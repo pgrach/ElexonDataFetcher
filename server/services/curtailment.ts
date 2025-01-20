@@ -1,0 +1,80 @@
+import { db } from "@db";
+import { curtailmentRecords, dailySummaries } from "@db/schema";
+import { fetchBidsOffers } from "./elexon";
+import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
+
+export async function processDailyCurtailment(date: string): Promise<void> {
+  let totalVolume = 0;
+  let totalPayment = 0;
+  let recordsProcessed = 0;
+
+  console.log(`Starting to process ${date}, fetching data for 48 settlement periods...`);
+
+  for (let period = 1; period <= 48; period++) {
+    try {
+      const records = await fetchBidsOffers(date, period);
+
+      for (const record of records) {
+        try {
+          // Calculate payment based on the original price and volume
+          const absVolume = Math.abs(record.volume);
+          const payment = absVolume * Math.abs(record.originalPrice);
+
+          await db.insert(curtailmentRecords).values({
+            settlementDate: date,
+            settlementPeriod: period,
+            farmId: record.id,
+            volume: absVolume.toString(),
+            payment: payment.toString(),
+            originalPrice: record.originalPrice.toString(),
+            finalPrice: record.finalPrice.toString(),
+            soFlag: record.soFlag,
+            cadlFlag: record.cadlFlag
+          });
+
+          totalVolume += absVolume;
+          totalPayment += payment;
+          recordsProcessed++;
+        } catch (error) {
+          console.error(`Error processing record for ${date} period ${period}:`, error);
+          console.error('Record data:', JSON.stringify(record, null, 2));
+        }
+      }
+
+      if (period % 12 === 0) {
+        console.log(`Progress update for ${date}: Completed ${period}/48 periods, processed ${recordsProcessed} records so far`);
+      }
+    } catch (error) {
+      console.error(`Error processing period ${period} for date ${date}:`, error);
+      // Continue with next period even if one fails
+      continue;
+    }
+
+    // Increase delay between API calls to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+
+  // Update daily summary
+  try {
+    console.log(`Updating daily summary for ${date}: ${recordsProcessed} records processed`);
+    console.log(`Total volume: ${totalVolume}, Total payment: ${totalPayment}`);
+
+    await db.insert(dailySummaries).values({
+      summaryDate: date,
+      totalCurtailedEnergy: totalVolume.toString(),
+      totalPayment: totalPayment.toString()
+    }).onConflictDoUpdate({
+      target: [dailySummaries.summaryDate],
+      set: {
+        totalCurtailedEnergy: sql`${totalVolume.toString()}`,
+        totalPayment: sql`${totalPayment.toString()}`
+      }
+    });
+
+    console.log(`Successfully updated daily summary for ${date}`);
+  } catch (error) {
+    console.error(`Error updating daily summary for ${date}:`, error);
+    throw error;
+  }
+}
