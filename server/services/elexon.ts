@@ -17,7 +17,10 @@ async function loadWindFarmIds(): Promise<Set<string>> {
   try {
     const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
     const bmuMapping = JSON.parse(mappingContent);
+
+    // Load all BMU IDs directly from mapping without filtering by prefix
     windFarmIds = new Set(bmuMapping.map((bmu: any) => bmu.elexonBmUnit));
+
     console.log(`Loaded ${windFarmIds.size} wind farm IDs from mapping`);
     return windFarmIds;
   } catch (error) {
@@ -49,52 +52,31 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
 
     console.log(`[${date} P${period}] Processing ${bids.length} bids and ${offers.length} offers`);
 
-    // Process bids
-    const validBids = bids.filter(record => {
-      if (!record || typeof record !== 'object') return false;
+    // Process bids exactly like reference implementation
+    const validBids = bids.filter(record => 
+      record.volume < 0 && // Only negative volumes (curtailment)
+      record.soFlag && // System operator flagged
+      validWindFarmIds.has(record.id) // Check if BMU is a wind farm
+    );
 
-      const isWindFarm = record.id && validWindFarmIds.has(record.id);
-      const hasNegativeVolume = typeof record.volume === 'number' && record.volume < 0;
-      const hasValidPrices = typeof record.originalPrice === 'number' && typeof record.finalPrice === 'number';
-
-      if (isWindFarm) {
-        if (hasNegativeVolume && hasValidPrices) {
-          console.log(`[${date} P${period}] Valid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
-          return true;
-        } else {
-          console.log(`[${date} P${period}] Skipping invalid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
-        }
-      }
-
-      return false;
+    // Log valid bids for debugging
+    validBids.forEach(record => {
+      console.log(`[${date} P${period}] Valid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
     });
 
-    // Process offers
-    const validOffers = offers.filter(record => {
-      if (!record || typeof record !== 'object') return false;
-
-      const isWindFarm = record.id && validWindFarmIds.has(record.id);
-      const hasNegativeVolume = typeof record.volume === 'number' && record.volume < 0;
-      const hasValidPrices = typeof record.originalPrice === 'number' && typeof record.finalPrice === 'number';
-
-      if (isWindFarm) {
-        if (hasNegativeVolume && hasValidPrices) {
-          console.log(`[${date} P${period}] Valid offer from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
-          return true;
-        } else {
-          console.log(`[${date} P${period}] Skipping invalid offer from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
-        }
-      }
-
-      return false;
-    });
+    // Similarly process offers
+    const validOffers = offers.filter(record => 
+      record.volume < 0 && // Only negative volumes (curtailment)
+      record.soFlag && // System operator flagged
+      validWindFarmIds.has(record.id) // Check if BMU is a wind farm
+    );
 
     const allRecords = [...validBids, ...validOffers];
     console.log(`[${date} P${period}] Found ${allRecords.length} valid curtailment records (${validBids.length} bids, ${validOffers.length} offers)`);
 
     // Calculate and log period totals
     const periodTotal = allRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-    const periodPayment = allRecords.reduce((sum, r) => sum + Math.abs(r.volume * r.originalPrice), 0);
+    const periodPayment = allRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
 
     if (periodTotal > 0) {
       console.log(`[${date} P${period}] Period totals: ${periodTotal.toFixed(2)} MWh, £${periodPayment.toFixed(2)}`);
