@@ -66,7 +66,7 @@ async function processChunk(days: Date[]) {
 
 async function ingestRemainingDays() {
   try {
-    const startDate = parseISO("2025-01-16"); // Start from January 16th
+    const startDate = parseISO("2025-01-19"); // Start from January 19th
     const endDate = new Date();
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
