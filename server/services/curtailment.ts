@@ -2,7 +2,6 @@ import { db } from "@db";
 import { curtailmentRecords, dailySummaries } from "@db/schema";
 import { fetchBidsOffers } from "./elexon";
 import { eq } from "drizzle-orm";
-import { sql } from "drizzle-orm";
 
 export async function processDailyCurtailment(date: string): Promise<void> {
   let totalVolume = 0;
@@ -15,18 +14,26 @@ export async function processDailyCurtailment(date: string): Promise<void> {
     try {
       const records = await fetchBidsOffers(date, period);
 
-      for (const record of records) {
-        try {
-          // Calculate payment based on the original price and volume
-          const absVolume = Math.abs(record.volume);
-          const payment = absVolume * Math.abs(record.originalPrice);
+      // Filter and process records exactly like reference implementation
+      const validRecords = records.filter(record => 
+        record.volume < 0 && // Only negative volumes (curtailment)
+        record.soFlag &&     // System operator flagged
+        (record.id.startsWith('T_') || record.id.startsWith('E_')) // Wind farm BMUs
+      );
 
-          // Insert the record into the database
+      for (const record of validRecords) {
+        try {
+          // Following reference implementation logic:
+          // 1. Volume comes as negative from API, store absolute value
+          // 2. Payment = |Volume| * Price * -1
+          const volume = Math.abs(record.volume);
+          const payment = volume * record.originalPrice * -1;
+
           await db.insert(curtailmentRecords).values({
             settlementDate: date,
             settlementPeriod: period,
             farmId: record.id,
-            volume: absVolume.toString(),
+            volume: volume.toString(),
             payment: payment.toString(),
             originalPrice: record.originalPrice.toString(),
             finalPrice: record.finalPrice.toString(),
@@ -34,12 +41,17 @@ export async function processDailyCurtailment(date: string): Promise<void> {
             cadlFlag: record.cadlFlag
           });
 
-          totalVolume += absVolume;
+          totalVolume += volume;
           totalPayment += payment;
           recordsProcessed++;
 
-          // Log individual record details for debugging
-          console.log(`[${date} P${period}] Processed record: farm=${record.id}, volume=${absVolume}, payment=${payment}`);
+          console.log(`[${date} P${period}] Processed record:`, {
+            farm: record.id,
+            volume,
+            originalPrice: record.originalPrice,
+            payment,
+            soFlag: record.soFlag,
+          });
         } catch (error) {
           console.error(`Error processing record for ${date} period ${period}:`, error);
           console.error('Record data:', JSON.stringify(record, null, 2));
@@ -53,11 +65,10 @@ export async function processDailyCurtailment(date: string): Promise<void> {
       }
     } catch (error) {
       console.error(`Error processing period ${period} for date ${date}:`, error);
-      // Continue with next period even if one fails
       continue;
     }
 
-    // Increase delay between API calls to avoid rate limiting
+    // Add delay between API calls to avoid rate limiting
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
@@ -75,8 +86,8 @@ export async function processDailyCurtailment(date: string): Promise<void> {
     }).onConflictDoUpdate({
       target: [dailySummaries.summaryDate],
       set: {
-        totalCurtailedEnergy: sql`${totalVolume.toString()}`,
-        totalPayment: sql`${totalPayment.toString()}`
+        totalCurtailedEnergy: totalVolume.toString(),
+        totalPayment: totalPayment.toString()
       }
     });
 
