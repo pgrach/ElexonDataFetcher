@@ -1,0 +1,417 @@
+Minimum Viable Prototype (MVP) description for ingesting just January 2025 up to the current date, storing it in a local database, and providing a single daily-summary endpoint. This will prove out the pipeline. Once you confirm that works, you can easily extend it to earlier dates (e.g., 2024) or add more endpoints.
+
+MVP Objectives
+Ingest data from Elexon BMRS for each day and settlement period in the range January 1, 2025, to “today”.
+Persist half-hourly records (bids/offers) in a local database.
+Generate a daily summary row for each day.
+Expose a single endpoint (e.g., GET /api/summary/daily/:date) to confirm data retrieval and aggregation works.
+That’s it. This confirms the core flow is working with minimal scope. Then you can scale backward (2024, etc.) or add monthly summaries, “top farms,” etc., as next steps.
+
+1. Database Setup
+Create the following tables (in PostgreSQL, MySQL, or whatever you prefer):
+sql
+Copy
+CREATE TABLE curtailment_records (
+  id SERIAL PRIMARY KEY,
+  settlement_date DATE NOT NULL,
+  settlement_period INT NOT NULL,
+  farm_id VARCHAR(50) NOT NULL,
+  volume NUMERIC NOT NULL,
+  payment NUMERIC NOT NULL,
+  original_price NUMERIC NOT NULL,
+  final_price NUMERIC NOT NULL,
+  so_flag BOOLEAN,
+  cadl_flag BOOLEAN,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE daily_summaries (
+  summary_date DATE PRIMARY KEY,
+  total_curtailed_energy NUMERIC,
+  total_payment NUMERIC,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+(You can adjust field names/types to match your existing code.)
+
+2. Data Ingestion Script (Node/TypeScript)
+Create a file, say ingestJan2025.ts, with a single script that:
+
+Calculates the date range: from 2025-01-01 to new Date() (today).
+
+Loops through each day in that range.
+
+For each day, calls a helper function ingestDay(dateString) that:
+
+Loops settlement periods 1..48.
+Calls the Elexon endpoints for bids and offers:
+GET 
+ℎ
+𝑡
+𝑡
+𝑝
+𝑠
+:
+/
+/
+𝑑
+𝑎
+𝑡
+𝑎
+.
+𝑒
+𝑙
+𝑒
+𝑥
+𝑜
+𝑛
+.
+𝑐
+𝑜
+.
+𝑢
+𝑘
+/
+𝑏
+𝑚
+𝑟
+𝑠
+/
+𝑎
+𝑝
+𝑖
+/
+𝑣
+1
+/
+𝑏
+𝑎
+𝑙
+𝑎
+𝑛
+𝑐
+𝑖
+𝑛
+𝑔
+/
+𝑠
+𝑒
+𝑡
+𝑡
+𝑙
+𝑒
+𝑚
+𝑒
+𝑛
+𝑡
+/
+𝑠
+𝑡
+𝑎
+𝑐
+𝑘
+/
+𝑎
+𝑙
+𝑙
+/
+𝑏
+𝑖
+𝑑
+/
+{
+𝑑
+𝑎
+𝑡
+𝑒
+}
+/
+{
+𝑝
+𝑒
+𝑟
+𝑖
+𝑜
+𝑑
+}
+GET https://data.elexon.co.uk/bmrs/api/v1/balancing/settlement/stack/all/bid/{date}/{period}
+and
+GET 
+ℎ
+𝑡
+𝑡
+𝑝
+𝑠
+:
+/
+/
+𝑑
+𝑎
+𝑡
+𝑎
+.
+𝑒
+𝑙
+𝑒
+𝑥
+𝑜
+𝑛
+.
+𝑐
+𝑜
+.
+𝑢
+𝑘
+/
+𝑏
+𝑚
+𝑟
+𝑠
+/
+𝑎
+𝑝
+𝑖
+/
+𝑣
+1
+/
+𝑏
+𝑎
+𝑙
+𝑎
+𝑛
+𝑐
+𝑖
+𝑛
+𝑔
+/
+𝑠
+𝑒
+𝑡
+𝑡
+𝑙
+𝑒
+𝑚
+𝑒
+𝑛
+𝑡
+/
+𝑠
+𝑡
+𝑎
+𝑐
+𝑘
+/
+𝑎
+𝑙
+𝑙
+/
+𝑜
+𝑓
+𝑓
+𝑒
+𝑟
+/
+{
+𝑑
+𝑎
+𝑡
+𝑒
+}
+/
+{
+𝑝
+𝑒
+𝑟
+𝑖
+𝑜
+𝑑
+}
+GET https://data.elexon.co.uk/bmrs/api/v1/balancing/settlement/stack/all/offer/{date}/{period}
+Filters data for negative volumes, soFlag = true, wind farms, etc. (like your fetchCurtailmentData function does).
+Inserts each record into curtailment_records.
+Accumulates total volume/payment for that day.
+After all 48 periods, insert/update one row in daily_summaries with total_curtailed_energy and total_payment.
+
+Pseudocode snippet:
+
+ts
+Copy
+import { fetchCurtailmentData } from "./services/elexon"; // your existing function
+import { db } from "./db"; // your DB client/connection
+import { eachDayOfInterval, parseISO, format } from "date-fns";
+
+async function ingestDay(dateStr: string) {
+  let allRecords: any[] = [];
+  for (let period = 1; period <= 48; period++) {
+    const records = await fetchCurtailmentData(dateStr, period);
+    // Insert each record into DB
+    for (const rec of records) {
+      await db.query(
+        `INSERT INTO curtailment_records
+         (settlement_date, settlement_period, farm_id, volume, payment, original_price, final_price, so_flag, cadl_flag)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          rec.settlementDate,
+          rec.settlementPeriod,
+          rec.farmId,
+          rec.volume,
+          rec.payment,
+          rec.originalPrice, // or rec.finalPrice
+          rec.finalPrice,
+          rec.soFlag,
+          rec.cadlFlag,
+        ]
+      );
+    }
+    allRecords.push(...records);
+  }
+
+  // Compute daily totals
+  const totalVolume = allRecords.reduce((sum, r) => sum + r.volume, 0);
+  const totalPayment = allRecords.reduce((sum, r) => sum + r.payment, 0);
+
+  // Insert into daily_summaries
+  await db.query(
+    `INSERT INTO daily_summaries (summary_date, total_curtailed_energy, total_payment)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (summary_date) DO UPDATE
+       SET total_curtailed_energy = $2,
+           total_payment = $3`,
+    [dateStr, totalVolume, totalPayment]
+  );
+}
+
+async function ingestJan2025() {
+  const start = parseISO("2025-01-01");
+  const end = new Date(); // "today"
+  const days = eachDayOfInterval({ start, end });
+
+  for (const day of days) {
+    const dateStr = format(day, "yyyy-MM-dd");
+    console.log(`Ingesting data for ${dateStr}`);
+    await ingestDay(dateStr);
+    // Optional: small delay to avoid rate limits
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+
+  console.log("Finished ingesting Jan 2025 to today");
+}
+
+ingestJan2025().catch((err) => {
+  console.error("Ingestion failed:", err);
+  process.exit(1);
+});
+(This example uses date-fns for date handling. Adjust as needed.)
+
+3. Express API Endpoint
+Just add one endpoint to read daily data from the DB. For example, in summaryRoutes.ts:
+
+ts
+Copy
+import express from "express";
+const router = express.Router();
+import { db } from "../db"; // or your DB client
+
+// GET /api/summary/daily/:date
+router.get("/daily/:date", async (req, res) => {
+  try {
+    const dateStr = req.params.date;
+    // 1. Query daily_summaries for that date
+    const { rows } = await db.query(
+      `SELECT total_curtailed_energy, total_payment
+       FROM daily_summaries
+       WHERE summary_date = $1`,
+      [dateStr]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: "No data for this date" });
+    }
+
+    const { total_curtailed_energy, total_payment } = rows[0];
+
+    // 2. Optional: If you want half-hour data as well:
+    //   const detailRows = await db.query("SELECT * FROM curtailment_records WHERE settlement_date = $1", [dateStr]);
+
+    // 3. Return JSON
+    res.json({
+      date: dateStr,
+      totalCurtailedEnergy: total_curtailed_energy,
+      totalPayment: total_payment
+      // detail: detailRows.rows, // optional
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch daily summary" });
+  }
+});
+
+export default router;
+Then mount it in your main server file:
+
+ts
+Copy
+import express from "express";
+import summaryRoutes from "./routes/summaryRoutes";
+const app = express();
+app.use("/api/summary", summaryRoutes);
+
+app.listen(3000, () => {
+  console.log("Server running on http://localhost:3000");
+});
+4. Testing the Prototype
+Run the ingestion script:
+
+bash
+Copy
+ts-node ingestJan2025.ts
+or however you run your Node/TS scripts. Watch for log output.
+
+After ingestion finishes, check your database:
+
+sql
+Copy
+SELECT * FROM curtailment_records LIMIT 10;
+SELECT * FROM daily_summaries LIMIT 10;
+You should see data for each date from Jan 1, 2025, up to “today.”
+
+Start the Express server:
+
+bash
+Copy
+npm run start
+or your usual command.
+
+Hit the endpoint in your browser or via Postman:
+
+bash
+Copy
+GET http://localhost:3000/api/summary/daily/2025-01-15
+You should see a JSON response like:
+
+json
+Copy
+{
+  "date": "2025-01-15",
+  "totalCurtailedEnergy": 12345.67,
+  "totalPayment": 89012.34
+}
+If this works for January 2025 to now, you’ve proven the pipeline. Next steps:
+
+Expand the date range: run the ingestion script for earlier months (e.g., 2024).
+Add monthly endpoints: sum daily_summaries.
+Add “top farms” queries or other advanced features.
+5. Conclusion
+This smallest prototype does the following:
+
+Fetch Elexon’s balancing data (bids/offers) for each settlement period, from Jan 2025 until today.
+Store it in curtailment_records.
+Aggregate daily totals in daily_summaries.
+Serve it via a single daily endpoint.
+By confirming that ingestion, persistence, and retrieval flow works for one range of dates, you validate the entire approach. Then you can seamlessly extend your date range and add extra features without rewriting the core logic.
+
+
+
+
+
+
