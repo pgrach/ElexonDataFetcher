@@ -36,7 +36,7 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
       axios.get<ElexonResponse>(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`)
     ]);
 
-    // Log sample responses for debugging
+    // Log sample responses for the first period
     if (period === 1) {
       const sampleBid = bidsResponse.data?.data?.[0];
       const sampleOffer = offersResponse.data?.data?.[0];
@@ -49,58 +49,54 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
 
     console.log(`[${date} P${period}] Processing ${bids.length} bids and ${offers.length} offers`);
 
-    // Process bids with updated filtering logic
+    // Process bids
     const validBids = bids.filter(record => {
       if (!record || typeof record !== 'object') return false;
 
       const isWindFarm = record.id && validWindFarmIds.has(record.id);
-      const isNegativeVolume = typeof record.volume === 'number' && record.volume < 0;
-      const hasValidPrices = typeof record.originalPrice === 'number';
-      const isSoFlagged = record.soFlag === true; // Explicitly check for SO flag
+      const hasNegativeVolume = typeof record.volume === 'number' && record.volume < 0;
+      const hasValidPrices = typeof record.originalPrice === 'number' && typeof record.finalPrice === 'number';
 
-      if (isWindFarm && isNegativeVolume && hasValidPrices && isSoFlagged) {
-        console.log(`[${date} P${period}] Valid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}, SO-flagged=true`);
-        return true;
-      } else {
-        if (isWindFarm) {
-          console.log(`[${date} P${period}] Skipping bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}, SO-flagged=${record.soFlag}`);
+      if (isWindFarm) {
+        if (hasNegativeVolume && hasValidPrices) {
+          console.log(`[${date} P${period}] Valid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
+          return true;
+        } else {
+          console.log(`[${date} P${period}] Skipping invalid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
         }
-        return false;
       }
+
+      return false;
     });
 
-    // Process offers with the same updated filtering logic
+    // Process offers
     const validOffers = offers.filter(record => {
       if (!record || typeof record !== 'object') return false;
 
       const isWindFarm = record.id && validWindFarmIds.has(record.id);
-      const isNegativeVolume = typeof record.volume === 'number' && record.volume < 0;
-      const hasValidPrices = typeof record.originalPrice === 'number';
-      const isSoFlagged = record.soFlag === true; // Explicitly check for SO flag
+      const hasNegativeVolume = typeof record.volume === 'number' && record.volume < 0;
+      const hasValidPrices = typeof record.originalPrice === 'number' && typeof record.finalPrice === 'number';
 
-      if (isWindFarm && isNegativeVolume && hasValidPrices && isSoFlagged) {
-        console.log(`[${date} P${period}] Valid offer from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}, SO-flagged=true`);
-        return true;
-      } else {
-        if (isWindFarm) {
-          console.log(`[${date} P${period}] Skipping offer from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}, SO-flagged=${record.soFlag}`);
+      if (isWindFarm) {
+        if (hasNegativeVolume && hasValidPrices) {
+          console.log(`[${date} P${period}] Valid offer from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
+          return true;
+        } else {
+          console.log(`[${date} P${period}] Skipping invalid offer from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
         }
-        return false;
       }
+
+      return false;
     });
 
-    const allRecords = [...validBids, ...validOffers].map(record => ({
-      ...record,
-      volume: Math.abs(record.volume), // Convert to positive for easier processing
-      payment: Math.abs(record.volume) * record.originalPrice * -1 // Calculate payment as per specification
-    }));
-
+    const allRecords = [...validBids, ...validOffers];
     console.log(`[${date} P${period}] Found ${allRecords.length} valid curtailment records (${validBids.length} bids, ${validOffers.length} offers)`);
 
     // Calculate and log period totals
-    if (allRecords.length > 0) {
-      const periodTotal = allRecords.reduce((sum, r) => sum + r.volume, 0);
-      const periodPayment = allRecords.reduce((sum, r) => sum + r.payment, 0);
+    const periodTotal = allRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
+    const periodPayment = allRecords.reduce((sum, r) => sum + Math.abs(r.volume * r.originalPrice), 0);
+
+    if (periodTotal > 0) {
       console.log(`[${date} P${period}] Period totals: ${periodTotal.toFixed(2)} MWh, £${periodPayment.toFixed(2)}`);
     }
 

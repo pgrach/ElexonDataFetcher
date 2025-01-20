@@ -17,25 +17,29 @@ export async function processDailyCurtailment(date: string): Promise<void> {
 
       for (const record of records) {
         try {
-          // Values are already processed in fetchBidsOffers to be positive volumes
-          // and correctly calculated payments
+          // Calculate payment based on the original price and volume
+          const absVolume = Math.abs(record.volume);
+          const payment = absVolume * Math.abs(record.originalPrice);
+
+          // Insert the record into the database
           await db.insert(curtailmentRecords).values({
             settlementDate: date,
             settlementPeriod: period,
             farmId: record.id,
-            volume: record.volume.toString(),
-            payment: record.payment.toString(),
+            volume: absVolume.toString(),
+            payment: payment.toString(),
             originalPrice: record.originalPrice.toString(),
             finalPrice: record.finalPrice.toString(),
-            soFlag: true, // We only store SO-flagged records now
+            soFlag: record.soFlag,
             cadlFlag: record.cadlFlag
           });
 
-          totalVolume += record.volume;
-          totalPayment += record.payment;
+          totalVolume += absVolume;
+          totalPayment += payment;
           recordsProcessed++;
 
-          console.log(`[${date} P${period}] Processed record: farm=${record.id}, volume=${record.volume}, payment=${record.payment}`);
+          // Log individual record details for debugging
+          console.log(`[${date} P${period}] Processed record: farm=${record.id}, volume=${absVolume}, payment=${payment}`);
         } catch (error) {
           console.error(`Error processing record for ${date} period ${period}:`, error);
           console.error('Record data:', JSON.stringify(record, null, 2));
