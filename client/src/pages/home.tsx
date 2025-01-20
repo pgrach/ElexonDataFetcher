@@ -10,13 +10,16 @@ export default function Home() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`],
-    enabled: !!date
+    enabled: !!date,
+    onSuccess: (data) => {
+      console.log('API Response:', data);
+    }
   });
 
   return (
     <div className="container mx-auto py-8">
       <h1 className="text-4xl font-bold mb-8">Wind Farm Curtailment Data</h1>
-      
+
       <div className="grid md:grid-cols-[300px,1fr] gap-8">
         <div className="space-y-4">
           <Card>
@@ -58,6 +61,9 @@ export default function Home() {
                 ) : (
                   <div className="text-sm text-muted-foreground">No data available</div>
                 )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Total curtailed energy for {format(date, 'MMM d, yyyy')}
+                </div>
               </CardContent>
             </Card>
 
@@ -80,6 +86,9 @@ export default function Home() {
                 ) : (
                   <div className="text-sm text-muted-foreground">No data available</div>
                 )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Total payment for {format(date, 'MMM d, yyyy')}
+                </div>
               </CardContent>
             </Card>
           </div>
