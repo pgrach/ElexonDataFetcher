@@ -1,13 +1,37 @@
 import axios from "axios";
+import fs from "fs/promises";
+import path from "path";
 import { ElexonBidOffer, ElexonResponse } from "../types/elexon";
 
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
+const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 
-// Wind farm identifiers based on actual data patterns
-const WIND_FARM_PATTERNS = ['SGRWO', 'SGRWN', 'SGRE'];
+let windFarmIds: Set<string> | null = null;
+
+async function loadWindFarmIds(): Promise<Set<string>> {
+  if (windFarmIds !== null) {
+    return windFarmIds;
+  }
+
+  try {
+    const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
+    const bmuMapping = JSON.parse(mappingContent);
+    windFarmIds = new Set(bmuMapping.map((bmu: any) => bmu.elexonBmUnit));
+    console.log(`Loaded ${windFarmIds.size} wind farm IDs from mapping`);
+    return windFarmIds;
+  } catch (error) {
+    console.error('Error loading BMU mapping:', error);
+    // Fallback to default patterns if mapping file is not available
+    console.warn('Falling back to default wind farm patterns');
+    return new Set(['SGRWO', 'SGRWN', 'SGRE'].map(pattern => `T_${pattern}`));
+  }
+}
 
 export async function fetchBidsOffers(date: string, period: number): Promise<ElexonBidOffer[]> {
   try {
+    // Load wind farm IDs if not already loaded
+    const validWindFarmIds = await loadWindFarmIds();
+
     // Fetch bids and offers in parallel
     const [bidsResponse, offersResponse] = await Promise.all([
       axios.get<ElexonResponse>(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`),
@@ -26,9 +50,8 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
         return false;
       }
 
-      // Check if it's a wind farm based on known patterns
-      const isWindFarm = record.id && 
-        WIND_FARM_PATTERNS.some(pattern => record.id.includes(pattern));
+      // Check if it's a wind farm based on the mapping
+      const isWindFarm = record.id && validWindFarmIds.has(record.id);
 
       // Check for curtailment (negative volume)
       const isNegativeVolume = typeof record.volume === 'number' && record.volume < 0;

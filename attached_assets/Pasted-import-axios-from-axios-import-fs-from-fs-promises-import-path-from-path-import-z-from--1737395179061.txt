@@ -1,0 +1,269 @@
+import axios from 'axios';
+import fs from 'fs/promises';
+import path from 'path';
+import { z } from 'zod';
+import crypto from 'crypto';
+
+const ELEXON_API_URL = 'https://data.elexon.co.uk/bmrs/api/v1/reference/bmunits/all';
+const BMU_MAPPING_PATH = path.join(process.cwd(), 'client', 'src', 'data', 'bmuMapping.json');
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+const REQUEST_TIMEOUT = 10000; // 10 seconds
+
+// Define validation schema for BMU data
+const bmuSchema = z.object({
+  nationalGridBmUnit: z.string(),
+  elexonBmUnit: z.string(),
+  bmUnitName: z.string(),
+  generationCapacity: z.string().refine(val => !isNaN(parseFloat(val)), {
+    message: "Generation capacity must be a valid number string"
+  }),
+  fuelType: z.literal('WIND'),
+  leadPartyName: z.string().min(1, "Lead party name is required")
+});
+
+const bmuResponseSchema = z.object({
+  nationalGridBmUnit: z.string(),
+  elexonBmUnit: z.string(),
+  bmUnitName: z.string(),
+  generationCapacity: z.string(),
+  fuelType: z.string().nullable(),
+  leadPartyName: z.string().nullable()
+}).partial();
+
+async function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchBmuData(attempt = 1) {
+  try {
+    console.log(`Attempt ${attempt}/${MAX_RETRIES} to fetch BMU data...`);
+
+    const response = await axios.get(ELEXON_API_URL, {
+      timeout: REQUEST_TIMEOUT,
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'CurtailCoin/1.0'
+      }
+    });
+
+    if (!response.data || !Array.isArray(response.data)) {
+      throw new Error('Invalid response format from Elexon API');
+    }
+
+    // Validate API response data
+    const validatedData = response.data.map((item, index) => {
+      try {
+        return bmuResponseSchema.parse(item);
+      } catch (error) {
+        console.warn(`Invalid BMU data at index ${index}:`, error.message);
+        return null;
+      }
+    }).filter(item => item !== null);
+
+    return validatedData;
+  } catch (error) {
+    if (attempt < MAX_RETRIES) {
+      console.warn(`Attempt ${attempt} failed:`, error.message);
+      const backoffDelay = RETRY_DELAY * Math.pow(2, attempt - 1);
+      console.log(`Retrying in ${backoffDelay}ms...`);
+      await delay(backoffDelay);
+      return fetchBmuData(attempt + 1);
+    }
+    throw new Error(`Failed to fetch BMU data after ${MAX_RETRIES} attempts: ${error.message}`);
+  }
+}
+
+async function validateBmuData(bmu) {
+  try {
+    const validatedBmu = bmuSchema.parse({
+      nationalGridBmUnit: bmu.nationalGridBmUnit,
+      elexonBmUnit: bmu.elexonBmUnit,
+      bmUnitName: bmu.bmUnitName,
+      generationCapacity: bmu.generationCapacity,
+      fuelType: 'WIND',
+      leadPartyName: bmu.leadPartyName || 'Unknown'
+    });
+
+    // Additional business logic validation
+    const genCapacity = parseFloat(validatedBmu.generationCapacity);
+    if (genCapacity <= 0) {
+      console.warn(`Warning: Zero or negative generation capacity for BMU ${validatedBmu.elexonBmUnit}`);
+    }
+    if (genCapacity > 1000) {
+      console.warn(`Warning: Unusually high generation capacity (${genCapacity}MW) for BMU ${validatedBmu.elexonBmUnit}`);
+    }
+
+    return validatedBmu;
+  } catch (error) {
+    console.warn('BMU validation failed:', error.message);
+    return null;
+  }
+}
+
+function calculateChecksum(data) {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(data))
+    .digest('hex');
+}
+
+async function validateFileContent(filePath, data) {
+  try {
+    // Parse and validate file content
+    const fileContent = JSON.parse(await fs.readFile(filePath, 'utf8'));
+
+    // Validate each BMU in the file
+    const validationResults = await Promise.all(
+      fileContent.map(async (bmu) => {
+        try {
+          return await validateBmuData(bmu);
+        } catch (error) {
+          console.warn(`Validation failed for BMU ${bmu.elexonBmUnit}:`, error.message);
+          return null;
+        }
+      })
+    );
+
+    const validBmus = validationResults.filter(result => result !== null);
+
+    // Compare data structure
+    const fileChecksum = calculateChecksum(validBmus);
+    const newDataChecksum = calculateChecksum(data);
+
+    if (fileChecksum === newDataChecksum) {
+      console.log('No changes detected in BMU data');
+      return true;
+    }
+
+    // If different, verify the differences are valid
+    const existingIds = new Set(validBmus.map(bmu => bmu.elexonBmUnit));
+    const newIds = new Set(data.map(bmu => bmu.elexonBmUnit));
+
+    const added = data.filter(bmu => !existingIds.has(bmu.elexonBmUnit));
+    const removed = validBmus.filter(bmu => !newIds.has(bmu.elexonBmUnit));
+
+    console.log(`Changes detected:
+      Added: ${added.length} BMUs
+      Removed: ${removed.length} BMUs
+      Total difference: ${Math.abs(data.length - validBmus.length)} BMUs`
+    );
+
+    return true;
+  } catch (error) {
+    console.error('File validation failed:', error.message);
+    return false;
+  }
+}
+
+async function createBackup(filePath, data) {
+  const backupPath = `${filePath}.backup`;
+  await fs.writeFile(backupPath, JSON.stringify(data, null, 2), 'utf8');
+
+  // Verify backup
+  try {
+    const backupContent = await fs.readFile(backupPath, 'utf8');
+    const backupData = JSON.parse(backupContent);
+    const originalChecksum = calculateChecksum(data);
+    const backupChecksum = calculateChecksum(backupData);
+
+    if (originalChecksum !== backupChecksum) {
+      throw new Error('Backup verification failed: checksum mismatch');
+    }
+
+    console.log(`Backup created and verified at ${backupPath}`);
+    return true;
+  } catch (error) {
+    console.error('Backup verification failed:', error.message);
+    return false;
+  }
+}
+
+async function fetchAndUpdateBmuMapping() {
+  try {
+    console.log('Starting BMU mapping update process...');
+
+    // Fetch data with retry logic
+    const bmuData = await fetchBmuData();
+
+    // Validate and filter wind units
+    const windBmus = await Promise.all(
+      bmuData
+        .filter(bmu => bmu?.fuelType?.toUpperCase() === 'WIND')
+        .map(validateBmuData)
+    );
+
+    // Remove null values from failed validations
+    const validWindBmus = windBmus
+      .filter(bmu => bmu !== null)
+      .sort((a, b) => a.elexonBmUnit.localeCompare(b.elexonBmUnit));
+
+    console.log(`Found ${validWindBmus.length} valid wind BMUs`);
+
+    // Read existing file to compare
+    let existingBmus = [];
+    try {
+      const existingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
+      existingBmus = JSON.parse(existingContent);
+      console.log(`Current mapping has ${existingBmus.length} entries`);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        console.warn('Error reading existing mapping:', error.message);
+      } else {
+        console.log('No existing mapping file found - will create new file');
+      }
+    }
+
+    // Validate file content before updating
+    if (existingBmus.length > 0) {
+      const isValid = await validateFileContent(BMU_MAPPING_PATH, validWindBmus);
+      if (!isValid) {
+        throw new Error('File content validation failed');
+      }
+    }
+
+    // Create and verify backup
+    if (existingBmus.length > 0) {
+      const backupCreated = await createBackup(BMU_MAPPING_PATH, existingBmus);
+      if (!backupCreated) {
+        throw new Error('Failed to create backup');
+      }
+    }
+
+    // Write the filtered data to bmuMapping.json
+    await fs.writeFile(
+      BMU_MAPPING_PATH,
+      JSON.stringify(validWindBmus, null, 2),
+      'utf8'
+    );
+
+    // Verify the written file
+    const writtenContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
+    const writtenData = JSON.parse(writtenContent);
+    const originalChecksum = calculateChecksum(validWindBmus);
+    const writtenChecksum = calculateChecksum(writtenData);
+
+    if (originalChecksum !== writtenChecksum) {
+      throw new Error('File write verification failed: checksum mismatch');
+    }
+
+    console.log('Successfully updated bmuMapping.json');
+    console.log(`File location: ${BMU_MAPPING_PATH}`);
+    console.log(`Total wind BMUs in updated mapping: ${validWindBmus.length}`);
+
+  } catch (error) {
+    console.error('Error updating BMU mapping:', error.message);
+    if (error.response) {
+      console.error('API Error details:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data
+      });
+    }
+    process.exit(1);
+  }
+}
+
+// Execute the update function
+fetchAndUpdateBmuMapping();
