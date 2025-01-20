@@ -4,49 +4,100 @@ import { db } from "@db";
 import { dailySummaries } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-async function ingestJan2025ToPresent() {
+const CHUNK_SIZE = 1; // Process 1 day at a time to avoid timeouts
+const CHUNK_DELAY = 30000; // 30 second delay between chunks
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 10000; // 10 seconds between retries
+const RATE_LIMIT_DELAY = 30000; // 30 seconds after rate limit errors
+
+async function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
   try {
-    const startDate = parseISO("2025-01-01");
+    await processDailyCurtailment(dateStr);
+    console.log(`Successfully processed ${dateStr}`);
+    return true;
+  } catch (error) {
+    const isRateLimit = (error as Error).message?.toLowerCase().includes('rate limit');
+    console.error(`Error processing ${dateStr} (attempt ${retryCount + 1}):`, error);
+
+    if (retryCount < MAX_RETRIES) {
+      const delayTime = isRateLimit ? RATE_LIMIT_DELAY : RETRY_DELAY;
+      console.log(`Retrying ${dateStr} in ${delayTime/1000} seconds...`);
+      await delay(delayTime);
+      return processDay(dateStr, retryCount + 1);
+    }
+
+    console.error(`Failed to process ${dateStr} after ${MAX_RETRIES} attempts`);
+    return false;
+  }
+}
+
+async function processChunk(days: Date[]) {
+  for (const day of days) {
+    const dateStr = format(day, 'yyyy-MM-dd');
+
+    // Check if we already have data for this date
+    const existingData = await db.query.dailySummaries.findFirst({
+      where: eq(dailySummaries.summaryDate, dateStr)
+    });
+
+    if (existingData) {
+      console.log(`Data already exists for ${dateStr}, skipping...`);
+      continue;
+    }
+
+    console.log(`\nProcessing data for ${dateStr}`);
+    const success = await processDay(dateStr);
+
+    if (success) {
+      // Add delay between successful days to respect rate limits
+      console.log(`Waiting 10 seconds before next day...`);
+      await delay(10000);
+    } else {
+      // Add longer delay after failed days
+      console.log(`Waiting 30 seconds before next day due to previous failure...`);
+      await delay(30000);
+    }
+  }
+}
+
+async function ingestRemainingDays() {
+  try {
+    const startDate = parseISO("2025-01-16"); // Start from January 16th
     const endDate = new Date();
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
     console.log(`Starting data ingestion from ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
+    console.log(`Total days to process: ${days.length}`);
 
-    for (const day of days) {
-      const dateStr = format(day, 'yyyy-MM-dd');
+    // Process days in smaller chunks
+    for (let i = 0; i < days.length; i += CHUNK_SIZE) {
+      const chunk = days.slice(i, i + CHUNK_SIZE);
+      const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
+      const totalChunks = Math.ceil(days.length/CHUNK_SIZE);
 
-      // Check if we already have data for this date
-      const existingData = await db.query.dailySummaries.findFirst({
-        where: eq(dailySummaries.summaryDate, dateStr)
-      });
+      console.log(`\nProcessing chunk ${chunkNum} of ${totalChunks}`);
+      console.log(`Days: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
 
-      if (existingData) {
-        console.log(`Data already exists for ${dateStr}, skipping...`);
-        continue;
+      await processChunk(chunk);
+
+      if (i + CHUNK_SIZE < days.length) {
+        console.log(`\nWaiting ${CHUNK_DELAY/1000} seconds before next chunk...`);
+        await delay(CHUNK_DELAY);
       }
-
-      console.log(`Processing data for ${dateStr}`);
-
-      try {
-        await processDailyCurtailment(dateStr);
-        console.log(`Successfully processed ${dateStr}`);
-      } catch (error) {
-        console.error(`Error processing ${dateStr}:`, error);
-        // Continue with next day even if one fails
-      }
-
-      // Add longer delay between days to respect rate limits
-      await new Promise(resolve => setTimeout(resolve, 5000));
     }
 
-    console.log('Data ingestion completed successfully');
+    console.log('\nData ingestion completed successfully');
   } catch (error) {
     console.error('Fatal error during ingestion:', error);
     process.exit(1);
   }
 }
 
-// Run the ingestion
-ingestJan2025ToPresent();
+// Run the ingestion for remaining days
+ingestRemainingDays();
 
-export { ingestJan2025ToPresent };
+export { ingestRemainingDays };
