@@ -17,29 +17,30 @@ export async function processDailyCurtailment(date: string): Promise<void> {
 
       for (const record of records) {
         try {
-          // Calculate payment based on the original price and volume
-          const absVolume = Math.abs(record.volume);
-          const payment = absVolume * Math.abs(record.originalPrice);
+          // Calculate payment based on the correct methodology:
+          // Payment = |Volume| * Price * -1
+          const volume = Math.abs(record.volume);
+          const payment = volume * Math.abs(record.originalPrice) * -1;
 
           // Insert the record into the database
           await db.insert(curtailmentRecords).values({
             settlementDate: date,
             settlementPeriod: period,
             farmId: record.id,
-            volume: absVolume.toString(),
-            payment: payment.toString(),
+            volume: volume.toString(),
+            payment: Math.abs(payment).toString(), // Store payment as positive value
             originalPrice: record.originalPrice.toString(),
             finalPrice: record.finalPrice.toString(),
             soFlag: record.soFlag,
             cadlFlag: record.cadlFlag
           });
 
-          totalVolume += absVolume;
-          totalPayment += payment;
+          totalVolume += volume;
+          totalPayment += Math.abs(payment); // Use absolute value for total
           recordsProcessed++;
 
           // Log individual record details for debugging
-          console.log(`[${date} P${period}] Processed record: farm=${record.id}, volume=${absVolume}, payment=${payment}`);
+          console.log(`[${date} P${period}] Processed record: farm=${record.id}, volume=${volume}, payment=${Math.abs(payment)}`);
         } catch (error) {
           console.error(`Error processing record for ${date} period ${period}:`, error);
           console.error('Record data:', JSON.stringify(record, null, 2));
