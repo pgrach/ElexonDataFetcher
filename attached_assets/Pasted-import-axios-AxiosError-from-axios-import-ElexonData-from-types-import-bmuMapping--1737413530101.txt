@@ -1,0 +1,114 @@
+import axios, { AxiosError } from "axios";
+import { ElexonData } from "../types";
+import bmuMapping from "../../client/src/data/bmuMapping.json";
+
+const ELEXON_API_BASE =
+  "https://data.elexon.co.uk/bmrs/api/v1/balancing/settlement/stack/all";
+
+const RETRY_ATTEMPTS = 5; // Increased from 3
+const INITIAL_TIMEOUT_MS = 20000; // Increased to 20 seconds
+const INITIAL_RETRY_DELAY_MS = 1000; // 1 second
+
+// Create a Set of wind farm BMU IDs for efficient lookup
+const windFarmBmuIds = new Set(
+  bmuMapping
+    .filter((bmu) => bmu.fuelType === "WIND")
+    .map((bmu) => bmu.elexonBmUnit),
+);
+
+async function retryableAxiosGet(url: string): Promise<any> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+    try {
+      // Increase timeout for each retry
+      const timeout = INITIAL_TIMEOUT_MS * attempt;
+
+      const response = await axios.get(url, {
+        timeout,
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "CurtailCoin/1.0",
+        },
+      });
+      return response.data;
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(
+        `Attempt ${attempt}/${RETRY_ATTEMPTS} failed for ${url}:`,
+        error instanceof AxiosError ? error.message : error,
+      );
+
+      if (attempt < RETRY_ATTEMPTS) {
+        // Exponential backoff with jitter
+        const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1) * (0.5 + Math.random() * 0.5);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+export async function fetchCurtailmentData(
+  date: string,
+  period: number,
+): Promise<ElexonData[]> {
+  try {
+    console.log(
+      `Fetching curtailment data for date: ${date}, period: ${period}`,
+    );
+
+    // Make API calls with retry logic
+    const [bidData, offerData] = await Promise.all([
+      retryableAxiosGet(`${ELEXON_API_BASE}/bid/${date}/${period}`),
+      retryableAxiosGet(`${ELEXON_API_BASE}/offer/${date}/${period}`),
+    ]);
+
+    const bids = bidData.data || [];
+    const offers = offerData.data || [];
+
+    console.log(`Received ${bids.length} bids and ${offers.length} offers`);
+
+    // Filter for wind energy curtailment
+    const filteredData = bids
+      .filter(
+        (bid: any) =>
+          bid.volume < 0 && // Only negative volumes (curtailment)
+          bid.soFlag && // System operator flagged
+          windFarmBmuIds.has(bid.id), // Check if BMU is a wind farm using fuel type mapping
+      )
+      .map((bid: any) => {
+        // Calculate payment: volume * price
+        const volume = Math.abs(bid.volume);
+        const finalPrice = bid.originalPrice;
+        const payment = volume * finalPrice * -1;
+
+        return {
+          settlementDate: bid.settlementDate,
+          settlementPeriod: bid.settlementPeriod,
+          volume: volume, // Convert to positive for easier processing
+          finalPrice: finalPrice,
+          payment: payment, // Add payment calculation
+          farmId: bid.id, // Include the BMU ID for farm identification
+        };
+      });
+
+    console.log(
+      `Found ${filteredData.length} curtailment records for wind farms`,
+    );
+    return filteredData;
+  } catch (error) {
+    console.error("Error fetching Elexon data:", error);
+    if (error instanceof AxiosError) {
+      console.error("API Error details:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+      });
+    }
+    throw new Error(
+      `Failed to fetch curtailment data: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
+  }
+}
