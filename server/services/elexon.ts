@@ -1,3 +1,4 @@
+import { db } from "@db";
 import axios from "axios";
 import fs from "fs/promises";
 import path from "path";
@@ -21,15 +22,12 @@ async function loadWindFarmIds(): Promise<Set<string>> {
     return windFarmIds;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
-    // Fallback to default patterns if mapping file is not available
-    console.warn('Falling back to default wind farm patterns');
-    return new Set(['SGRWO', 'SGRWN', 'SGRE'].map(pattern => `T_${pattern}`));
+    throw error;
   }
 }
 
 export async function fetchBidsOffers(date: string, period: number): Promise<ElexonBidOffer[]> {
   try {
-    // Load wind farm IDs if not already loaded
     const validWindFarmIds = await loadWindFarmIds();
 
     // Fetch bids and offers in parallel
@@ -38,31 +36,71 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
       axios.get<ElexonResponse>(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`)
     ]);
 
-    // Make sure we have data arrays, even if empty
+    // Log sample responses for the first period
+    if (period === 1) {
+      const sampleBid = bidsResponse.data?.data?.[0];
+      const sampleOffer = offersResponse.data?.data?.[0];
+      console.log('\nSample Bid Response:', JSON.stringify(sampleBid, null, 2));
+      console.log('\nSample Offer Response:', JSON.stringify(sampleOffer, null, 2));
+    }
+
     const bids = bidsResponse.data?.data || [];
     const offers = offersResponse.data?.data || [];
 
-    console.log(`Processing ${bids.length} bids and ${offers.length} offers for ${date} period ${period}`);
+    console.log(`[${date} P${period}] Processing ${bids.length} bids and ${offers.length} offers`);
 
-    return [...bids, ...offers].filter(record => {
-      if (!record || typeof record !== 'object') {
-        console.log('Invalid record:', record);
-        return false;
-      }
+    // Process bids
+    const validBids = bids.filter(record => {
+      if (!record || typeof record !== 'object') return false;
 
-      // Check if it's a wind farm based on the mapping
       const isWindFarm = record.id && validWindFarmIds.has(record.id);
+      const hasNegativeVolume = typeof record.volume === 'number' && record.volume < 0;
+      const hasValidPrices = typeof record.originalPrice === 'number' && typeof record.finalPrice === 'number';
 
-      // Check for curtailment (negative volume)
-      const isNegativeVolume = typeof record.volume === 'number' && record.volume < 0;
-
-      // Additional logging for debugging
       if (isWindFarm) {
-        console.log(`Found wind farm record: ${record.id}, volume: ${record.volume}`);
+        if (hasNegativeVolume && hasValidPrices) {
+          console.log(`[${date} P${period}] Valid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
+          return true;
+        } else {
+          console.log(`[${date} P${period}] Skipping invalid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
+        }
       }
 
-      return isWindFarm && isNegativeVolume;
+      return false;
     });
+
+    // Process offers
+    const validOffers = offers.filter(record => {
+      if (!record || typeof record !== 'object') return false;
+
+      const isWindFarm = record.id && validWindFarmIds.has(record.id);
+      const hasNegativeVolume = typeof record.volume === 'number' && record.volume < 0;
+      const hasValidPrices = typeof record.originalPrice === 'number' && typeof record.finalPrice === 'number';
+
+      if (isWindFarm) {
+        if (hasNegativeVolume && hasValidPrices) {
+          console.log(`[${date} P${period}] Valid offer from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
+          return true;
+        } else {
+          console.log(`[${date} P${period}] Skipping invalid offer from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
+        }
+      }
+
+      return false;
+    });
+
+    const allRecords = [...validBids, ...validOffers];
+    console.log(`[${date} P${period}] Found ${allRecords.length} valid curtailment records (${validBids.length} bids, ${validOffers.length} offers)`);
+
+    // Calculate and log period totals
+    const periodTotal = allRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
+    const periodPayment = allRecords.reduce((sum, r) => sum + Math.abs(r.volume * r.originalPrice), 0);
+
+    if (periodTotal > 0) {
+      console.log(`[${date} P${period}] Period totals: ${periodTotal.toFixed(2)} MWh, £${periodPayment.toFixed(2)}`);
+    }
+
+    return allRecords;
   } catch (error) {
     if (axios.isAxiosError(error)) {
       console.error(`Elexon API error for ${date} period ${period}:`, error.response?.data || error.message);

@@ -21,6 +21,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
           const absVolume = Math.abs(record.volume);
           const payment = absVolume * Math.abs(record.originalPrice);
 
+          // Insert the record into the database
           await db.insert(curtailmentRecords).values({
             settlementDate: date,
             settlementPeriod: period,
@@ -36,6 +37,9 @@ export async function processDailyCurtailment(date: string): Promise<void> {
           totalVolume += absVolume;
           totalPayment += payment;
           recordsProcessed++;
+
+          // Log individual record details for debugging
+          console.log(`[${date} P${period}] Processed record: farm=${record.id}, volume=${absVolume}, payment=${payment}`);
         } catch (error) {
           console.error(`Error processing record for ${date} period ${period}:`, error);
           console.error('Record data:', JSON.stringify(record, null, 2));
@@ -43,7 +47,9 @@ export async function processDailyCurtailment(date: string): Promise<void> {
       }
 
       if (period % 12 === 0) {
-        console.log(`Progress update for ${date}: Completed ${period}/48 periods, processed ${recordsProcessed} records so far`);
+        console.log(`Progress update for ${date}: Completed ${period}/48 periods`);
+        console.log(`Records processed: ${recordsProcessed}`);
+        console.log(`Running totals: ${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)}`);
       }
     } catch (error) {
       console.error(`Error processing period ${period} for date ${date}:`, error);
@@ -57,8 +63,10 @@ export async function processDailyCurtailment(date: string): Promise<void> {
 
   // Update daily summary
   try {
-    console.log(`Updating daily summary for ${date}: ${recordsProcessed} records processed`);
-    console.log(`Total volume: ${totalVolume}, Total payment: ${totalPayment}`);
+    console.log(`\nUpdating daily summary for ${date}:`);
+    console.log(`Total records processed: ${recordsProcessed}`);
+    console.log(`Total volume: ${totalVolume.toFixed(2)} MWh`);
+    console.log(`Total payment: £${totalPayment.toFixed(2)}`);
 
     await db.insert(dailySummaries).values({
       summaryDate: date,

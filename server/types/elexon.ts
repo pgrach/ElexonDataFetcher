@@ -3,11 +3,9 @@ export interface ElexonBidOffer {
   settlementPeriod: number;
   id: string;
   bmUnit?: string;
-  bidPrice?: number;
-  offerPrice?: number;
   volume: number;
   soFlag: boolean;
-  cadlFlag: boolean;
+  cadlFlag: boolean | null;
   originalPrice: number;
   finalPrice: number;
 }
