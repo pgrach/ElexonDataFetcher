@@ -2,13 +2,9 @@ import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
 import { z } from 'zod';
-import { fileURLToPath } from 'url';
 
 const ELEXON_API_URL = 'https://data.elexon.co.uk/bmrs/api/v1/reference/bmunits/all';
-// Use __dirname to get correct project root path
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const BMU_MAPPING_PATH = path.resolve(__dirname, '..', '..', 'data', 'bmuMapping.json');
+const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
@@ -81,10 +77,8 @@ async function updateBmuMapping() {
   try {
     console.log('Starting BMU mapping update process...');
 
-    // Create all necessary directories recursively
-    const dirPath = path.dirname(BMU_MAPPING_PATH);
-    await fs.mkdir(dirPath, { recursive: true });
-    console.log(`Created directory structure: ${dirPath}`);
+    // Create data directory if it doesn't exist
+    await fs.mkdir(path.dirname(BMU_MAPPING_PATH), { recursive: true });
 
     // Fetch data with retry logic
     const bmuData = await fetchBmuData();
@@ -111,7 +105,7 @@ async function updateBmuMapping() {
     )).filter(bmu => bmu !== null);
 
     // Sort by BMU ID for consistency
-    const sortedWindBmus = windBmus.sort((a, b) =>
+    const sortedWindBmus = windBmus.sort((a, b) => 
       a!.elexonBmUnit.localeCompare(b!.elexonBmUnit)
     );
 

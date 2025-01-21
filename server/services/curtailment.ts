@@ -4,12 +4,9 @@ import { fetchBidsOffers } from "./elexon";
 import { eq } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
-import { fileURLToPath } from 'url';
 
-// Use __dirname to get correct project root path
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const BMU_MAPPING_PATH = path.resolve(__dirname, '..', '..', 'data', 'bmuMapping.json');
+// Load BMU mapping from the correct location
+const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 
 let windFarmBmuIds: Set<string> | null = null;
 
@@ -33,9 +30,6 @@ async function loadWindFarmIds(): Promise<Set<string>> {
     return windFarmBmuIds;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
-    // Log more details about the error and file path
-    console.error('BMU Mapping Path:', BMU_MAPPING_PATH);
-    console.error('Current working directory:', process.cwd());
     throw error;
   }
 }
@@ -49,87 +43,71 @@ export async function processDailyCurtailment(date: string): Promise<void> {
 
   const validWindFarmIds = await loadWindFarmIds();
 
-  // Process all 48 periods concurrently in smaller batches to avoid overwhelming the API
-  const periods = Array.from({ length: 48 }, (_, i) => i + 1);
-  const BATCH_SIZE = 6; // Process 6 periods at a time
+  for (let period = 1; period <= 48; period++) {
+    try {
+      const records = await fetchBidsOffers(date, period);
 
-  for (let i = 0; i < periods.length; i += BATCH_SIZE) {
-    const batch = periods.slice(i, i + BATCH_SIZE);
+      // Log raw data for debugging
+      console.log(`[${date} P${period}] Processing ${records.length} records`);
 
-    // Process batch of periods concurrently
-    const results = await Promise.allSettled(
-      batch.map(async (period) => {
+      // Filter records using same criteria as reference implementation
+      const validRecords = records.filter(record => 
+        record.volume < 0 && // Only negative volumes (curtailment)
+        record.soFlag && // System operator flagged
+        validWindFarmIds.has(record.id) // Check if BMU is a wind farm using mapping
+      );
+
+      console.log(`[${date} P${period}] Found ${validRecords.length} valid curtailment records`);
+
+      for (const record of validRecords) {
         try {
-          const records = await fetchBidsOffers(date, period);
+          // Following reference implementation logic:
+          // 1. Volume comes as negative from API, store absolute value
+          // 2. Payment = |Volume| * Price * -1
+          const volume = Math.abs(record.volume);
+          const payment = volume * record.originalPrice * -1;
 
-          // Filter records using same criteria as reference implementation
-          const validRecords = records.filter(record =>
-            record.volume < 0 && // Only negative volumes (curtailment)
-            record.soFlag && // System operator flagged
-            validWindFarmIds.has(record.id) // Check if BMU is a wind farm using mapping
-          );
+          await db.insert(curtailmentRecords).values({
+            settlementDate: date,
+            settlementPeriod: period,
+            farmId: record.id,
+            volume: volume.toString(),
+            payment: payment.toString(),
+            originalPrice: record.originalPrice.toString(),
+            finalPrice: record.finalPrice.toString(),
+            soFlag: record.soFlag,
+            cadlFlag: record.cadlFlag
+          });
 
-          console.log(`[${date} P${period}] Found ${validRecords.length} valid curtailment records`);
+          totalVolume += volume;
+          totalPayment += payment;
+          recordsProcessed++;
 
-          for (const record of validRecords) {
-            try {
-              const volume = Math.abs(record.volume);
-              const payment = volume * record.originalPrice * -1;
-
-              await db.insert(curtailmentRecords).values({
-                settlementDate: date,
-                settlementPeriod: period,
-                farmId: record.id,
-                volume: volume.toString(),
-                payment: payment.toString(),
-                originalPrice: record.originalPrice.toString(),
-                finalPrice: record.finalPrice.toString(),
-                soFlag: record.soFlag,
-                cadlFlag: record.cadlFlag
-              });
-
-              totalVolume += volume;
-              totalPayment += payment;
-              recordsProcessed++;
-
-              console.log(`[${date} P${period}] Processed record:`, {
-                farm: record.id,
-                volume,
-                payment,
-                soFlag: record.soFlag,
-              });
-            } catch (error) {
-              console.error(`Error processing record for ${date} period ${period}:`, error);
-            }
-          }
-
-          return { period, success: true, records: validRecords.length };
+          console.log(`[${date} P${period}] Processed record:`, {
+            farm: record.id,
+            volume,
+            originalPrice: record.originalPrice,
+            payment,
+            soFlag: record.soFlag,
+          });
         } catch (error) {
-          console.error(`Error processing period ${period} for date ${date}:`, error);
-          return { period, success: false, error };
+          console.error(`Error processing record for ${date} period ${period}:`, error);
+          console.error('Record data:', JSON.stringify(record, null, 2));
         }
-      })
-    );
+      }
 
-    // Log batch progress
-    const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
-    const recordCount = results
-      .filter((r): r is PromiseFulfilledResult<{ records: number }> =>
-        r.status === 'fulfilled' && r.value.success
-      )
-      .reduce((sum, r) => sum + r.value.records, 0);
-
-    if (successful < batch.length) {
-      console.log(`Warning: Only ${successful}/${batch.length} periods processed successfully in current batch`);
+      if (period % 12 === 0) {
+        console.log(`Progress update for ${date}: Completed ${period}/48 periods`);
+        console.log(`Records processed: ${recordsProcessed}`);
+        console.log(`Running totals: ${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)}`);
+      }
+    } catch (error) {
+      console.error(`Error processing period ${period} for date ${date}:`, error);
+      continue;
     }
 
-    console.log(`Progress: Completed periods ${i + 1}-${Math.min(i + BATCH_SIZE, 48)} (${recordCount} records in this batch)`);
-    console.log(`Running totals: ${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)}`);
-
-    // Small delay between batches to avoid rate limiting
-    if (i + BATCH_SIZE < periods.length) {
-      await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay between batches
-    }
+    // Add delay between API calls to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   // Update daily summary
