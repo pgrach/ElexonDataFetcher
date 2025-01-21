@@ -27,7 +27,7 @@ interface MonthlySummary {
 }
 
 export default function Home() {
-  const [date, setDate] = useState<Date>(new Date("2024-12-01")); // Set initial date to December 2024
+  const [date, setDate] = useState<Date>(new Date("2024-12-01")); // Default to December 2024
 
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`],
@@ -55,8 +55,8 @@ export default function Home() {
                 selected={date}
                 onSelect={(newDate) => newDate && setDate(newDate)}
                 disabled={(date) => {
-                  // Allow dates from Dec 2024 to today
-                  return date < new Date("2024-12-01") || date > new Date();
+                  // Allow dates from Nov 2024 to today
+                  return date < new Date("2024-11-01") || date > new Date();
                 }}
               />
             </CardContent>
