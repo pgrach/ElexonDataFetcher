@@ -3,9 +3,9 @@ import { db } from "@db";
 import { dailySummaries } from "@db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
-const API_CALL_DELAY = 5000; // 5 seconds between API calls
+const API_CALL_DELAY = 1000; // Reduced to 1 second between days
 const MAX_RETRIES = 5;
-const BATCH_SIZE = 1; // Process 1 day at a time to avoid timeouts
+const BATCH_SIZE = 5; // Process 5 days at a time
 
 // API Request tracking
 let apiRequestsPerMinute: { [key: string]: number } = {};
@@ -82,7 +82,7 @@ async function ingestBatch(startDate: string) {
   try {
     console.log(`\n=== Starting batch ingestion from ${startDate} ===`);
 
-    // Generate the next day from the start date
+    // Generate the next batch of days from the start date
     const batchDays = Array.from({ length: BATCH_SIZE }, (_, i) => {
       const date = new Date(startDate);
       date.setDate(date.getDate() + i);
@@ -91,27 +91,28 @@ async function ingestBatch(startDate: string) {
 
     console.log(`Processing ${batchDays.length} days starting from ${startDate}`);
 
-    // Process each day in the batch
-    for (const dateStr of batchDays) {
-      const success = await processDay(dateStr);
+    // Process multiple days in parallel
+    const results = await Promise.all(
+      batchDays.map(async dateStr => {
+        const success = await processDay(dateStr);
 
-      if (success) {
-        const processedData = await db.query.dailySummaries.findFirst({
-          where: eq(dailySummaries.summaryDate, dateStr)
-        });
+        if (success) {
+          const processedData = await db.query.dailySummaries.findFirst({
+            where: eq(dailySummaries.summaryDate, dateStr)
+          });
 
-        if (processedData) {
-          console.log(`${dateStr} Summary:`);
-          console.log(`- Total Curtailed Energy: ${Number(processedData.totalCurtailedEnergy).toFixed(2)} MWh`);
-          console.log(`- Total Payment: £${Number(processedData.totalPayment).toFixed(2)}`);
+          if (processedData) {
+            console.log(`${dateStr} Summary:`);
+            console.log(`- Total Curtailed Energy: ${Number(processedData.totalCurtailedEnergy).toFixed(2)} MWh`);
+            console.log(`- Total Payment: £${Number(processedData.totalPayment).toFixed(2)}`);
+          }
+        } else {
+          console.log(`\nFailed to process ${dateStr}\n`);
         }
 
-        await delay(API_CALL_DELAY);
-      } else {
-        console.log(`\nSkipping to next day after failure of ${dateStr}...\n`);
-        await delay(API_CALL_DELAY * 2);
-      }
-    }
+        return { dateStr, success };
+      })
+    );
 
     // Show batch statistics
     console.log('\nBatch API Request Statistics:');
@@ -122,6 +123,9 @@ async function ingestBatch(startDate: string) {
       .forEach(([minute, count]) => {
         console.log(`${minute}: ${count} requests`);
       });
+
+    // Return success status for each day
+    return results;
 
   } catch (error) {
     console.error('Fatal error during batch ingestion:', error);

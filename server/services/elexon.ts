@@ -8,6 +8,7 @@ const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 const MAX_REQUESTS_PER_MINUTE = 4500; // Keep buffer below 5000 limit
 const REQUEST_WINDOW_MS = 60000; // 1 minute in milliseconds
+const PARALLEL_REQUESTS = 10; // Allow 10 parallel requests
 
 let windFarmIds: Set<string> | null = null;
 let requestTimestamps: number[] = [];
@@ -74,27 +75,22 @@ async function makeRequest(url: string, date: string, period: number): Promise<a
 export async function fetchBidsOffers(date: string, period: number): Promise<ElexonBidOffer[]> {
   try {
     const validWindFarmIds = await loadWindFarmIds();
-    console.log(`[${date} P${period}] Fetching data...`);
 
-    // Make requests sequentially instead of in parallel
-    const bidsResponse = await makeRequest(
-      `${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`,
-      date,
-      period
-    ).catch(error => {
-      console.error(`[${date} P${period}] Error fetching bids:`, error.response?.data || error.message);
-      return { data: { data: [] } };
-    });
-
-    await delay(1000); // Small delay between requests
-
-    const offersResponse = await makeRequest(
-      `${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`,
-      date,
-      period
-    ).catch(error => {
-      console.error(`[${date} P${period}] Error fetching offers:`, error.response?.data || error.message);
-      return { data: { data: [] } };
+    // Make parallel requests for bids and offers
+    const [bidsResponse, offersResponse] = await Promise.all([
+      makeRequest(
+        `${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`,
+        date,
+        period
+      ),
+      makeRequest(
+        `${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`,
+        date,
+        period
+      )
+    ]).catch(error => {
+      console.error(`[${date} P${period}] Error fetching data:`, error.message);
+      return [{ data: { data: [] } }, { data: { data: [] } }];
     });
 
     if (!bidsResponse.data?.data || !offersResponse.data?.data) {
@@ -102,11 +98,11 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
       return [];
     }
 
-    const validBids = bidsResponse.data.data.filter(record => 
+    const validBids = bidsResponse.data.data.filter((record: any) => 
       record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
     );
 
-    const validOffers = offersResponse.data.data.filter(record => 
+    const validOffers = offersResponse.data.data.filter((record: any) => 
       record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
     );
 
