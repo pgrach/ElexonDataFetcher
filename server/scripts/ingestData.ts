@@ -5,7 +5,7 @@ import { dailySummaries } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 const CHUNK_SIZE = 1; // Process 1 day at a time to avoid timeouts
-const CHUNK_DELAY = 15000; // Reduced to 15 second delay between chunks
+const CHUNK_DELAY = 15000; // 15 second delay between chunks
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 10000; // 10 seconds between retries
 const RATE_LIMIT_DELAY = 30000; // 30 seconds after rate limit errors
@@ -67,22 +67,25 @@ async function processChunk(days: Date[]) {
 
 async function ingestHistoricalData() {
   try {
-    const startDate = parseISO("2024-12-01"); // Start from December 1st, 2024
+    const startDate = parseISO("2024-12-07"); // Start from December 7th, 2024 (since we have 1-6)
     const endDate = parseISO("2024-12-31"); // End at December 31st, 2024
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
-    console.log(`Starting December 2024 data ingestion`);
-    console.log(`Date range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
-    console.log(`Total days to process: ${days.length}`);
+    console.log(`\n=== Starting December 2024 Data Ingestion (Remaining Days) ===`);
+    console.log(`Current Progress: 6/31 days processed (19.4%)`);
+    console.log(`Target Range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
+    console.log(`Days Remaining: ${days.length}`);
+    console.log(`===============================================\n`);
 
     // Process days in smaller chunks
     for (let i = 0; i < days.length; i += CHUNK_SIZE) {
       const chunk = days.slice(i, i + CHUNK_SIZE);
       const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
       const totalChunks = Math.ceil(days.length/CHUNK_SIZE);
+      const overallProgress = Math.round(((i + 6)/31) * 100); // Including the 6 days we already have
 
-      console.log(`\nProcessing chunk ${chunkNum} of ${totalChunks} (${Math.round((chunkNum/totalChunks) * 100)}% complete)`);
-      console.log(`Days in current chunk: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
+      console.log(`\n=== Processing Chunk ${chunkNum}/${totalChunks} (Overall Progress: ${overallProgress}%) ===`);
+      console.log(`Current day: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
 
       await processChunk(chunk);
 
@@ -92,7 +95,9 @@ async function ingestHistoricalData() {
       }
     }
 
-    console.log('\nDecember 2024 data ingestion completed successfully');
+    console.log('\n=== December 2024 Data Ingestion Completed ===');
+    console.log('All remaining days have been processed successfully');
+    console.log('===========================================\n');
   } catch (error) {
     console.error('Fatal error during ingestion:', error);
     process.exit(1);
