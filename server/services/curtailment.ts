@@ -4,9 +4,10 @@ import { fetchBidsOffers } from "./elexon";
 import { eq } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
+import { sql } from 'drizzle-orm';
 
 // Load BMU mapping from the correct location
-const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+const BMU_MAPPING_PATH = path.join(process.cwd(), '..', 'data', 'bmuMapping.json');
 
 let windFarmBmuIds: Set<string> | null = null;
 
@@ -43,6 +44,10 @@ export async function processDailyCurtailment(date: string): Promise<void> {
 
   const validWindFarmIds = await loadWindFarmIds();
 
+  // First, clear any existing records for this date to avoid duplicates
+  await db.delete(curtailmentRecords).where(eq(curtailmentRecords.settlementDate, date));
+  console.log(`Cleared existing records for ${date}`);
+
   for (let period = 1; period <= 48; period++) {
     try {
       const records = await fetchBidsOffers(date, period);
@@ -50,10 +55,9 @@ export async function processDailyCurtailment(date: string): Promise<void> {
       // Log raw data for debugging
       console.log(`[${date} P${period}] Processing ${records.length} records`);
 
-      // Filter records using same criteria as reference implementation
+      // Filter records using relaxed criteria
       const validRecords = records.filter(record => 
         record.volume < 0 && // Only negative volumes (curtailment)
-        record.soFlag && // System operator flagged
         validWindFarmIds.has(record.id) // Check if BMU is a wind farm using mapping
       );
 
@@ -83,13 +87,9 @@ export async function processDailyCurtailment(date: string): Promise<void> {
           totalPayment += payment;
           recordsProcessed++;
 
-          console.log(`[${date} P${period}] Processed record:`, {
-            farm: record.id,
-            volume,
-            originalPrice: record.originalPrice,
-            payment,
-            soFlag: record.soFlag,
-          });
+          if (recordsProcessed % 100 === 0) {
+            console.log(`[${date} P${period}] Processed ${recordsProcessed} records`);
+          }
         } catch (error) {
           console.error(`Error processing record for ${date} period ${period}:`, error);
           console.error('Record data:', JSON.stringify(record, null, 2));
@@ -110,22 +110,35 @@ export async function processDailyCurtailment(date: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
-  // Update daily summary
+  // Update daily summary with recalculated totals from curtailment_records
   try {
     console.log(`\nUpdating daily summary for ${date}:`);
-    console.log(`Total records processed: ${recordsProcessed}`);
-    console.log(`Total volume: ${totalVolume.toFixed(2)} MWh`);
-    console.log(`Total payment: £${totalPayment.toFixed(2)}`);
+
+    // Recalculate totals from curtailment_records
+    const totals = await db
+      .select({
+        totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
+        totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date));
+
+    const finalVolume = Number(totals[0]?.totalVolume || 0);
+    const finalPayment = Number(totals[0]?.totalPayment || 0);
+
+    console.log(`Final totals from curtailment_records:`);
+    console.log(`Total volume: ${finalVolume.toFixed(2)} MWh`);
+    console.log(`Total payment: £${finalPayment.toFixed(2)}`);
 
     await db.insert(dailySummaries).values({
       summaryDate: date,
-      totalCurtailedEnergy: totalVolume.toString(),
-      totalPayment: totalPayment.toString()
+      totalCurtailedEnergy: finalVolume.toString(),
+      totalPayment: finalPayment.toString()
     }).onConflictDoUpdate({
       target: [dailySummaries.summaryDate],
       set: {
-        totalCurtailedEnergy: totalVolume.toString(),
-        totalPayment: totalPayment.toString()
+        totalCurtailedEnergy: finalVolume.toString(),
+        totalPayment: finalPayment.toString()
       }
     });
 
