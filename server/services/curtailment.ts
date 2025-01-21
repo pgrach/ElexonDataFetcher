@@ -18,22 +18,8 @@ export async function processDailyCurtailment(date: string): Promise<void> {
       console.log(`[${date} P${period}] Processing ${records.length} records`);
 
       // Filter and process records exactly like reference implementation
-      const validRecords = records.filter(record => {
-        const isValid = record.volume < 0 && // Only negative volumes (curtailment)
-                       record.soFlag &&     // System operator flagged
-                       (record.id.startsWith('T_') || record.id.startsWith('E_')); // Wind farm BMUs
-
-        if (record.volume < 0) {
-          console.log(`[${date} P${period}] Record ${record.id}:`, {
-            isValid,
-            volume: record.volume,
-            soFlag: record.soFlag,
-            isWindFarm: record.id.startsWith('T_') || record.id.startsWith('E_')
-          });
-        }
-
-        return isValid;
-      });
+      // Records are already validated in elexon.ts
+      const validRecords = records;
 
       console.log(`[${date} P${period}] Found ${validRecords.length} valid curtailment records`);
 
