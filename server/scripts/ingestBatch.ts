@@ -5,7 +5,7 @@ import { eq, and, sql } from "drizzle-orm";
 
 const API_CALL_DELAY = 5000; // 5 seconds between API calls
 const MAX_RETRIES = 5;
-const BATCH_SIZE = 5; // Process 5 days at a time
+const BATCH_SIZE = 1; // Process 1 day at a time to avoid timeouts
 
 // API Request tracking
 let apiRequestsPerMinute: { [key: string]: number } = {};
@@ -82,7 +82,7 @@ async function ingestBatch(startDate: string) {
   try {
     console.log(`\n=== Starting batch ingestion from ${startDate} ===`);
 
-    // Generate the next 5 days from the start date
+    // Generate the next day from the start date
     const batchDays = Array.from({ length: BATCH_SIZE }, (_, i) => {
       const date = new Date(startDate);
       date.setDate(date.getDate() + i);

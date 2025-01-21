@@ -6,8 +6,11 @@ import { ElexonBidOffer, ElexonResponse } from "../types/elexon";
 
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+const MAX_REQUESTS_PER_MINUTE = 4500; // Keep buffer below 5000 limit
+const REQUEST_WINDOW_MS = 60000; // 1 minute in milliseconds
 
 let windFarmIds: Set<string> | null = null;
+let requestTimestamps: number[] = [];
 
 async function loadWindFarmIds(): Promise<Set<string>> {
   if (windFarmIds !== null) {
@@ -25,47 +28,94 @@ async function loadWindFarmIds(): Promise<Set<string>> {
   }
 }
 
+function trackRequest() {
+  const now = Date.now();
+  requestTimestamps = [...requestTimestamps, now].filter(timestamp => 
+    now - timestamp < REQUEST_WINDOW_MS
+  );
+}
+
+async function waitForRateLimit(): Promise<void> {
+  const now = Date.now();
+  requestTimestamps = requestTimestamps.filter(timestamp => 
+    now - timestamp < REQUEST_WINDOW_MS
+  );
+
+  if (requestTimestamps.length >= MAX_REQUESTS_PER_MINUTE) {
+    const oldestRequest = requestTimestamps[0];
+    const waitTime = REQUEST_WINDOW_MS - (now - oldestRequest);
+    console.log(`Rate limit reached, waiting ${Math.ceil(waitTime/1000)}s...`);
+    await delay(waitTime + 100); // Add 100ms buffer
+    return waitForRateLimit(); // Recheck after waiting
+  }
+}
+
+async function makeRequest(url: string, date: string, period: number): Promise<any> {
+  await waitForRateLimit();
+
+  try {
+    const response = await axios.get(url, {
+      headers: { 'Accept': 'application/json' },
+      timeout: 30000 // 30 second timeout
+    });
+
+    trackRequest();
+    return response;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 429) {
+      console.log(`[${date} P${period}] Rate limited, retrying after delay...`);
+      await delay(60000); // Wait 1 minute on rate limit
+      return makeRequest(url, date, period);
+    }
+    throw error;
+  }
+}
+
 export async function fetchBidsOffers(date: string, period: number): Promise<ElexonBidOffer[]> {
   try {
     const validWindFarmIds = await loadWindFarmIds();
-    console.log(`[${date} P${period}] Fetching bids and offers...`);
+    console.log(`[${date} P${period}] Fetching data...`);
 
-    const [bidsResponse, offersResponse] = await Promise.all([
-      axios.get<ElexonResponse>(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`).catch(error => {
-        console.error(`[${date} P${period}] Error fetching bids:`, error.response?.data || error.message);
-        return { data: { data: [] } };
-      }),
-      axios.get<ElexonResponse>(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`).catch(error => {
-        console.error(`[${date} P${period}] Error fetching offers:`, error.response?.data || error.message);
-        return { data: { data: [] } };
-      })
-    ]);
+    // Make requests sequentially instead of in parallel
+    const bidsResponse = await makeRequest(
+      `${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`,
+      date,
+      period
+    ).catch(error => {
+      console.error(`[${date} P${period}] Error fetching bids:`, error.response?.data || error.message);
+      return { data: { data: [] } };
+    });
+
+    await delay(1000); // Small delay between requests
+
+    const offersResponse = await makeRequest(
+      `${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`,
+      date,
+      period
+    ).catch(error => {
+      console.error(`[${date} P${period}] Error fetching offers:`, error.response?.data || error.message);
+      return { data: { data: [] } };
+    });
 
     if (!bidsResponse.data?.data || !offersResponse.data?.data) {
       console.error(`[${date} P${period}] Invalid API response format`);
       return [];
     }
 
-    const bids = bidsResponse.data.data;
-    const offers = offersResponse.data.data;
-
-    // Process bids and offers with minimal logging
-    const validBids = bids.filter(record => 
+    const validBids = bidsResponse.data.data.filter(record => 
       record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
     );
 
-    const validOffers = offers.filter(record => 
+    const validOffers = offersResponse.data.data.filter(record => 
       record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
     );
 
     const allRecords = [...validBids, ...validOffers];
 
-    // Log only summary information
     if (allRecords.length > 0) {
       const periodTotal = allRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
       const periodPayment = allRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
-      console.log(`[${date} P${period}] Found ${allRecords.length} valid curtailment records (${validBids.length} bids, ${validOffers.length} offers)`);
-      console.log(`[${date} P${period}] Period totals: ${periodTotal.toFixed(2)} MWh, £${periodPayment.toFixed(2)}`);
+      console.log(`[${date} P${period}] Records: ${allRecords.length} (${periodTotal.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
     }
 
     return allRecords;
