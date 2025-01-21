@@ -1,111 +1,87 @@
-import { eachDayOfInterval, format, parseISO } from "date-fns";
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
 import { dailySummaries } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-// Process 2 days at a time to avoid timeouts while maintaining good throughput
-const CHUNK_SIZE = 2;
-const CHUNK_DELAY = 10000; // 10 second delay between chunks
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 5000; // 5 seconds between retries
-const RATE_LIMIT_DELAY = 15000; // 15 seconds after rate limit errors
+// Configuration for retry mechanism
+const MAX_RETRIES = 5;
+const RETRY_DELAY = 30000; // 30 seconds between retries
 
-// Specific dates that need reprocessing
-const PROBLEM_DATES = [
-  "2024-12-12",
-  "2024-12-11",
-  "2024-12-28",
-  "2024-12-29"
-];
+// Get date from command line argument or use default
+const dateToProcess = process.argv[2] || "2024-12-10";
 
 async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
+async function processDate(dateStr: string, retryCount = 0): Promise<boolean> {
   try {
-    console.log(`\nStarting processing for ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+    console.log(`\n=== Processing Date: ${dateStr} ===`);
+    console.log(`Attempt ${retryCount + 1}/${MAX_RETRIES}`);
+    console.log(`Time: ${new Date().toISOString()}`);
+    console.log(`===============================\n`);
+
     await processDailyCurtailment(dateStr);
 
-    // Verify the data was actually ingested properly
+    // Verify the data was actually ingested
     const summary = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, dateStr)
     });
 
-    // If summary exists but has zero values, consider it a failed ingestion
-    if (summary && Number(summary.totalCurtailedEnergy) === 0 && Number(summary.totalPayment) === 0) {
+    if (!summary || (Number(summary.totalCurtailedEnergy) === 0 && Number(summary.totalPayment) === 0)) {
       console.log(`Warning: Zero values detected for ${dateStr}, will retry...`);
       throw new Error('Zero values detected in summary');
     }
 
-    console.log(`✓ Successfully processed ${dateStr}`);
+    console.log(`\n=== Successfully processed ${dateStr} ===`);
+    console.log(`Total Energy: ${summary.totalCurtailedEnergy} MWh`);
+    console.log(`Total Payment: £${summary.totalPayment}`);
+    console.log(`======================================\n`);
+
     return true;
   } catch (error) {
-    const isRateLimit = (error as Error).message?.toLowerCase().includes('rate limit');
+    const isRateLimit = error.message?.toLowerCase().includes('rate limit');
     console.error(`Error processing ${dateStr} (attempt ${retryCount + 1}):`, error);
 
     if (retryCount < MAX_RETRIES) {
-      const delayTime = isRateLimit ? RATE_LIMIT_DELAY : RETRY_DELAY;
-      console.log(`Retrying ${dateStr} in ${delayTime/1000} seconds...`);
+      const delayTime = isRateLimit ? RETRY_DELAY * 2 : RETRY_DELAY;
+      console.log(`\nRetrying ${dateStr} in ${delayTime/1000} seconds...`);
       await delay(delayTime);
-      return processDay(dateStr, retryCount + 1);
+      return processDate(dateStr, retryCount + 1);
     }
 
-    console.error(`Failed to process ${dateStr} after ${MAX_RETRIES + 1} attempts`);
+    console.error(`Failed to process ${dateStr} after ${MAX_RETRIES} attempts`);
     return false;
   }
 }
 
-async function processChunk(dates: string[]) {
-  console.log(`Processing dates: ${dates.join(', ')}`);
-
-  const results = await Promise.all(
-    dates.map(async (dateStr) => {
-      // Always process these problem dates
-      console.log(`Processing ${dateStr}...`);
-      return processDay(dateStr);
-    })
-  );
-
-  const successCount = results.filter(Boolean).length;
-  if (successCount < dates.length) {
-    console.log(`Warning: ${dates.length - successCount} dates in chunk failed to process`);
-  }
-}
-
-async function reprocessProblemDates() {
+// Process single date
+async function main() {
   try {
-    console.log(`\n=== Starting Reprocessing of Problem Dates ===`);
-    console.log(`Dates to process: ${PROBLEM_DATES.join(', ')}`);
-    console.log(`===============================================\n`);
+    const success = await processDate(dateToProcess);
 
-    // Process dates in chunks
-    for (let i = 0; i < PROBLEM_DATES.length; i += CHUNK_SIZE) {
-      const chunk = PROBLEM_DATES.slice(i, i + CHUNK_SIZE);
-      const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
-      const totalChunks = Math.ceil(PROBLEM_DATES.length/CHUNK_SIZE);
-      const progress = Math.round((i/PROBLEM_DATES.length) * 100);
-
-      console.log(`\n=== Processing Chunk ${chunkNum}/${totalChunks} (Progress: ${progress}%) ===`);
-      await processChunk(chunk);
-
-      if (i + CHUNK_SIZE < PROBLEM_DATES.length) {
-        console.log(`\nWaiting ${CHUNK_DELAY/1000} seconds before next chunk...`);
-        await delay(CHUNK_DELAY);
-      }
+    if (!success) {
+      console.error(`Failed to process ${dateToProcess}`);
+      process.exit(1);
     }
 
-    console.log('\n=== Problem Dates Reprocessing Completed ===');
-    console.log('All specified dates have been processed');
-    console.log('==========================================\n');
+    // Final validation
+    const summary = await db.query.dailySummaries.findFirst({
+      where: eq(dailySummaries.summaryDate, dateToProcess)
+    });
+
+    if (summary) {
+      console.log('\nFinal Data Validation:');
+      console.log(`Date: ${dateToProcess}`);
+      console.log(`Total Curtailed Energy: ${Number(summary.totalCurtailedEnergy).toFixed(2)} MWh`);
+      console.log(`Total Payment: £${Number(summary.totalPayment).toFixed(2)}`);
+    }
+
   } catch (error) {
-    console.error('Fatal error during reprocessing:', error);
+    console.error('Fatal error:', error);
     process.exit(1);
   }
 }
 
-// Run the reprocessing
-reprocessProblemDates();
-
-export { reprocessProblemDates };
+// Run the script
+main();
