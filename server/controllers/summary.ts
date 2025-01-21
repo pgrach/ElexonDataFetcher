@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "@db";
-import { dailySummaries, curtailmentRecords } from "@db/schema";
+import { dailySummaries, curtailmentRecords, monthlySummaries } from "@db/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function getDailySummary(req: Request, res: Response) {
@@ -49,6 +49,54 @@ export async function getDailySummary(req: Request, res: Response) {
     });
   } catch (error) {
     console.error('Error fetching daily summary:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching summary"
+    });
+  }
+}
+
+export async function getMonthlySummary(req: Request, res: Response) {
+  try {
+    const { yearMonth } = req.params;
+
+    // Validate yearMonth format (YYYY-MM)
+    if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
+      return res.status(400).json({
+        error: "Invalid format. Please use YYYY-MM"
+      });
+    }
+
+    // Get the monthly summary
+    const summary = await db.query.monthlySummaries.findFirst({
+      where: eq(monthlySummaries.yearMonth, yearMonth)
+    });
+
+    if (!summary) {
+      return res.status(404).json({
+        error: "No data available for this month"
+      });
+    }
+
+    // Calculate totals from daily_summaries for verification
+    const dailyTotals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
+      })
+      .from(dailySummaries)
+      .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${yearMonth + '-01'}::date)`);
+
+    res.json({
+      yearMonth,
+      totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
+      totalPayment: Number(summary.totalPayment),
+      dailyTotals: {
+        totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
+        totalPayment: Number(dailyTotals[0]?.totalPayment || 0)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching monthly summary:', error);
     res.status(500).json({
       error: "Internal server error while fetching summary"
     });

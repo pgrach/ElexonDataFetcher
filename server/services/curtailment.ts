@@ -1,9 +1,10 @@
 import { db } from "@db";
-import { curtailmentRecords, dailySummaries } from "@db/schema";
+import { curtailmentRecords, dailySummaries, monthlySummaries } from "@db/schema";
 import { fetchBidsOffers } from "./elexon";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
+import { format } from "date-fns";
 
 // Load BMU mapping from the correct location
 const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
@@ -30,6 +31,51 @@ async function loadWindFarmIds(): Promise<Set<string>> {
     return windFarmBmuIds;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
+    throw error;
+  }
+}
+
+async function updateMonthlySummary(date: string): Promise<void> {
+  const yearMonth = date.substring(0, 7); // Extract YYYY-MM from YYYY-MM-DD
+
+  try {
+    // Calculate monthly totals from daily_summaries
+    const monthlyTotals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
+      })
+      .from(dailySummaries)
+      .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${date}::date)`);
+
+    const totals = monthlyTotals[0];
+
+    if (totals.totalCurtailedEnergy === null || totals.totalPayment === null) {
+      console.log(`No daily summaries found for ${yearMonth}, skipping monthly summary update`);
+      return;
+    }
+
+    // Update monthly summary
+    await db.insert(monthlySummaries).values({
+      yearMonth,
+      totalCurtailedEnergy: totals.totalCurtailedEnergy,
+      totalPayment: totals.totalPayment,
+      updatedAt: new Date()
+    }).onConflictDoUpdate({
+      target: [monthlySummaries.yearMonth],
+      set: {
+        totalCurtailedEnergy: totals.totalCurtailedEnergy,
+        totalPayment: totals.totalPayment,
+        updatedAt: new Date()
+      }
+    });
+
+    console.log(`Updated monthly summary for ${yearMonth}:`, {
+      totalCurtailedEnergy: totals.totalCurtailedEnergy,
+      totalPayment: totals.totalPayment
+    });
+  } catch (error) {
+    console.error(`Error updating monthly summary for ${yearMonth}:`, error);
     throw error;
   }
 }
@@ -130,6 +176,9 @@ export async function processDailyCurtailment(date: string): Promise<void> {
     });
 
     console.log(`Successfully updated daily summary for ${date}`);
+
+    // Update monthly summary after daily summary is updated
+    await updateMonthlySummary(date);
   } catch (error) {
     console.error(`Error updating daily summary for ${date}:`, error);
     throw error;

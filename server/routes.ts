@@ -1,11 +1,14 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { getDailySummary } from "./controllers/summary";
+import { getDailySummary, getMonthlySummary } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
 
 export function registerRoutes(app: Express): Server {
   // Daily summary endpoint
   app.get("/api/summary/daily/:date", getDailySummary);
+
+  // Monthly summary endpoint
+  app.get("/api/summary/monthly/:yearMonth", getMonthlySummary);
 
   // Re-ingest data endpoint
   app.post("/api/ingest/:date", async (req, res) => {
