@@ -52,7 +52,7 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
 
     console.log(`[${date} P${period}] Processing ${bids.length} bids and ${offers.length} offers`);
 
-    // Process bids exactly like reference implementation
+    // Process bids - removed cadlFlag from filtering criteria
     const validBids = bids.filter(record => 
       record.volume < 0 && // Only negative volumes (curtailment)
       record.soFlag && // System operator flagged
@@ -64,7 +64,7 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
       console.log(`[${date} P${period}] Valid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
     });
 
-    // Similarly process offers
+    // Similarly process offers - removed cadlFlag from filtering criteria
     const validOffers = offers.filter(record => 
       record.volume < 0 && // Only negative volumes (curtailment)
       record.soFlag && // System operator flagged
