@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery } from "lucide-react";
 
 export default function Home() {
-  const [date, setDate] = useState<Date>(new Date("2024-12-31")); // Default to latest December data
+  const [date, setDate] = useState<Date>(new Date("2025-01-01"));
 
   const { data, isLoading, error } = useQuery({
     queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`],
@@ -32,8 +32,8 @@ export default function Home() {
                 selected={date}
                 onSelect={(newDate) => newDate && setDate(newDate)}
                 disabled={(date) => {
-                  // Allow dates from Dec 2024 to today
-                  return date < new Date("2024-12-01") || date > new Date();
+                  // Only allow dates from Jan 2025 to today
+                  return date < new Date("2025-01-01") || date > new Date();
                 }}
               />
             </CardContent>

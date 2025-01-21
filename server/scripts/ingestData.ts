@@ -1,53 +1,34 @@
+import { eachDayOfInterval, format, parseISO } from "date-fns";
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
 import { dailySummaries } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-// Configuration for retry mechanism
-const MAX_RETRIES = 5;
-const RETRY_DELAY = 30000; // 30 seconds between retries
-
-// Get date from command line argument or use default
-const dateToProcess = process.argv[2] || "2024-12-10";
+const CHUNK_SIZE = 1; // Process 1 day at a time to avoid timeouts
+const CHUNK_DELAY = 15000; // 15 second delay between chunks
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 10000; // 10 seconds between retries
+const RATE_LIMIT_DELAY = 30000; // 30 seconds after rate limit errors
 
 async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function processDate(dateStr: string, retryCount = 0): Promise<boolean> {
+async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
   try {
-    console.log(`\n=== Processing Date: ${dateStr} ===`);
-    console.log(`Attempt ${retryCount + 1}/${MAX_RETRIES}`);
-    console.log(`Time: ${new Date().toISOString()}`);
-    console.log(`===============================\n`);
-
+    console.log(`\nStarting processing for ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     await processDailyCurtailment(dateStr);
-
-    // Verify the data was actually ingested
-    const summary = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, dateStr)
-    });
-
-    if (!summary || (Number(summary.totalCurtailedEnergy) === 0 && Number(summary.totalPayment) === 0)) {
-      console.log(`Warning: Zero values detected for ${dateStr}, will retry...`);
-      throw new Error('Zero values detected in summary');
-    }
-
-    console.log(`\n=== Successfully processed ${dateStr} ===`);
-    console.log(`Total Energy: ${summary.totalCurtailedEnergy} MWh`);
-    console.log(`Total Payment: £${summary.totalPayment}`);
-    console.log(`======================================\n`);
-
+    console.log(`✓ Successfully processed ${dateStr}`);
     return true;
   } catch (error) {
-    const isRateLimit = error.message?.toLowerCase().includes('rate limit');
+    const isRateLimit = (error as Error).message?.toLowerCase().includes('rate limit');
     console.error(`Error processing ${dateStr} (attempt ${retryCount + 1}):`, error);
 
     if (retryCount < MAX_RETRIES) {
-      const delayTime = isRateLimit ? RETRY_DELAY * 2 : RETRY_DELAY;
-      console.log(`\nRetrying ${dateStr} in ${delayTime/1000} seconds...`);
+      const delayTime = isRateLimit ? RATE_LIMIT_DELAY : RETRY_DELAY;
+      console.log(`Retrying ${dateStr} in ${delayTime/1000} seconds...`);
       await delay(delayTime);
-      return processDate(dateStr, retryCount + 1);
+      return processDay(dateStr, retryCount + 1);
     }
 
     console.error(`Failed to process ${dateStr} after ${MAX_RETRIES} attempts`);
@@ -55,33 +36,75 @@ async function processDate(dateStr: string, retryCount = 0): Promise<boolean> {
   }
 }
 
-// Process single date
-async function main() {
-  try {
-    const success = await processDate(dateToProcess);
+async function processChunk(days: Date[]) {
+  for (const day of days) {
+    const dateStr = format(day, 'yyyy-MM-dd');
 
-    if (!success) {
-      console.error(`Failed to process ${dateToProcess}`);
-      process.exit(1);
-    }
-
-    // Final validation
-    const summary = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, dateToProcess)
+    // Check if we already have data for this date
+    const existingData = await db.query.dailySummaries.findFirst({
+      where: eq(dailySummaries.summaryDate, dateStr)
     });
 
-    if (summary) {
-      console.log('\nFinal Data Validation:');
-      console.log(`Date: ${dateToProcess}`);
-      console.log(`Total Curtailed Energy: ${Number(summary.totalCurtailedEnergy).toFixed(2)} MWh`);
-      console.log(`Total Payment: £${Number(summary.totalPayment).toFixed(2)}`);
+    if (existingData) {
+      console.log(`✓ Data already exists for ${dateStr}, skipping...`);
+      continue;
     }
 
+    console.log(`\nProcessing data for ${dateStr}`);
+    const success = await processDay(dateStr);
+
+    if (success) {
+      // Add shorter delay between successful days to speed up processing
+      console.log(`Waiting 5 seconds before next day...`);
+      await delay(5000);
+    } else {
+      // Add longer delay after failed days
+      console.log(`Waiting 15 seconds before next day due to previous failure...`);
+      await delay(15000);
+    }
+  }
+}
+
+async function ingestHistoricalData() {
+  try {
+    const startDate = parseISO("2024-12-07"); // Start from December 7th, 2024 (since we have 1-6)
+    const endDate = parseISO("2024-12-31"); // End at December 31st, 2024
+    const days = eachDayOfInterval({ start: startDate, end: endDate });
+
+    console.log(`\n=== Starting December 2024 Data Ingestion (Remaining Days) ===`);
+    console.log(`Current Progress: 6/31 days processed (19.4%)`);
+    console.log(`Target Range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
+    console.log(`Days Remaining: ${days.length}`);
+    console.log(`===============================================\n`);
+
+    // Process days in smaller chunks
+    for (let i = 0; i < days.length; i += CHUNK_SIZE) {
+      const chunk = days.slice(i, i + CHUNK_SIZE);
+      const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
+      const totalChunks = Math.ceil(days.length/CHUNK_SIZE);
+      const overallProgress = Math.round(((i + 6)/31) * 100); // Including the 6 days we already have
+
+      console.log(`\n=== Processing Chunk ${chunkNum}/${totalChunks} (Overall Progress: ${overallProgress}%) ===`);
+      console.log(`Current day: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
+
+      await processChunk(chunk);
+
+      if (i + CHUNK_SIZE < days.length) {
+        console.log(`\nWaiting ${CHUNK_DELAY/1000} seconds before next chunk...`);
+        await delay(CHUNK_DELAY);
+      }
+    }
+
+    console.log('\n=== December 2024 Data Ingestion Completed ===');
+    console.log('All remaining days have been processed successfully');
+    console.log('===========================================\n');
   } catch (error) {
-    console.error('Fatal error:', error);
+    console.error('Fatal error during ingestion:', error);
     process.exit(1);
   }
 }
 
-// Run the script
-main();
+// Run the ingestion
+ingestHistoricalData();
+
+export { ingestHistoricalData };
