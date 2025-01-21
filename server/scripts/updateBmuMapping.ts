@@ -4,31 +4,32 @@ import path from 'path';
 import { z } from 'zod';
 
 const ELEXON_API_URL = 'https://data.elexon.co.uk/bmrs/api/v1/reference/bmunits/all';
-const BMU_MAPPING_PATH = path.join(process.cwd(), '..', 'data', 'bmuMapping.json');
+const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 const REQUEST_TIMEOUT = 10000; // 10 seconds
 
-// Define more lenient validation schema for BMU data
+// Define validation schema for BMU data
 const bmuSchema = z.object({
   nationalGridBmUnit: z.string(),
   elexonBmUnit: z.string(),
   bmUnitName: z.string(),
-  generationCapacity: z.string().transform(val => val || '0.000'), // Default to '0.000' if missing
+  generationCapacity: z.string().refine(val => !isNaN(parseFloat(val)), {
+    message: "Generation capacity must be a valid number string"
+  }),
   fuelType: z.literal('WIND'),
   leadPartyName: z.string().min(1, "Lead party name is required")
 });
 
-// More lenient response schema that handles null values
 const bmuResponseSchema = z.object({
-  nationalGridBmUnit: z.string().nullish().transform(val => val || ''),
-  elexonBmUnit: z.string().nullish().transform(val => val || ''),
-  bmUnitName: z.string().nullish().transform(val => val || ''),
-  generationCapacity: z.string().nullish().transform(val => val || '0.000'),
-  fuelType: z.string().nullish(),
-  leadPartyName: z.string().nullish().transform(val => val || 'Unknown')
-});
+  nationalGridBmUnit: z.string(),
+  elexonBmUnit: z.string(),
+  bmUnitName: z.string(),
+  generationCapacity: z.string(),
+  fuelType: z.string().nullable(),
+  leadPartyName: z.string().nullable()
+}).partial();
 
 async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -49,7 +50,7 @@ async function fetchBmuData(attempt = 1): Promise<any[]> {
       throw new Error('Invalid response format from Elexon API');
     }
 
-    // Validate API response data with more lenient schema
+    // Validate API response data
     const validatedData = response.data.map((item, index) => {
       try {
         return bmuResponseSchema.parse(item);
@@ -82,7 +83,7 @@ async function updateBmuMapping() {
     // Fetch data with retry logic
     const bmuData = await fetchBmuData();
 
-    // Filter wind units and validate with final schema
+    // Validate and filter wind units
     const windBmus = (await Promise.all(
       bmuData
         .filter(bmu => bmu?.fuelType?.toUpperCase() === 'WIND')

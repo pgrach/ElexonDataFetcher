@@ -4,7 +4,8 @@ import { db } from "@db";
 import { dailySummaries } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-const CHUNK_DELAY = 5000; // 5 second delay between chunks
+const CHUNK_SIZE = 1; // Process 1 day at a time to avoid timeouts
+const CHUNK_DELAY = 15000; // 15 second delay between chunks
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 10000; // 10 seconds between retries
 const RATE_LIMIT_DELAY = 30000; // 30 seconds after rate limit errors
@@ -35,23 +36,68 @@ async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
   }
 }
 
-async function ingestSpecificDate() {
-  try {
-    const targetDate = "2024-12-21";
+async function processChunk(days: Date[]) {
+  for (const day of days) {
+    const dateStr = format(day, 'yyyy-MM-dd');
 
-    console.log(`\n=== Starting December 21, 2024 Data Ingestion ===`);
-    console.log(`Target Date: ${targetDate}`);
-    console.log(`===============================================\n`);
+    // Check if we already have data for this date
+    const existingData = await db.query.dailySummaries.findFirst({
+      where: eq(dailySummaries.summaryDate, dateStr)
+    });
 
-    // Process the target date
-    const success = await processDay(targetDate);
+    if (existingData) {
+      console.log(`✓ Data already exists for ${dateStr}, skipping...`);
+      continue;
+    }
+
+    console.log(`\nProcessing data for ${dateStr}`);
+    const success = await processDay(dateStr);
 
     if (success) {
-      console.log(`\n=== December 21 Data Ingestion Completed Successfully ===`);
+      // Add shorter delay between successful days to speed up processing
+      console.log(`Waiting 5 seconds before next day...`);
+      await delay(5000);
     } else {
-      console.error(`\n=== Failed to complete December 21 data ingestion ===`);
-      process.exit(1);
+      // Add longer delay after failed days
+      console.log(`Waiting 15 seconds before next day due to previous failure...`);
+      await delay(15000);
     }
+  }
+}
+
+async function ingestHistoricalData() {
+  try {
+    const startDate = parseISO("2024-12-07"); // Start from December 7th, 2024 (since we have 1-6)
+    const endDate = parseISO("2024-12-31"); // End at December 31st, 2024
+    const days = eachDayOfInterval({ start: startDate, end: endDate });
+
+    console.log(`\n=== Starting December 2024 Data Ingestion (Remaining Days) ===`);
+    console.log(`Current Progress: 6/31 days processed (19.4%)`);
+    console.log(`Target Range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
+    console.log(`Days Remaining: ${days.length}`);
+    console.log(`===============================================\n`);
+
+    // Process days in smaller chunks
+    for (let i = 0; i < days.length; i += CHUNK_SIZE) {
+      const chunk = days.slice(i, i + CHUNK_SIZE);
+      const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
+      const totalChunks = Math.ceil(days.length/CHUNK_SIZE);
+      const overallProgress = Math.round(((i + 6)/31) * 100); // Including the 6 days we already have
+
+      console.log(`\n=== Processing Chunk ${chunkNum}/${totalChunks} (Overall Progress: ${overallProgress}%) ===`);
+      console.log(`Current day: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
+
+      await processChunk(chunk);
+
+      if (i + CHUNK_SIZE < days.length) {
+        console.log(`\nWaiting ${CHUNK_DELAY/1000} seconds before next chunk...`);
+        await delay(CHUNK_DELAY);
+      }
+    }
+
+    console.log('\n=== December 2024 Data Ingestion Completed ===');
+    console.log('All remaining days have been processed successfully');
+    console.log('===========================================\n');
   } catch (error) {
     console.error('Fatal error during ingestion:', error);
     process.exit(1);
@@ -59,6 +105,6 @@ async function ingestSpecificDate() {
 }
 
 // Run the ingestion
-ingestSpecificDate();
+ingestHistoricalData();
 
-export { ingestSpecificDate };
+export { ingestHistoricalData };
