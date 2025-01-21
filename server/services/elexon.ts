@@ -6,7 +6,7 @@ import { ElexonBidOffer, ElexonResponse } from "../types/elexon";
 
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
-const BATCH_SIZE = 2; // Reduce batch size to 2 periods to avoid rate limits
+const BATCH_SIZE = 2; // Process 2 periods at a time
 const MAX_RETRIES = 5;
 const BASE_DELAY = 2000; // 2 second base delay
 const MAX_REQUESTS_PER_MINUTE = 3500; // Keep well under the 5000 limit for safety
@@ -14,20 +14,29 @@ const REQUEST_WINDOW = 60000; // 1 minute in milliseconds
 const RATE_LIMIT_DELAY = 10000; // 10 seconds delay for rate limit
 const BATCH_DELAY = 5000; // 5 seconds between batches
 
-let windFarmIds: Set<string> | null = null;
+let windFarmBmuMap: Map<string, any> | null = null;
 let requestQueue: { timestamp: number }[] = [];
 
-async function loadWindFarmIds(): Promise<Set<string>> {
-  if (windFarmIds !== null) {
-    return windFarmIds;
+async function loadWindFarmIds(): Promise<Map<string, any>> {
+  if (windFarmBmuMap !== null) {
+    return windFarmBmuMap;
   }
 
   try {
     const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
     const bmuMapping = JSON.parse(mappingContent);
-    windFarmIds = new Set(bmuMapping.map((bmu: any) => bmu.elexonBmUnit));
-    console.log(`Loaded ${windFarmIds.size} wind farm IDs from mapping`);
-    return windFarmIds;
+    windFarmBmuMap = new Map(
+      bmuMapping.map((bmu: any) => [
+        bmu.elexonBmUnit,
+        {
+          name: bmu.bmUnitName,
+          capacity: parseFloat(bmu.generationCapacity),
+          fuelType: bmu.fuelType
+        }
+      ])
+    );
+    console.log(`Loaded ${windFarmBmuMap.size} wind farm IDs from mapping`);
+    return windFarmBmuMap;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
     throw error;
@@ -56,7 +65,6 @@ async function fetchWithRetry(url: string, attempt = 1): Promise<any> {
   try {
     await waitForRateLimit();
     console.log(`Fetching: ${url} (Attempt ${attempt}/${MAX_RETRIES})`);
-    const startTime = Date.now();
 
     const response = await axios.get(url, {
       timeout: 30000, // 30 seconds timeout
@@ -64,10 +72,6 @@ async function fetchWithRetry(url: string, attempt = 1): Promise<any> {
         'Accept': 'application/json'
       }
     });
-
-    const duration = Date.now() - startTime;
-    const dataSize = JSON.stringify(response.data).length;
-    console.log(`Response received in ${duration}ms, Status: ${response.status}, Size: ${dataSize} bytes`);
 
     // Detailed validation of response format
     if (!response.data) {
@@ -112,7 +116,7 @@ async function fetchWithRetry(url: string, attempt = 1): Promise<any> {
 
 async function fetchBatchBidsOffers(date: string, periods: number[]): Promise<ElexonBidOffer[]> {
   try {
-    const validWindFarmIds = await loadWindFarmIds();
+    const windFarmMap = await loadWindFarmIds();
     console.log(`\nProcessing ${periods.length} periods for ${date}`);
 
     const requests = periods.flatMap(period => [
@@ -132,53 +136,40 @@ async function fetchBatchBidsOffers(date: string, periods: number[]): Promise<El
       const bids = responses[i]?.data || [];
       const offers = responses[i + 1]?.data || [];
 
-      // Log raw data counts and sample records
       console.log(`[${date} P${period}] Raw data - Bids: ${bids.length}, Offers: ${offers.length}`);
-      if (bids.length > 0) console.log(`Sample bid:`, JSON.stringify(bids[0], null, 2));
-      if (offers.length > 0) console.log(`Sample offer:`, JSON.stringify(offers[0], null, 2));
 
-      // Process bids with detailed logging
-      const validBids = bids.filter(record => {
-        const isValid = record.volume < 0 && 
-                       record.soFlag === true && // Explicitly check for true
-                       validWindFarmIds.has(record.id);
+      // Process bids and offers with improved validation
+      const validRecords = [...bids, ...offers].filter(record => {
+        const windFarmInfo = windFarmMap.get(record.id);
+        const isWindFarm = !!windFarmInfo;
+        const isNegativeVolume = record.volume < 0;
+        const isSOFlagged = record.soFlag === true;
 
-        if (!isValid && record.volume < 0) {
-          console.log(`Invalid bid record (${!validWindFarmIds.has(record.id) ? 'Not wind farm' : 
-                      record.soFlag !== true ? 'Not SO flagged' : 'Other reason'}):`, 
-            JSON.stringify(record, null, 2));
+        // Log invalid records for debugging
+        if (isNegativeVolume && (!isWindFarm || !isSOFlagged)) {
+          console.log(`Invalid record (${!isWindFarm ? 'Not wind farm' : 'Not SO flagged'}):`, {
+            id: record.id,
+            name: windFarmInfo?.name || 'Unknown',
+            period: period,
+            volume: record.volume,
+            soFlag: record.soFlag
+          });
         }
-        return isValid;
+
+        return isWindFarm && isNegativeVolume && isSOFlagged;
       });
 
-      // Process offers with detailed logging
-      const validOffers = offers.filter(record => {
-        const isValid = record.volume < 0 && 
-                       record.soFlag === true && // Explicitly check for true
-                       validWindFarmIds.has(record.id);
+      if (validRecords.length > 0) {
+        console.log(`[${date} P${period}] Found ${validRecords.length} valid curtailment records`);
+        console.log('Sample valid record:', JSON.stringify(validRecords[0], null, 2));
 
-        if (!isValid && record.volume < 0) {
-          console.log(`Invalid offer record (${!validWindFarmIds.has(record.id) ? 'Not wind farm' : 
-                      record.soFlag !== true ? 'Not SO flagged' : 'Other reason'}):`,
-            JSON.stringify(record, null, 2));
-        }
-        return isValid;
-      });
-
-      const periodRecords = [...validBids, ...validOffers];
-
-      // Calculate period totals for logging
-      const periodTotal = periodRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-      const periodPayment = periodRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
-
-      console.log(`[${date} P${period}] Valid Records: ${periodRecords.length} (from ${bids.length + offers.length} total)`);
-      if (periodTotal > 0) {
+        // Calculate period totals
+        const periodTotal = validRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
+        const periodPayment = validRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
         console.log(`[${date} P${period}] Volume: ${periodTotal.toFixed(2)} MWh, Payment: £${periodPayment.toFixed(2)}`);
-      } else {
-        console.log(`[${date} P${period}] No valid curtailment records found`);
       }
 
-      allRecords = [...allRecords, ...periodRecords];
+      allRecords = [...allRecords, ...validRecords];
     }
 
     return allRecords;

@@ -11,6 +11,7 @@ const BATCH_SIZE = 2; // Process 2 periods at a time to be extra careful
 const BATCH_DELAY = 5000; // 5 seconds between batches
 
 let windFarmBmuIds: Set<string> | null = null;
+let recordsByPeriod: Record<number, { volume: number, payment: number }> = {};
 
 async function loadWindFarmIds(): Promise<Set<string>> {
   if (windFarmBmuIds !== null) {
@@ -20,11 +21,7 @@ async function loadWindFarmIds(): Promise<Set<string>> {
   try {
     const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
     const bmuMapping = JSON.parse(mappingContent);
-    windFarmBmuIds = new Set(
-      bmuMapping
-        .filter((bmu: any) => bmu.fuelType === "WIND")
-        .map((bmu: any) => bmu.elexonBmUnit)
-    );
+    windFarmBmuIds = new Set(bmuMapping.map((bmu: any) => bmu.elexonBmUnit));
     console.log(`Loaded ${windFarmBmuIds.size} wind farm IDs from mapping`);
     return windFarmBmuIds;
   } catch (error) {
@@ -58,29 +55,46 @@ export async function processDailyCurtailment(date: string): Promise<void> {
       console.log(`\nProcessing periods ${batch.start}-${batch.end} for ${date}`);
       const records = await fetchMultiplePeriods(date, batch.start, batch.end);
 
-      console.log(`Raw records for periods ${batch.start}-${batch.end}:`, {
+      // Log raw record counts
+      const rawCounts = {
         total: records.length,
         withNegativeVolume: records.filter(r => r.volume < 0).length,
         withSOFlag: records.filter(r => r.soFlag === true).length,
         windFarms: records.filter(r => validWindFarmIds.has(r.id)).length
-      });
+      };
+      console.log(`Raw records for periods ${batch.start}-${batch.end}:`, rawCounts);
 
       // Filter and process records with detailed validation
       const validRecords = records.filter(record => {
-        const isValid = record.volume < 0 && 
-                       record.soFlag === true && 
-                       validWindFarmIds.has(record.id);
+        const isWindFarm = validWindFarmIds.has(record.id);
+        const hasNegativeVolume = record.volume < 0;
+        const isSOFlagged = record.soFlag === true;
 
-        if (!isValid && record.volume < 0) {
-          totalInvalidRecords++;
-          console.log(`Invalid record details:`, {
-            period: record.settlementPeriod,
+        // Log validation details for records with negative volume
+        if (hasNegativeVolume && !isWindFarm) {
+          console.log(`Record from non-wind farm BMU:`, {
             id: record.id,
-            isWindFarm: validWindFarmIds.has(record.id),
-            soFlag: record.soFlag,
-            volume: record.volume.toFixed(2)
+            period: record.settlementPeriod,
+            volume: record.volume,
+            soFlag: record.soFlag
           });
         }
+
+        if (hasNegativeVolume && isWindFarm && !isSOFlagged) {
+          console.log(`Wind farm record without SO flag:`, {
+            id: record.id,
+            period: record.settlementPeriod,
+            volume: record.volume,
+            soFlag: record.soFlag
+          });
+        }
+
+        const isValid = isWindFarm && hasNegativeVolume && isSOFlagged;
+
+        if (!isValid && hasNegativeVolume) {
+          totalInvalidRecords++;
+        }
+
         return isValid;
       });
 
@@ -88,6 +102,9 @@ export async function processDailyCurtailment(date: string): Promise<void> {
 
       if (validRecords.length > 0) {
         console.log(`Found ${validRecords.length} valid curtailment records`);
+
+        // Log sample valid record
+        console.log('Sample valid record:', JSON.stringify(validRecords[0], null, 2));
       }
 
       for (const record of validRecords) {
@@ -109,7 +126,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
             originalPrice: record.originalPrice.toString(),
             finalPrice: record.finalPrice.toString(),
             soFlag: record.soFlag,
-            cadlFlag: record.cadlFlag
+            cadlFlag: record.cadlFlag,
           });
 
           totalVolume += volume;
