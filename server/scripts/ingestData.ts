@@ -1,33 +1,13 @@
-import { eachDayOfInterval, format, parseISO } from "date-fns";
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
-import { dailySummaries, ingestionProgress } from "@db/schema";
-import { eq, desc } from "drizzle-orm";
+import { dailySummaries } from "@db/schema";
+import { eq } from "drizzle-orm";
 
 const API_CALL_DELAY = 2000; // 2 seconds between API calls
-const DAY_DELAY = 45000; // 45 seconds between days
 const MAX_RETRIES = 3;
-const RETRY_DELAY = 15000; // 15 seconds between retries
 
 async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function getLastProcessedDate(): Promise<string | null> {
-  const progress = await db.query.ingestionProgress.findFirst({
-    orderBy: [desc(ingestionProgress.lastProcessedDate)]
-  });
-
-  return progress ? format(progress.lastProcessedDate, 'yyyy-MM-dd') : null;
-}
-
-async function updateProgress(date: string, status: 'completed' | 'in_progress' | 'failed', errorMessage?: string) {
-  await db.insert(ingestionProgress).values({
-    lastProcessedDate: date,
-    status,
-    errorMessage,
-    updatedAt: new Date()
-  });
 }
 
 async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
@@ -37,28 +17,24 @@ async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
       where: eq(dailySummaries.summaryDate, dateStr)
     });
 
-    if (existingData) {
-      console.log(`✓ Data already exists for ${dateStr}, skipping...`);
-      await updateProgress(dateStr, 'completed');
+    if (existingData && Number(existingData.totalCurtailedEnergy) > 0) {
+      console.log(`✓ Valid data exists for ${dateStr}, skipping...`);
       return true;
     }
 
-    console.log(`\nStarting processing for ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
-    await updateProgress(dateStr, 'in_progress');
+    console.log(`\nProcessing ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     await processDailyCurtailment(dateStr);
-    await updateProgress(dateStr, 'completed');
     console.log(`✓ Successfully processed ${dateStr}`);
     return true;
   } catch (error) {
     console.error(`Error processing ${dateStr} (attempt ${retryCount + 1}):`, error);
 
     if (retryCount < MAX_RETRIES) {
-      console.log(`Retrying ${dateStr} in ${RETRY_DELAY/1000} seconds...`);
-      await delay(RETRY_DELAY);
+      console.log(`Retrying ${dateStr} in 15 seconds...`);
+      await delay(15000);
       return processDay(dateStr, retryCount + 1);
     }
 
-    await updateProgress(dateStr, 'failed', (error as Error).message);
     console.error(`Failed to process ${dateStr} after ${MAX_RETRIES + 1} attempts`);
     return false;
   }
@@ -66,10 +42,9 @@ async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
 
 async function ingestHistoricalData() {
   try {
-    // Process just one day at a time
+    // List of remaining days to process
     const remainingDays = [
-      "2024-11-07", // Next day to process
-      "2024-11-08", "2024-11-09", "2024-11-10",
+      "2024-11-08", // Failed day
       "2024-11-11", "2024-11-12", "2024-11-13",
       "2024-11-14", "2024-11-15", "2024-11-16",
       "2024-11-17", "2024-11-18", "2024-11-19",
@@ -80,48 +55,39 @@ async function ingestHistoricalData() {
     ];
 
     console.log('\n=== Starting November 2024 Data Ingestion ===');
-    console.log(`Total days to process: ${remainingDays.length}`);
-    console.log('=======================================\n');
+    console.log(`Days to process: ${remainingDays.length}`);
 
-    const lastProcessed = await getLastProcessedDate();
-    let startFromIndex = 0;
-
-    if (lastProcessed) {
-      startFromIndex = remainingDays.findIndex(date => date > lastProcessed);
-      if (startFromIndex === -1) startFromIndex = remainingDays.length;
-      console.log(`Resuming from ${remainingDays[startFromIndex]} (after ${lastProcessed})`);
-    }
-
-    // Process one day at a time
-    for (let i = startFromIndex; i < remainingDays.length; i++) {
+    for (let i = 0; i < remainingDays.length; i++) {
       const dateStr = remainingDays[i];
-      const progress = Math.round(((i + 1) / remainingDays.length) * 100);
-
-      console.log(`\n=== Processing day ${i + 1}/${remainingDays.length} (${progress}%) ===`);
-      console.log(`Current date: ${dateStr}`);
-      console.log('=======================================\n');
-
       const success = await processDay(dateStr);
 
       if (success) {
-        console.log(`\nWaiting ${DAY_DELAY/1000} seconds before next day...\n`);
-        await delay(DAY_DELAY);
+        console.log(`\nWaiting 45 seconds before next day...\n`);
+        await delay(45000);
       } else {
         console.log(`\nSkipping to next day after failure...\n`);
-        await delay(DAY_DELAY * 2); // Double delay after failures
+        await delay(60000); // Longer delay after failures
       }
     }
 
-    console.log('\n=== November 2024 Data Ingestion Completed ===');
-    console.log('All remaining days have been processed');
-    console.log('===========================================\n');
+    console.log('\n=== November 2024 Data Ingestion Status ===');
+
+    // Show final status
+    const novemberData = await db.query.dailySummaries.findMany({
+      where: eq(dailySummaries.summaryDate.toString(), /^2024-11/),
+      orderBy: [dailySummaries.summaryDate]
+    });
+
+    console.log('\nProcessed days:');
+    novemberData.forEach(day => {
+      console.log(`${day.summaryDate}: ${Number(day.totalCurtailedEnergy).toFixed(2)} MWh, £${Number(day.totalPayment).toFixed(2)}`);
+    });
+
   } catch (error) {
     console.error('Fatal error during ingestion:', error);
     process.exit(1);
   }
 }
 
-// Run the ingestion for November
+// Run the ingestion
 ingestHistoricalData();
-
-export { ingestHistoricalData };
