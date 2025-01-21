@@ -5,15 +5,23 @@ import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery } from "lucide-react";
 
-export default function Home() {
-  const [date, setDate] = useState<Date>(new Date("2025-01-01"));
+// Define the API response type based on our schema
+interface DailySummary {
+  date: string;
+  totalCurtailedEnergy: number;
+  totalPayment: number;
+  recordTotals: {
+    totalVolume: number;
+    totalPayment: number;
+  };
+}
 
-  const { data, isLoading, error } = useQuery({
+export default function Home() {
+  const [date, setDate] = useState<Date>(new Date("2024-12-01")); // Set initial date to December 2024
+
+  const { data, isLoading, error } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`],
-    enabled: !!date,
-    onSuccess: (data) => {
-      console.log('API Response:', data);
-    }
+    enabled: !!date
   });
 
   return (
@@ -32,8 +40,8 @@ export default function Home() {
                 selected={date}
                 onSelect={(newDate) => newDate && setDate(newDate)}
                 disabled={(date) => {
-                  // Only allow dates from Jan 2025 to today
-                  return date < new Date("2025-01-01") || date > new Date();
+                  // Allow dates from Dec 2024 to today
+                  return date < new Date("2024-12-01") || date > new Date();
                 }}
               />
             </CardContent>
