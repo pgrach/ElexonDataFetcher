@@ -1,6 +1,7 @@
 import axios, { AxiosError } from "axios";
 import { ElexonData } from "../types";
-import bmuMapping from "../../client/src/data/bmuMapping.json";
+import fs from "fs/promises";
+import path from "path";
 
 const ELEXON_API_BASE =
   "https://data.elexon.co.uk/bmrs/api/v1/balancing/settlement/stack/all";
@@ -9,12 +10,28 @@ const RETRY_ATTEMPTS = 5; // Increased from 3
 const INITIAL_TIMEOUT_MS = 20000; // Increased to 20 seconds
 const INITIAL_RETRY_DELAY_MS = 1000; // 1 second
 
-// Create a Set of wind farm BMU IDs for efficient lookup
-const windFarmBmuIds = new Set(
-  bmuMapping
-    .filter((bmu) => bmu.fuelType === "WIND")
-    .map((bmu) => bmu.elexonBmUnit),
-);
+// Load BMU mapping from the correct location
+const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+
+let windFarmBmuIds: Set<string> | null = null;
+
+async function loadWindFarmIds(): Promise<Set<string>> {
+  if (windFarmBmuIds !== null) {
+    return windFarmBmuIds;
+  }
+
+  const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
+  const bmuMapping = JSON.parse(mappingContent);
+
+  // Create Set of wind farm BMU IDs for efficient lookup
+  windFarmBmuIds = new Set(
+    bmuMapping
+      .filter((bmu: any) => bmu.fuelType === "WIND")
+      .map((bmu: any) => bmu.elexonBmUnit)
+  );
+
+  return windFarmBmuIds;
+}
 
 async function retryableAxiosGet(url: string): Promise<any> {
   let lastError: Error | null = null;
@@ -59,6 +76,9 @@ export async function fetchCurtailmentData(
       `Fetching curtailment data for date: ${date}, period: ${period}`,
     );
 
+    // Load wind farm IDs
+    const validWindFarmIds = await loadWindFarmIds();
+
     // Make API calls with retry logic
     const [bidData, offerData] = await Promise.all([
       retryableAxiosGet(`${ELEXON_API_BASE}/bid/${date}/${period}`),
@@ -76,7 +96,7 @@ export async function fetchCurtailmentData(
         (bid: any) =>
           bid.volume < 0 && // Only negative volumes (curtailment)
           bid.soFlag && // System operator flagged
-          windFarmBmuIds.has(bid.id), // Check if BMU is a wind farm using fuel type mapping
+          validWindFarmIds.has(bid.id), // Check if BMU is a wind farm using fuel type mapping
       )
       .map((bid: any) => {
         // Calculate payment: volume * price

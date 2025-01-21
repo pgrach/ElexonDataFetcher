@@ -2,6 +2,37 @@ import { db } from "@db";
 import { curtailmentRecords, dailySummaries } from "@db/schema";
 import { fetchBidsOffers } from "./elexon";
 import { eq } from "drizzle-orm";
+import fs from "fs/promises";
+import path from "path";
+
+// Load BMU mapping from the correct location
+const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+
+let windFarmBmuIds: Set<string> | null = null;
+
+async function loadWindFarmIds(): Promise<Set<string>> {
+  if (windFarmBmuIds !== null) {
+    return windFarmBmuIds;
+  }
+
+  try {
+    const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
+    const bmuMapping = JSON.parse(mappingContent);
+
+    // Create Set of wind farm BMU IDs for efficient lookup
+    windFarmBmuIds = new Set(
+      bmuMapping
+        .filter((bmu: any) => bmu.fuelType === "WIND")
+        .map((bmu: any) => bmu.elexonBmUnit)
+    );
+
+    console.log(`Loaded ${windFarmBmuIds.size} wind farm IDs from mapping`);
+    return windFarmBmuIds;
+  } catch (error) {
+    console.error('Error loading BMU mapping:', error);
+    throw error;
+  }
+}
 
 export async function processDailyCurtailment(date: string): Promise<void> {
   let totalVolume = 0;
@@ -10,6 +41,8 @@ export async function processDailyCurtailment(date: string): Promise<void> {
 
   console.log(`Starting to process ${date}, fetching data for 48 settlement periods...`);
 
+  const validWindFarmIds = await loadWindFarmIds();
+
   for (let period = 1; period <= 48; period++) {
     try {
       const records = await fetchBidsOffers(date, period);
@@ -17,9 +50,12 @@ export async function processDailyCurtailment(date: string): Promise<void> {
       // Log raw data for debugging
       console.log(`[${date} P${period}] Processing ${records.length} records`);
 
-      // Filter and process records exactly like reference implementation
-      // Records are already validated in elexon.ts
-      const validRecords = records;
+      // Filter records using same criteria as reference implementation
+      const validRecords = records.filter(record => 
+        record.volume < 0 && // Only negative volumes (curtailment)
+        record.soFlag && // System operator flagged
+        validWindFarmIds.has(record.id) // Check if BMU is a wind farm using mapping
+      );
 
       console.log(`[${date} P${period}] Found ${validRecords.length} valid curtailment records`);
 

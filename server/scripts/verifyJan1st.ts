@@ -7,10 +7,11 @@ async function verifyJan1stData() {
   try {
     console.log('Starting verification of January 1st, 2025 data...');
 
-    // Clear existing data for Jan 1st
+    // Clear existing data for Jan 1st to avoid duplicates
     await db.delete(dailySummaries).where(eq(dailySummaries.summaryDate, '2025-01-01'));
     await db.delete(curtailmentRecords).where(eq(curtailmentRecords.settlementDate, '2025-01-01'));
 
+    // Process January 1st with enhanced logging
     console.log('\nProcessing data for 2025-01-01');
     await processDailyCurtailment('2025-01-01');
 
@@ -18,35 +19,24 @@ async function verifyJan1stData() {
     const recordTotals = await db
       .select({
         recordCount: sql`COUNT(*)`,
-        totalVolume: sql`SUM(${curtailmentRecords.volume})`,
-        totalPayment: sql`SUM(${curtailmentRecords.payment})`
+        totalVolume: sql`SUM(${curtailmentRecords.volume}::numeric)`,
+        totalPayment: sql`SUM(${curtailmentRecords.payment}::numeric)`
       })
       .from(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, '2025-01-01'));
 
     console.log('\nVerification Results:');
-    console.log('Total Records:', recordTotals[0]?.recordCount || 0);
-    console.log('Total Volume:', recordTotals[0]?.totalVolume || 0, 'MWh');
-    console.log('Total Payment:', recordTotals[0]?.totalPayment || 0, 'GBP');
-
-    // Get daily summary for comparison
-    const dailySummary = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, '2025-01-01')
-    });
-
-    if (dailySummary) {
-      console.log('\nDaily Summary:');
-      console.log('Total Volume:', dailySummary.totalCurtailedEnergy, 'MWh');
-      console.log('Total Payment:', dailySummary.totalPayment, 'GBP');
-    }
+    console.log('Total Records:', recordTotals[0].recordCount);
+    console.log('Total Volume:', recordTotals[0].totalVolume, 'MWh');
+    console.log('Total Payment:', recordTotals[0].totalPayment, 'GBP');
 
     // Get period-by-period breakdown
     const periodBreakdown = await db
       .select({
         period: curtailmentRecords.settlementPeriod,
         recordCount: sql`COUNT(*)`,
-        periodVolume: sql`SUM(${curtailmentRecords.volume})`,
-        periodPayment: sql`SUM(${curtailmentRecords.payment})`
+        periodVolume: sql`SUM(${curtailmentRecords.volume}::numeric)`,
+        periodPayment: sql`SUM(${curtailmentRecords.payment}::numeric)`
       })
       .from(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, '2025-01-01'))
