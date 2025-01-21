@@ -4,6 +4,42 @@ import { db } from "@db";
 import { dailySummaries } from "@db/schema";
 import { eq } from "drizzle-orm";
 
+// Process just one day as a test
+async function ingestSingleDay() {
+  try {
+    const testDate = "2024-11-01";
+    console.log(`\n=== Starting test ingestion for ${testDate} ===`);
+
+    // Check if we already have data for this date
+    const existingData = await db.query.dailySummaries.findFirst({
+      where: eq(dailySummaries.summaryDate, testDate)
+    });
+
+    if (existingData) {
+      console.log(`Data already exists for ${testDate}, clearing it first...`);
+      // We'll skip deletion to avoid data loss, just continue with the ingestion
+    }
+
+    console.log(`\nProcessing data for ${testDate}`);
+    await processDailyCurtailment(testDate);
+
+    console.log('\n=== Test ingestion completed successfully ===');
+    console.log(`✓ Data ingested for ${testDate}`);
+    console.log('==========================================\n');
+  } catch (error) {
+    console.error('Fatal error during test ingestion:', error);
+    process.exit(1);
+  }
+}
+
+// Run the test ingestion
+ingestSingleDay();
+
+export { ingestSingleDay };
+
+
+//The original ingestHistoricalData function is left here but commented out for now.  It will be used later for the full month ingestion.
+/*
 const CHUNK_SIZE = 1; // Process 1 day at a time to avoid timeouts
 const CHUNK_DELAY = 15000; // 15 second delay between chunks
 const MAX_RETRIES = 3;
@@ -67,14 +103,13 @@ async function processChunk(days: Date[]) {
 
 async function ingestHistoricalData() {
   try {
-    const startDate = parseISO("2024-12-07"); // Start from December 7th, 2024 (since we have 1-6)
-    const endDate = parseISO("2024-12-31"); // End at December 31st, 2024
+    const startDate = parseISO("2024-11-01"); // Start from November 1st, 2024
+    const endDate = parseISO("2024-11-30"); // End at November 30th, 2024
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
-    console.log(`\n=== Starting December 2024 Data Ingestion (Remaining Days) ===`);
-    console.log(`Current Progress: 6/31 days processed (19.4%)`);
+    console.log(`\n=== Starting November 2024 Data Ingestion ===`);
     console.log(`Target Range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
-    console.log(`Days Remaining: ${days.length}`);
+    console.log(`Days to Process: ${days.length}`);
     console.log(`===============================================\n`);
 
     // Process days in smaller chunks
@@ -82,7 +117,7 @@ async function ingestHistoricalData() {
       const chunk = days.slice(i, i + CHUNK_SIZE);
       const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
       const totalChunks = Math.ceil(days.length/CHUNK_SIZE);
-      const overallProgress = Math.round(((i + 6)/31) * 100); // Including the 6 days we already have
+      const overallProgress = Math.round((i/days.length) * 100);
 
       console.log(`\n=== Processing Chunk ${chunkNum}/${totalChunks} (Overall Progress: ${overallProgress}%) ===`);
       console.log(`Current day: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
@@ -95,8 +130,8 @@ async function ingestHistoricalData() {
       }
     }
 
-    console.log('\n=== December 2024 Data Ingestion Completed ===');
-    console.log('All remaining days have been processed successfully');
+    console.log('\n=== November 2024 Data Ingestion Completed ===');
+    console.log('All days have been processed successfully');
     console.log('===========================================\n');
   } catch (error) {
     console.error('Fatal error during ingestion:', error);
@@ -105,6 +140,7 @@ async function ingestHistoricalData() {
 }
 
 // Run the ingestion
-ingestHistoricalData();
+//ingestHistoricalData();
 
 export { ingestHistoricalData };
+*/
