@@ -1,4 +1,4 @@
-import { eachDayOfInterval, format, parseISO, addDays, subDays, isBefore, isAfter } from "date-fns";
+import { eachDayOfInterval, format, parseISO } from "date-fns";
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
 import { dailySummaries } from "@db/schema";
@@ -9,8 +9,6 @@ const CHUNK_DELAY = 15000; // 15 second delay between chunks
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 10000; // 10 seconds between retries
 const RATE_LIMIT_DELAY = 30000; // 30 seconds after rate limit errors
-const LOOKBACK_DAYS = 7; // Number of days to look back for data validation
-const LOOK_FORWARD_DAYS = 1; // Number of days to look ahead (usually 1 for next day's data)
 
 async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -42,12 +40,6 @@ async function processChunk(days: Date[]) {
   for (const day of days) {
     const dateStr = format(day, 'yyyy-MM-dd');
 
-    // Skip future dates
-    if (isAfter(day, new Date())) {
-      console.log(`Skipping future date ${dateStr}`);
-      continue;
-    }
-
     // Check if we already have data for this date
     const existingData = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, dateStr)
@@ -73,21 +65,16 @@ async function processChunk(days: Date[]) {
   }
 }
 
-async function calculateDateRange(): Promise<{ startDate: Date; endDate: Date }> {
-  const today = new Date();
-  const startDate = subDays(today, LOOKBACK_DAYS);
-  const endDate = addDays(today, LOOK_FORWARD_DAYS);
-  return { startDate, endDate };
-}
-
-async function ingestData() {
+async function ingestHistoricalData() {
   try {
-    const { startDate, endDate } = await calculateDateRange();
+    const startDate = parseISO("2024-12-07"); // Start from December 7th, 2024 (since we have 1-6)
+    const endDate = parseISO("2024-12-31"); // End at December 31st, 2024
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
-    console.log(`\n=== Starting Rolling Data Ingestion ===`);
+    console.log(`\n=== Starting December 2024 Data Ingestion (Remaining Days) ===`);
+    console.log(`Current Progress: 6/31 days processed (19.4%)`);
     console.log(`Target Range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
-    console.log(`Days to Process: ${days.length}`);
+    console.log(`Days Remaining: ${days.length}`);
     console.log(`===============================================\n`);
 
     // Process days in smaller chunks
@@ -95,9 +82,9 @@ async function ingestData() {
       const chunk = days.slice(i, i + CHUNK_SIZE);
       const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
       const totalChunks = Math.ceil(days.length/CHUNK_SIZE);
-      const progress = Math.round((i/days.length) * 100);
+      const overallProgress = Math.round(((i + 6)/31) * 100); // Including the 6 days we already have
 
-      console.log(`\n=== Processing Chunk ${chunkNum}/${totalChunks} (Progress: ${progress}%) ===`);
+      console.log(`\n=== Processing Chunk ${chunkNum}/${totalChunks} (Overall Progress: ${overallProgress}%) ===`);
       console.log(`Current day: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
 
       await processChunk(chunk);
@@ -108,8 +95,8 @@ async function ingestData() {
       }
     }
 
-    console.log('\n=== Data Ingestion Completed ===');
-    console.log('All days have been processed successfully');
+    console.log('\n=== December 2024 Data Ingestion Completed ===');
+    console.log('All remaining days have been processed successfully');
     console.log('===========================================\n');
   } catch (error) {
     console.error('Fatal error during ingestion:', error);
@@ -117,10 +104,7 @@ async function ingestData() {
   }
 }
 
-// Only run if called directly (not imported)
-if (import.meta.url === new URL(process.argv[1], 'file:').href) {
-  ingestData();
-}
+// Run the ingestion
+ingestHistoricalData();
 
-// Export only once
-export { ingestData };
+export { ingestHistoricalData };
