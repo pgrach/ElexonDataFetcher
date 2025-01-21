@@ -4,7 +4,7 @@ import { dailySummaries, ingestionProgress } from "@db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 
-const INITIAL_BATCH_SIZE = 10;  // Start with larger batches
+const INITIAL_BATCH_SIZE = 2;  // We only have 2 dates to process
 const MIN_API_DELAY = 1000;     // 1 second minimum delay
 const MAX_RETRIES = 3;          // Reduced retries for faster failure detection
 
@@ -85,13 +85,11 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
 
 async function recordProgress(date: string, status: string, errorMessage?: string) {
   try {
-    // First, try to find existing progress record
     const existing = await db.query.ingestionProgress.findFirst({
       where: eq(ingestionProgress.lastProcessedDate, date)
     });
 
     if (existing) {
-      // Update existing record using standard update
       await db
         .update(ingestionProgress)
         .set({
@@ -101,7 +99,6 @@ async function recordProgress(date: string, status: string, errorMessage?: strin
         })
         .where(eq(ingestionProgress.lastProcessedDate, date));
     } else {
-      // Insert new record
       await db.insert(ingestionProgress).values({
         lastProcessedDate: date,
         status,
@@ -110,113 +107,53 @@ async function recordProgress(date: string, status: string, errorMessage?: strin
       });
     }
   } catch (error) {
-    // Log error but don't fail the entire process
     console.error('Error updating progress tracking:', error);
   }
 }
 
-async function ingestOctober2024Data() {
-  console.log('\n=== Starting October 2024 Optimized Data Ingestion ===');
+async function ingestMissingOctoberData() {
+  console.log('\n=== Processing Missing October 21-22, 2024 Data ===');
 
-  // Generate all October 2024 dates
-  const allOctoberDays = Array.from({ length: 31 }, (_, i) => {
-    const day = (i + 1).toString().padStart(2, '0');
-    return `2024-10-${day}`;
-  });
+  // Only process October 21-22
+  const missingDays = ['2024-10-21', '2024-10-22'];
 
-  let currentBatchSize = INITIAL_BATCH_SIZE;
-  let consecutiveSuccesses = 0;
-  let consecutiveFailures = 0;
+  console.log(`Processing missing days: ${missingDays.join(', ')}`);
 
-  // Process in optimized batches
-  for (let i = 0; i < allOctoberDays.length; i += currentBatchSize) {
-    const batchStartTime = performance.now();
-    const batch = allOctoberDays.slice(i, i + currentBatchSize);
+  // Process the two days in parallel
+  const results = await Promise.all(
+    missingDays.map(async dateStr => {
+      const metrics = await processDay(dateStr);
 
-    console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(allOctoberDays.length/currentBatchSize)}`);
-    console.log(`Current batch size: ${currentBatchSize}`);
+      if (metrics.success) {
+        const data = await db.query.dailySummaries.findFirst({
+          where: eq(dailySummaries.summaryDate, dateStr)
+        });
 
-    // Process batch in parallel
-    const results = await Promise.all(
-      batch.map(async dateStr => {
-        const metrics = await processDay(dateStr);
+        if (data) {
+          console.log(`${dateStr} Summary:`);
+          console.log(`- Total Curtailed Energy: ${Number(data.totalCurtailedEnergy).toFixed(2)} MWh`);
+          console.log(`- Total Payment: £${Number(data.totalPayment).toFixed(2)}`);
 
-        if (metrics.success) {
-          const data = await db.query.dailySummaries.findFirst({
-            where: eq(dailySummaries.summaryDate, dateStr)
-          });
-
-          if (data) {
-            console.log(`${dateStr} Summary:`);
-            console.log(`- Total Curtailed Energy: ${Number(data.totalCurtailedEnergy).toFixed(2)} MWh`);
-            console.log(`- Total Payment: £${Number(data.totalPayment).toFixed(2)}`);
-
-            // Record successful progress
-            await recordProgress(dateStr, 'completed');
-          }
-        } else {
-          // Record failed progress
-          await recordProgress(dateStr, 'failed', 'Processing failed after max retries');
+          await recordProgress(dateStr, 'completed');
         }
-
-        return { dateStr, ...metrics };
-      })
-    );
-
-    // Calculate batch performance metrics
-    const batchDuration = performance.now() - batchStartTime;
-    const batchSuccess = results.every(r => r.success);
-    const avgDuration = batchDuration / results.length;
-
-    // Adapt batch size based on performance
-    if (batchSuccess) {
-      consecutiveSuccesses++;
-      consecutiveFailures = 0;
-      if (consecutiveSuccesses >= 2 && avgDuration < 30000) { // If batch completes in under 30s
-        currentBatchSize = Math.min(currentBatchSize + 2, 15); // Increase batch size up to max 15
+      } else {
+        await recordProgress(dateStr, 'failed', 'Processing failed after max retries');
       }
-    } else {
-      consecutiveFailures++;
-      consecutiveSuccesses = 0;
-      if (consecutiveFailures >= 2) {
-        currentBatchSize = Math.max(currentBatchSize - 2, 5); // Decrease batch size but maintain minimum of 5
-      }
-    }
 
-    // Update progress tracking
-    totalProcessingTime += batchDuration;
-    successfulBatches += batchSuccess ? 1 : 0;
-
-    // Log detailed performance metrics
-    console.log('\nBatch Performance Metrics:');
-    console.log(`Duration: ${(batchDuration/1000).toFixed(2)}s`);
-    console.log(`Average processing time per day: ${(avgDuration/1000).toFixed(2)}s`);
-    console.log(`Success rate: ${(results.filter(r => r.success).length/results.length*100).toFixed(1)}%`);
-    console.log(`API requests this batch: ${results.reduce((sum, r) => sum + r.requestCount, 0)}`);
-
-
-    // Adaptive delay between batches based on API response patterns
-    const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.1, 5000));
-    await delay(optimalDelay);
-  }
+      return { dateStr, ...metrics };
+    })
+  );
 
   // Final statistics
-  console.log('\n=== October 2024 Data Ingestion Complete ===');
+  console.log('\n=== October 21-22 Data Processing Complete ===');
   console.log('\nPerformance Statistics:');
   console.log(`Total API Requests: ${totalRequests}`);
   console.log(`Failed Requests: ${failedRequests}`);
   console.log(`Success Rate: ${((totalRequests-failedRequests)/totalRequests*100).toFixed(1)}%`);
-  console.log(`Average Processing Time per Day: ${(totalProcessingTime/(31*1000)).toFixed(2)}s`);
-  console.log('\nAPI Request Distribution:');
-  Object.entries(apiRequestsPerMinute)
-    .sort()
-    .forEach(([minute, count]) => {
-      console.log(`${minute}: ${count} requests`);
-    });
 }
 
-// Run the optimized ingestion
-ingestOctober2024Data().catch(error => {
+// Run the ingestion for missing days
+ingestMissingOctoberData().catch(error => {
   console.error('Fatal error during ingestion:', error);
   process.exit(1);
 });
