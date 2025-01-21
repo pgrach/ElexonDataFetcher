@@ -18,7 +18,7 @@ async function loadWindFarmIds(): Promise<Set<string>> {
     const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
     const bmuMapping = JSON.parse(mappingContent);
 
-    // Load all BMU IDs directly from mapping without filtering by prefix
+    // Load all wind farm BMU IDs from mapping
     windFarmIds = new Set(bmuMapping.map((bmu: any) => bmu.elexonBmUnit));
 
     console.log(`Loaded ${windFarmIds.size} wind farm IDs from mapping`);
