@@ -5,7 +5,7 @@ import { dailySummaries } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 const CHUNK_SIZE = 1; // Process 1 day at a time to avoid timeouts
-const CHUNK_DELAY = 30000; // 30 second delay between chunks
+const CHUNK_DELAY = 15000; // Reduced to 15 second delay between chunks
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 10000; // 10 seconds between retries
 const RATE_LIMIT_DELAY = 30000; // 30 seconds after rate limit errors
@@ -16,8 +16,9 @@ async function delay(ms: number) {
 
 async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
   try {
+    console.log(`\nStarting processing for ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     await processDailyCurtailment(dateStr);
-    console.log(`Successfully processed ${dateStr}`);
+    console.log(`✓ Successfully processed ${dateStr}`);
     return true;
   } catch (error) {
     const isRateLimit = (error as Error).message?.toLowerCase().includes('rate limit');
@@ -45,7 +46,7 @@ async function processChunk(days: Date[]) {
     });
 
     if (existingData) {
-      console.log(`Data already exists for ${dateStr}, skipping...`);
+      console.log(`✓ Data already exists for ${dateStr}, skipping...`);
       continue;
     }
 
@@ -53,13 +54,13 @@ async function processChunk(days: Date[]) {
     const success = await processDay(dateStr);
 
     if (success) {
-      // Add delay between successful days to respect rate limits
-      console.log(`Waiting 10 seconds before next day...`);
-      await delay(10000);
+      // Add shorter delay between successful days to speed up processing
+      console.log(`Waiting 5 seconds before next day...`);
+      await delay(5000);
     } else {
       // Add longer delay after failed days
-      console.log(`Waiting 30 seconds before next day due to previous failure...`);
-      await delay(30000);
+      console.log(`Waiting 15 seconds before next day due to previous failure...`);
+      await delay(15000);
     }
   }
 }
@@ -70,7 +71,8 @@ async function ingestHistoricalData() {
     const endDate = parseISO("2024-12-31"); // End at December 31st, 2024
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
-    console.log(`Starting data ingestion from ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
+    console.log(`Starting December 2024 data ingestion`);
+    console.log(`Date range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
     console.log(`Total days to process: ${days.length}`);
 
     // Process days in smaller chunks
@@ -79,8 +81,8 @@ async function ingestHistoricalData() {
       const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
       const totalChunks = Math.ceil(days.length/CHUNK_SIZE);
 
-      console.log(`\nProcessing chunk ${chunkNum} of ${totalChunks}`);
-      console.log(`Days: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
+      console.log(`\nProcessing chunk ${chunkNum} of ${totalChunks} (${Math.round((chunkNum/totalChunks) * 100)}% complete)`);
+      console.log(`Days in current chunk: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
 
       await processChunk(chunk);
 
