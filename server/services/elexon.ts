@@ -17,11 +17,7 @@ async function loadWindFarmIds(): Promise<Set<string>> {
   try {
     const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
     const bmuMapping = JSON.parse(mappingContent);
-
-    // Load all wind farm BMU IDs from mapping
     windFarmIds = new Set(bmuMapping.map((bmu: any) => bmu.elexonBmUnit));
-
-    console.log(`Loaded ${windFarmIds.size} wind farm IDs from mapping`);
     return windFarmIds;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
@@ -32,11 +28,8 @@ async function loadWindFarmIds(): Promise<Set<string>> {
 export async function fetchBidsOffers(date: string, period: number): Promise<ElexonBidOffer[]> {
   try {
     const validWindFarmIds = await loadWindFarmIds();
-
-    // Add detailed logging for debugging specific dates
     console.log(`[${date} P${period}] Fetching bids and offers...`);
 
-    // Fetch bids and offers in parallel
     const [bidsResponse, offersResponse] = await Promise.all([
       axios.get<ElexonResponse>(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`).catch(error => {
         console.error(`[${date} P${period}] Error fetching bids:`, error.response?.data || error.message);
@@ -48,47 +41,27 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
       })
     ]);
 
-    // Enhanced error checking for API responses
     if (!bidsResponse.data?.data || !offersResponse.data?.data) {
       console.error(`[${date} P${period}] Invalid API response format`);
-      console.log('Bids Response:', JSON.stringify(bidsResponse.data, null, 2));
-      console.log('Offers Response:', JSON.stringify(offersResponse.data, null, 2));
       return [];
     }
 
     const bids = bidsResponse.data.data;
     const offers = offersResponse.data.data;
 
-    console.log(`[${date} P${period}] Processing ${bids.length} bids and ${offers.length} offers`);
+    // Process bids and offers with minimal logging
+    const validBids = bids.filter(record => 
+      record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
+    );
 
-    // Process bids with enhanced logging
-    const validBids = bids.filter(record => {
-      const isValid = record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id);
-      if (isValid) {
-        console.log(`[${date} P${period}] Valid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
-      }
-      return isValid;
-    });
-
-    // Similarly process offers with enhanced logging
-    const validOffers = offers.filter(record => {
-      const isValid = record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id);
-      if (isValid) {
-        console.log(`[${date} P${period}] Valid offer from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
-      }
-      return isValid;
-    });
+    const validOffers = offers.filter(record => 
+      record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
+    );
 
     const allRecords = [...validBids, ...validOffers];
 
-    // Enhanced logging for debugging
-    if (allRecords.length === 0) {
-      console.log(`[${date} P${period}] No valid curtailment records found. Total bids: ${bids.length}, Total offers: ${offers.length}`);
-      if (bids.length > 0 || offers.length > 0) {
-        console.log(`[${date} P${period}] Sample bid:`, bids[0]);
-        console.log(`[${date} P${period}] Sample offer:`, offers[0]);
-      }
-    } else {
+    // Log only summary information
+    if (allRecords.length > 0) {
       const periodTotal = allRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
       const periodPayment = allRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
       console.log(`[${date} P${period}] Found ${allRecords.length} valid curtailment records (${validBids.length} bids, ${validOffers.length} offers)`);
