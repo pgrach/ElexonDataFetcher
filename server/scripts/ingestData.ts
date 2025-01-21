@@ -4,11 +4,11 @@ import { db } from "@db";
 import { dailySummaries } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-const CHUNK_SIZE = 1; // Process 1 day at a time to avoid timeouts
-const CHUNK_DELAY = 15000; // 15 second delay between chunks
+const CHUNK_SIZE = 3; // Process 3 days at a time since we have better rate handling
+const CHUNK_DELAY = 5000; // 5 second delay between chunks
 const MAX_RETRIES = 3;
-const RETRY_DELAY = 10000; // 10 seconds between retries
-const RATE_LIMIT_DELAY = 30000; // 30 seconds after rate limit errors
+const RETRY_DELAY = 5000; // 5 seconds between retries
+const RATE_LIMIT_DELAY = 15000; // 15 seconds after rate limit errors
 
 async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -37,31 +37,28 @@ async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
 }
 
 async function processChunk(days: Date[]) {
-  for (const day of days) {
-    const dateStr = format(day, 'yyyy-MM-dd');
+  const results = await Promise.all(
+    days.map(async (day) => {
+      const dateStr = format(day, 'yyyy-MM-dd');
 
-    // Check if we already have data for this date
-    const existingData = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, dateStr)
-    });
+      // Check if we already have data for this date
+      const existingData = await db.query.dailySummaries.findFirst({
+        where: eq(dailySummaries.summaryDate, dateStr)
+      });
 
-    if (existingData) {
-      console.log(`✓ Data already exists for ${dateStr}, skipping...`);
-      continue;
-    }
+      if (existingData) {
+        console.log(`✓ Data already exists for ${dateStr}, skipping...`);
+        return true;
+      }
 
-    console.log(`\nProcessing data for ${dateStr}`);
-    const success = await processDay(dateStr);
+      console.log(`\nProcessing data for ${dateStr}`);
+      return processDay(dateStr);
+    })
+  );
 
-    if (success) {
-      // Add shorter delay between successful days to speed up processing
-      console.log(`Waiting 5 seconds before next day...`);
-      await delay(5000);
-    } else {
-      // Add longer delay after failed days
-      console.log(`Waiting 15 seconds before next day due to previous failure...`);
-      await delay(15000);
-    }
+  const successCount = results.filter(Boolean).length;
+  if (successCount < days.length) {
+    console.log(`Warning: ${days.length - successCount} days in chunk failed to process`);
   }
 }
 
@@ -77,7 +74,7 @@ async function ingestHistoricalData() {
     console.log(`Days Remaining: ${days.length}`);
     console.log(`===============================================\n`);
 
-    // Process days in smaller chunks
+    // Process days in larger chunks
     for (let i = 0; i < days.length; i += CHUNK_SIZE) {
       const chunk = days.slice(i, i + CHUNK_SIZE);
       const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
@@ -85,7 +82,7 @@ async function ingestHistoricalData() {
       const overallProgress = Math.round(((i + 6)/31) * 100); // Including the 6 days we already have
 
       console.log(`\n=== Processing Chunk ${chunkNum}/${totalChunks} (Overall Progress: ${overallProgress}%) ===`);
-      console.log(`Current day: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
+      console.log(`Current days: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
 
       await processChunk(chunk);
 

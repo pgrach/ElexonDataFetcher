@@ -6,8 +6,14 @@ import { ElexonBidOffer, ElexonResponse } from "../types/elexon";
 
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+const BATCH_SIZE = 10; // Process 10 settlement periods concurrently
+const MAX_RETRIES = 3;
+const BASE_DELAY = 100; // Base delay in ms
+const MAX_REQUESTS_PER_MINUTE = 4500; // Keep slightly under the 5000 limit for safety
+const REQUEST_WINDOW = 60000; // 1 minute in milliseconds
 
 let windFarmIds: Set<string> | null = null;
+let requestQueue: { timestamp: number }[] = [];
 
 async function loadWindFarmIds(): Promise<Set<string>> {
   if (windFarmIds !== null) {
@@ -17,10 +23,7 @@ async function loadWindFarmIds(): Promise<Set<string>> {
   try {
     const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
     const bmuMapping = JSON.parse(mappingContent);
-
-    // Load all wind farm BMU IDs from mapping
     windFarmIds = new Set(bmuMapping.map((bmu: any) => bmu.elexonBmUnit));
-
     console.log(`Loaded ${windFarmIds.size} wind farm IDs from mapping`);
     return windFarmIds;
   } catch (error) {
@@ -29,67 +32,112 @@ async function loadWindFarmIds(): Promise<Set<string>> {
   }
 }
 
-export async function fetchBidsOffers(date: string, period: number): Promise<ElexonBidOffer[]> {
+function checkRateLimit(): boolean {
+  const now = Date.now();
+  // Remove requests older than 1 minute
+  requestQueue = requestQueue.filter(req => now - req.timestamp < REQUEST_WINDOW);
+  return requestQueue.length < MAX_REQUESTS_PER_MINUTE;
+}
+
+async function waitForRateLimit(): Promise<void> {
+  while (!checkRateLimit()) {
+    await delay(100); // Wait 100ms before checking again
+  }
+  requestQueue.push({ timestamp: Date.now() });
+}
+
+async function fetchWithRetry(url: string, attempt = 1): Promise<any> {
+  try {
+    await waitForRateLimit();
+    const response = await axios.get(url);
+    return response.data;
+  } catch (error: any) {
+    if (attempt < MAX_RETRIES && (error.response?.status === 429 || error.response?.status >= 500)) {
+      const backoffDelay = BASE_DELAY * Math.pow(2, attempt - 1);
+      console.log(`Retry ${attempt}/${MAX_RETRIES} for ${url} after ${backoffDelay}ms`);
+      await delay(backoffDelay);
+      return fetchWithRetry(url, attempt + 1);
+    }
+    throw error;
+  }
+}
+
+async function fetchBatchBidsOffers(date: string, periods: number[]): Promise<ElexonBidOffer[]> {
   try {
     const validWindFarmIds = await loadWindFarmIds();
-
-    // Fetch bids and offers in parallel
-    const [bidsResponse, offersResponse] = await Promise.all([
-      axios.get<ElexonResponse>(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`),
-      axios.get<ElexonResponse>(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`)
+    const requests = periods.flatMap(period => [
+      fetchWithRetry(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`),
+      fetchWithRetry(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`)
     ]);
 
-    // Log sample responses for the first period
-    if (period === 1) {
-      const sampleBid = bidsResponse.data?.data?.[0];
-      const sampleOffer = offersResponse.data?.data?.[0];
-      console.log('\nSample Bid Response:', JSON.stringify(sampleBid, null, 2));
-      console.log('\nSample Offer Response:', JSON.stringify(sampleOffer, null, 2));
-    }
+    const responses = await Promise.all(requests);
+    let allRecords: ElexonBidOffer[] = [];
 
-    const bids = bidsResponse.data?.data || [];
-    const offers = offersResponse.data?.data || [];
+    for (let i = 0; i < responses.length; i += 2) {
+      const period = periods[Math.floor(i/2)];
+      const bids = responses[i]?.data || [];
+      const offers = responses[i + 1]?.data || [];
 
-    console.log(`[${date} P${period}] Processing ${bids.length} bids and ${offers.length} offers`);
+      // Process bids
+      const validBids = bids.filter(record => 
+        record.volume < 0 && 
+        record.soFlag && 
+        validWindFarmIds.has(record.id)
+      );
 
-    // Process bids - removed cadlFlag from filtering criteria
-    const validBids = bids.filter(record => 
-      record.volume < 0 && // Only negative volumes (curtailment)
-      record.soFlag && // System operator flagged
-      validWindFarmIds.has(record.id) // Check if BMU is a wind farm
-    );
+      // Process offers
+      const validOffers = offers.filter(record => 
+        record.volume < 0 && 
+        record.soFlag && 
+        validWindFarmIds.has(record.id)
+      );
 
-    // Log valid bids for debugging
-    validBids.forEach(record => {
-      console.log(`[${date} P${period}] Valid bid from ${record.id}: volume=${record.volume}, originalPrice=${record.originalPrice}`);
-    });
+      const periodRecords = [...validBids, ...validOffers];
 
-    // Similarly process offers - removed cadlFlag from filtering criteria
-    const validOffers = offers.filter(record => 
-      record.volume < 0 && // Only negative volumes (curtailment)
-      record.soFlag && // System operator flagged
-      validWindFarmIds.has(record.id) // Check if BMU is a wind farm
-    );
+      // Calculate period totals for logging
+      const periodTotal = periodRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
+      const periodPayment = periodRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
 
-    const allRecords = [...validBids, ...validOffers];
-    console.log(`[${date} P${period}] Found ${allRecords.length} valid curtailment records (${validBids.length} bids, ${validOffers.length} offers)`);
+      if (periodTotal > 0) {
+        console.log(`[${date} P${period}] Records: ${periodRecords.length}, Volume: ${periodTotal.toFixed(2)} MWh, Payment: £${periodPayment.toFixed(2)}`);
+      }
 
-    // Calculate and log period totals
-    const periodTotal = allRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-    const periodPayment = allRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
-
-    if (periodTotal > 0) {
-      console.log(`[${date} P${period}] Period totals: ${periodTotal.toFixed(2)} MWh, £${periodPayment.toFixed(2)}`);
+      allRecords = [...allRecords, ...periodRecords];
     }
 
     return allRecords;
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      console.error(`Elexon API error for ${date} period ${period}:`, error.response?.data || error.message);
+      console.error(`Elexon API error for ${date}:`, error.response?.data || error.message);
       throw new Error(`Elexon API error: ${error.response?.data?.error || error.message}`);
     }
     throw error;
   }
+}
+
+export async function fetchBidsOffers(date: string, period: number): Promise<ElexonBidOffer[]> {
+  return fetchBatchBidsOffers(date, [period]);
+}
+
+// New method for batch processing multiple periods
+export async function fetchMultiplePeriods(date: string, startPeriod: number, endPeriod: number): Promise<ElexonBidOffer[]> {
+  const periods = Array.from({ length: endPeriod - startPeriod + 1 }, (_, i) => startPeriod + i);
+  const batches = [];
+
+  // Split periods into batches
+  for (let i = 0; i < periods.length; i += BATCH_SIZE) {
+    batches.push(periods.slice(i, i + BATCH_SIZE));
+  }
+
+  let allRecords: ElexonBidOffer[] = [];
+
+  // Process batches sequentially to maintain rate limits
+  for (const batch of batches) {
+    const batchRecords = await fetchBatchBidsOffers(date, batch);
+    allRecords = [...allRecords, ...batchRecords];
+  }
+
+  return allRecords;
 }
 
 export async function delay(ms: number): Promise<void> {
