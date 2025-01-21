@@ -2,10 +2,14 @@ import { db } from "@db";
 import axios from "axios";
 import fs from "fs/promises";
 import path from "path";
+import { fileURLToPath } from 'url';
 import { ElexonBidOffer, ElexonResponse } from "../types/elexon";
 
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
-const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+// Use __dirname to get correct project root path
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const BMU_MAPPING_PATH = path.resolve(__dirname, '..', '..', 'data', 'bmuMapping.json');
 
 let windFarmIds: Set<string> | null = null;
 
@@ -53,7 +57,7 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
     console.log(`[${date} P${period}] Processing ${bids.length} bids and ${offers.length} offers`);
 
     // Process bids - removed cadlFlag from filtering criteria
-    const validBids = bids.filter(record => 
+    const validBids = bids.filter(record =>
       record.volume < 0 && // Only negative volumes (curtailment)
       record.soFlag && // System operator flagged
       validWindFarmIds.has(record.id) // Check if BMU is a wind farm
@@ -65,7 +69,7 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
     });
 
     // Similarly process offers - removed cadlFlag from filtering criteria
-    const validOffers = offers.filter(record => 
+    const validOffers = offers.filter(record =>
       record.volume < 0 && // Only negative volumes (curtailment)
       record.soFlag && // System operator flagged
       validWindFarmIds.has(record.id) // Check if BMU is a wind farm

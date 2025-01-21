@@ -4,8 +4,8 @@ import { db } from "@db";
 import { dailySummaries } from "@db/schema";
 import { eq } from "drizzle-orm";
 
-const CHUNK_SIZE = 1; // Process 1 day at a time to avoid timeouts
-const CHUNK_DELAY = 15000; // 15 second delay between chunks
+const CHUNK_SIZE = 10; // Process 10 days at a time (960 API calls per minute, well within 5000 limit)
+const CHUNK_DELAY = 5000; // 5 second delay between chunks
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 10000; // 10 seconds between retries
 const RATE_LIMIT_DELAY = 30000; // 30 seconds after rate limit errors
@@ -37,31 +37,44 @@ async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
 }
 
 async function processChunk(days: Date[]) {
-  for (const day of days) {
-    const dateStr = format(day, 'yyyy-MM-dd');
+  // Process all days in the chunk concurrently
+  const results = await Promise.allSettled(
+    days.map(async (day) => {
+      const dateStr = format(day, 'yyyy-MM-dd');
 
-    // Check if we already have data for this date
-    const existingData = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, dateStr)
+      // Check if we already have data for this date
+      const existingData = await db.query.dailySummaries.findFirst({
+        where: eq(dailySummaries.summaryDate, dateStr)
+      });
+
+      if (existingData) {
+        console.log(`✓ Data already exists for ${dateStr}, skipping...`);
+        return { date: dateStr, skipped: true, success: true };
+      }
+
+      console.log(`\nProcessing data for ${dateStr}`);
+      const success = await processDay(dateStr);
+      return { date: dateStr, skipped: false, success };
+    })
+  );
+
+  // Log chunk results
+  const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+  const skipped = results.filter(r => r.status === 'fulfilled' && r.value.skipped).length;
+  const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length;
+
+  console.log('\nChunk Results:');
+  console.log(`- Successfully processed: ${successful}`);
+  console.log(`- Skipped (already exists): ${skipped}`);
+  console.log(`- Failed: ${failed}`);
+
+  if (failed > 0) {
+    console.log('Failed dates:');
+    results.forEach((result, index) => {
+      if (result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.success)) {
+        console.log(`- ${format(days[index], 'yyyy-MM-dd')}`);
+      }
     });
-
-    if (existingData) {
-      console.log(`✓ Data already exists for ${dateStr}, skipping...`);
-      continue;
-    }
-
-    console.log(`\nProcessing data for ${dateStr}`);
-    const success = await processDay(dateStr);
-
-    if (success) {
-      // Add shorter delay between successful days to speed up processing
-      console.log(`Waiting 5 seconds before next day...`);
-      await delay(5000);
-    } else {
-      // Add longer delay after failed days
-      console.log(`Waiting 15 seconds before next day due to previous failure...`);
-      await delay(15000);
-    }
   }
 }
 
@@ -75,9 +88,10 @@ async function ingestHistoricalData() {
     console.log(`Current Progress: 6/31 days processed (19.4%)`);
     console.log(`Target Range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
     console.log(`Days Remaining: ${days.length}`);
+    console.log(`Processing Strategy: ${CHUNK_SIZE} days at a time`);
     console.log(`===============================================\n`);
 
-    // Process days in smaller chunks
+    // Process days in chunks
     for (let i = 0; i < days.length; i += CHUNK_SIZE) {
       const chunk = days.slice(i, i + CHUNK_SIZE);
       const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
@@ -85,7 +99,7 @@ async function ingestHistoricalData() {
       const overallProgress = Math.round(((i + 6)/31) * 100); // Including the 6 days we already have
 
       console.log(`\n=== Processing Chunk ${chunkNum}/${totalChunks} (Overall Progress: ${overallProgress}%) ===`);
-      console.log(`Current day: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
+      console.log(`Days in chunk: ${chunk.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`);
 
       await processChunk(chunk);
 
