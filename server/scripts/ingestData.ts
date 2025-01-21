@@ -5,7 +5,7 @@ import { eq, and, sql } from "drizzle-orm";
 
 const API_CALL_DELAY = 10000; // 10 seconds between API calls
 const MAX_RETRIES = 5;
-const BATCH_SIZE = 2; // Process 2 days at a time
+const BATCH_SIZE = 1; // Process 1 day at a time for the final day
 
 async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -54,18 +54,18 @@ async function processDay(dateStr: string, retryCount = 0): Promise<boolean> {
 
 async function ingestHistoricalData() {
   try {
-    // First batch: November 18-20
+    // Final day: November 30
     const remainingDays = [
-      "2024-11-18", "2024-11-19", "2024-11-20"
+      "2024-11-30"
     ];
 
-    console.log('\n=== Starting November 18-20, 2024 Data Ingestion ===');
+    console.log('\n=== Starting November 30, 2024 Data Ingestion ===');
     console.log(`Days to process: ${remainingDays.length}`);
 
-    // Process days in batches
+    // Process the final day
     for (let i = 0; i < remainingDays.length; i += BATCH_SIZE) {
       const batch = remainingDays.slice(i, i + BATCH_SIZE);
-      console.log(`\nProcessing batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(remainingDays.length/BATCH_SIZE)}`);
+      console.log(`\nProcessing final day of November`);
       console.log(`Days in batch: ${batch.join(', ')}`);
 
       for (const dateStr of batch) {
@@ -89,27 +89,22 @@ async function ingestHistoricalData() {
           await delay(API_CALL_DELAY * 2); // Double delay after failures
         }
       }
-
-      // Add a longer delay between batches
-      if (i + BATCH_SIZE < remainingDays.length) {
-        console.log(`Batch complete. Waiting 45 seconds before next batch...\n`);
-        await delay(45000);
-      }
     }
 
-    console.log('\n=== November 18-20 Data Ingestion Complete ===');
+    console.log('\n=== November 30 Data Ingestion Complete ===');
+    console.log('\n=== All November 2024 Data Ingestion Complete ===');
 
-    // Show final status using SQL for type safety
+    // Show final status for November 30
     const novemberData = await db.select({
       summaryDate: dailySummaries.summaryDate,
       totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
       totalPayment: dailySummaries.totalPayment
     })
     .from(dailySummaries)
-    .where(sql`${dailySummaries.summaryDate} >= '2024-11-18' and ${dailySummaries.summaryDate} <= '2024-11-20'`)
+    .where(sql`${dailySummaries.summaryDate} = '2024-11-30'`)
     .orderBy(dailySummaries.summaryDate);
 
-    console.log('\nProcessed days:');
+    console.log('\nProcessed day:');
     novemberData.forEach(day => {
       console.log(`${day.summaryDate}: ${Number(day.totalCurtailedEnergy).toFixed(2)} MWh, £${Number(day.totalPayment).toFixed(2)}`);
     });
