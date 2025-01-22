@@ -1,5 +1,5 @@
 import { db } from "@db";
-import { curtailmentRecords, dailySummaries } from "@db/schema";
+import { curtailmentRecords, dailySummaries, monthlySummaries } from "@db/schema";
 import { fetchBidsOffers } from "./elexon";
 import { eq, sql } from "drizzle-orm";
 import fs from "fs/promises";
