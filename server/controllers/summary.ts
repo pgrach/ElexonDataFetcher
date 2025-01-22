@@ -41,10 +41,10 @@ export async function getDailySummary(req: Request, res: Response) {
     res.json({
       date,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Number(summary.totalPayment),
+      totalPayment: Math.abs(Number(summary.totalPayment)), // Convert to positive number
       recordTotals: {
         totalVolume: Number(recordTotals[0]?.totalVolume || 0),
-        totalPayment: Number(recordTotals[0]?.totalPayment || 0)
+        totalPayment: Math.abs(Number(recordTotals[0]?.totalPayment || 0)) // Convert to positive number
       }
     });
   } catch (error) {
@@ -89,10 +89,10 @@ export async function getMonthlySummary(req: Request, res: Response) {
     res.json({
       yearMonth,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Number(summary.totalPayment),
+      totalPayment: Math.abs(Number(summary.totalPayment)), // Convert to positive number
       dailyTotals: {
         totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
-        totalPayment: Number(dailyTotals[0]?.totalPayment || 0)
+        totalPayment: Math.abs(Number(dailyTotals[0]?.totalPayment || 0)) // Convert to positive number
       }
     });
   } catch (error) {
