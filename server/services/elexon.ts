@@ -99,19 +99,29 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
     }
 
     // Enhanced filtering for bids and offers
-    const validBids = bidsResponse.data.data.filter((record: any) => 
-      record.volume < 0 && 
-      record.soFlag === true && // Strict equality check
-      validWindFarmIds.has(record.id) &&
-      !record.cadlFlag // Exclude CADL flagged records
-    );
+    const validBids = bidsResponse.data.data.filter((record: any) => {
+      const isValid = record.volume < 0 && 
+                     record.soFlag === true && // Strict equality check
+                     validWindFarmIds.has(record.id) &&
+                     !record.cadlFlag; // Exclude CADL flagged records
 
-    const validOffers = offersResponse.data.data.filter((record: any) => 
-      record.volume < 0 && 
-      record.soFlag === true && // Strict equality check
-      validWindFarmIds.has(record.id) &&
-      !record.cadlFlag // Exclude CADL flagged records
-    );
+      if (isValid) {
+        console.log(`[${date} P${period}] Including bid: ID=${record.id}, Volume=${Math.abs(record.volume)}, Price=${record.originalPrice}, SO=${record.soFlag}, CADL=${record.cadlFlag}`);
+      }
+      return isValid;
+    });
+
+    const validOffers = offersResponse.data.data.filter((record: any) => {
+      const isValid = record.volume < 0 && 
+                     record.soFlag === true && // Strict equality check
+                     validWindFarmIds.has(record.id) &&
+                     !record.cadlFlag; // Exclude CADL flagged records
+
+      if (isValid) {
+        console.log(`[${date} P${period}] Including offer: ID=${record.id}, Volume=${Math.abs(record.volume)}, Price=${record.originalPrice}, SO=${record.soFlag}, CADL=${record.cadlFlag}`);
+      }
+      return isValid;
+    });
 
     const allRecords = [...validBids, ...validOffers];
 
