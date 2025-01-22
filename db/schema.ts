@@ -1,5 +1,16 @@
-import { pgTable, text, serial, date, integer, numeric, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, date, integer, numeric, boolean, timestamp, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+
+export const windFarmLocations = pgTable("wind_farm_locations", {
+  id: serial("id").primaryKey(),
+  farmId: text("farm_id").notNull().unique(),
+  name: text("name").notNull(),
+  latitude: doublePrecision("latitude").notNull(),
+  longitude: doublePrecision("longitude").notNull(),
+  capacity: numeric("capacity").notNull(),
+  region: text("region"),
+  createdAt: timestamp("created_at").defaultNow()
+});
 
 export const curtailmentRecords = pgTable("curtailment_records", {
   id: serial("id").primaryKey(),
@@ -30,7 +41,6 @@ export const monthlySummaries = pgTable("monthly_summaries", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
-// New table to track ingestion progress
 export const ingestionProgress = pgTable("ingestion_progress", {
   id: serial("id").primaryKey(),
   lastProcessedDate: date("last_processed_date").notNull(),
@@ -40,6 +50,9 @@ export const ingestionProgress = pgTable("ingestion_progress", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
+// Schema validations
+export const insertWindFarmLocationSchema = createInsertSchema(windFarmLocations);
+export const selectWindFarmLocationSchema = createSelectSchema(windFarmLocations);
 export const insertCurtailmentRecordSchema = createInsertSchema(curtailmentRecords);
 export const selectCurtailmentRecordSchema = createSelectSchema(curtailmentRecords);
 export const insertDailySummarySchema = createInsertSchema(dailySummaries);
@@ -49,6 +62,9 @@ export const selectMonthlySummarySchema = createSelectSchema(monthlySummaries);
 export const insertIngestionProgressSchema = createInsertSchema(ingestionProgress);
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
 
+// Type definitions
+export type WindFarmLocation = typeof windFarmLocations.$inferSelect;
+export type InsertWindFarmLocation = typeof windFarmLocations.$inferInsert;
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
 export type DailySummary = typeof dailySummaries.$inferSelect;
