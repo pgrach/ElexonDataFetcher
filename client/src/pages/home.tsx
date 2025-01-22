@@ -56,8 +56,8 @@ export default function Home() {
                 selected={date}
                 onSelect={(newDate) => newDate && setDate(newDate)}
                 disabled={(date) => {
-                  // Allow dates from December 2023 to current date (January 2025)
-                  return date < new Date("2023-12-01") || date > new Date();
+                  // Allow dates from November 2023 to current date (January 2025)
+                  return date < new Date("2023-11-01") || date > new Date();
                 }}
               />
             </CardContent>
