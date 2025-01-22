@@ -5,11 +5,13 @@ import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
 
-const INITIAL_BATCH_SIZE = 5;  // Reduced for better reliability
-const MIN_API_DELAY = 200;    
+// Reduced batch sizes and increased delays for better reliability
+const INITIAL_BATCH_SIZE = 3;     // Start with smaller batches
+const MIN_API_DELAY = 500;        // Increased minimum delay between requests
 const MAX_RETRIES = 3;
-const MAX_BATCH_SIZE = 10;     // Reduced max batch size
-const BATCH_RETRY_ATTEMPTS = 2; // New: number of times to retry a failed batch
+const MAX_BATCH_SIZE = 5;         // Reduced maximum batch size
+const BATCH_RETRY_ATTEMPTS = 3;    // Increased retry attempts
+const REQUEST_TIMEOUT = 30000;     // 30 seconds timeout for API requests
 
 let apiRequestsPerMinute: { [key: string]: number } = {};
 let totalRequests = 0;
@@ -49,9 +51,14 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
     trackApiRequest();
     requestCount++;
 
-    await processDailyCurtailment(dateStr);
+    await Promise.race([
+      processDailyCurtailment(dateStr),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), REQUEST_TIMEOUT)
+      )
+    ]);
 
-    // Verify the data was properly ingested
+    // Enhanced verification
     const verifyData = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, dateStr)
     });
@@ -60,16 +67,22 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
       throw new Error(`Data verification failed for ${dateStr}`);
     }
 
+    // Log successful processing with details
     console.log(`[${dateStr}] Successfully processed: ${Number(verifyData.totalCurtailedEnergy).toFixed(2)} MWh, £${Number(verifyData.totalPayment).toFixed(2)}`);
 
     const duration = performance.now() - startTime;
+    avgProcessingTime = (avgProcessingTime * successfulBatches + duration) / (successfulBatches + 1);
+    successfulBatches++;
+
     return { requestCount, duration, success: true };
 
   } catch (error) {
     console.error(`Error processing ${dateStr} (attempt ${retryCount + 1}):`, error);
 
     if (retryCount < MAX_RETRIES) {
+      // Exponential backoff for retries
       const backoffDelay = Math.min(MIN_API_DELAY * Math.pow(2, retryCount), 5000);
+      console.log(`Retrying after ${backoffDelay}ms delay...`);
       await delay(backoffDelay);
       return processDay(dateStr, retryCount + 1);
     }
@@ -85,7 +98,7 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
   }
 }
 
-async function verifyBatchData(dates: string[]): Promise<boolean> {
+async function verifyBatchData(dates: string[]): Promise<{ success: boolean, missingDates: string[] }> {
   const results = await Promise.all(
     dates.map(async (date) => {
       const data = await db.query.dailySummaries.findFirst({
@@ -98,19 +111,30 @@ async function verifyBatchData(dates: string[]): Promise<boolean> {
   const missingDates = results.filter(r => !r.exists).map(r => r.date);
   if (missingDates.length > 0) {
     console.log(`Missing data for dates: ${missingDates.join(', ')}`);
-    return false;
+    return { success: false, missingDates };
   }
-  return true;
+  return { success: true, missingDates: [] };
 }
 
-async function processBatch(dates: string[], batchNumber: number, totalBatches: number, retryAttempt = 0): Promise<boolean> {
+async function processBatch(
+  dates: string[], 
+  batchNumber: number, 
+  totalBatches: number, 
+  retryAttempt = 0
+): Promise<boolean> {
   console.log(`\nProcessing batch ${batchNumber} of ${totalBatches} (Attempt ${retryAttempt + 1}/${BATCH_RETRY_ATTEMPTS + 1})`);
   console.log(`Dates: ${dates.join(', ')}`);
 
   const batchStartTime = performance.now();
-  const results = await Promise.all(
-    dates.map(dateStr => processDay(dateStr))
-  );
+
+  // Process each date sequentially within the batch to avoid overwhelming the API
+  const results = [];
+  for (const dateStr of dates) {
+    const result = await processDay(dateStr);
+    results.push(result);
+    // Add delay between processing days within the batch
+    await delay(MIN_API_DELAY);
+  }
 
   const batchDuration = performance.now() - batchStartTime;
   const failedDates = dates.filter((_, index) => !results[index].success);
@@ -124,12 +148,12 @@ async function processBatch(dates: string[], batchNumber: number, totalBatches: 
   });
 
   // Verify all dates were processed correctly
-  const batchSuccessful = await verifyBatchData(dates);
+  const { success: batchSuccessful, missingDates } = await verifyBatchData(dates);
 
   if (!batchSuccessful && retryAttempt < BATCH_RETRY_ATTEMPTS) {
     console.log(`\nRetrying failed dates in batch ${batchNumber}...`);
     await delay(MIN_API_DELAY * 2);
-    return processBatch(dates, batchNumber, totalBatches, retryAttempt + 1);
+    return processBatch(missingDates, batchNumber, totalBatches, retryAttempt + 1);
   }
 
   return batchSuccessful;
@@ -170,20 +194,20 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
       if (batchSuccess) {
         consecutiveSuccesses++;
         consecutiveFailures = 0;
-        if (consecutiveSuccesses >= 2 && currentBatchSize < MAX_BATCH_SIZE) {
+        if (consecutiveSuccesses >= 3 && currentBatchSize < MAX_BATCH_SIZE) {
           currentBatchSize = Math.min(currentBatchSize + 1, MAX_BATCH_SIZE);
         }
       } else {
         consecutiveFailures++;
         consecutiveSuccesses = 0;
         if (consecutiveFailures >= 2) {
-          currentBatchSize = Math.max(currentBatchSize - 1, 3);
+          currentBatchSize = Math.max(currentBatchSize - 1, INITIAL_BATCH_SIZE);
         }
         failedDates.push(...batch);
       }
 
-      // Add delay between batches
-      const optimalDelay = Math.max(MIN_API_DELAY * 2, Math.min(avgProcessingTime * 0.1, 3000));
+      // Add delay between batches based on recent performance
+      const optimalDelay = Math.max(MIN_API_DELAY * 2, Math.min(avgProcessingTime * 0.2, 3000));
       await delay(optimalDelay);
     }
 
