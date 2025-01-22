@@ -76,7 +76,14 @@ export async function processDailyCurtailment(date: string): Promise<void> {
   let recordsProcessed = 0;
 
   const validWindFarmIds = await loadWindFarmIds();
-  const BATCH_SIZE = 12; // Process 12 settlement periods in parallel
+
+  // First, delete existing records for this date to ensure clean re-ingestion
+  await db.delete(curtailmentRecords)
+    .where(eq(curtailmentRecords.settlementDate, date));
+
+  // Reduce batch size and increase delay for more reliable data fetching
+  const BATCH_SIZE = 6; // Process 6 settlement periods in parallel
+  const FETCH_DELAY = 1000; // 1 second delay between batches
 
   // Process settlement periods in parallel batches
   for (let startPeriod = 1; startPeriod <= 48; startPeriod += BATCH_SIZE) {
@@ -88,9 +95,10 @@ export async function processDailyCurtailment(date: string): Promise<void> {
         try {
           const records = await fetchBidsOffers(date, period);
 
+          // Enhanced filtering to ensure we capture all valid records
           const validRecords = records.filter(record => 
             record.volume < 0 && 
-            record.soFlag && 
+            (record.soFlag || record.cadlFlag) && // Consider both SO and CADL flags
             validWindFarmIds.has(record.id)
           );
 
@@ -135,8 +143,8 @@ export async function processDailyCurtailment(date: string): Promise<void> {
       recordsProcessed += result.records;
     }
 
-    // Minimal delay between batches
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Increased delay between batches for more reliable data fetching
+    await new Promise(resolve => setTimeout(resolve, FETCH_DELAY));
   }
 
   try {
@@ -153,6 +161,12 @@ export async function processDailyCurtailment(date: string): Promise<void> {
     });
 
     await updateMonthlySummary(date);
+
+    console.log('Curtailment records totals:', {
+      totalVolume: totalVolume.toString(),
+      totalPayment: totalPayment.toString()
+    });
+
   } catch (error) {
     console.error(`Error updating daily summary for ${date}:`, error);
     throw error;
