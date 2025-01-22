@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "@db";
-import { dailySummaries, curtailmentRecords, monthlySummaries, yearlySummaries } from "@db/schema";
+import { dailySummaries, curtailmentRecords, monthlySummaries } from "@db/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function getDailySummary(req: Request, res: Response) {
@@ -97,54 +97,6 @@ export async function getMonthlySummary(req: Request, res: Response) {
     });
   } catch (error) {
     console.error('Error fetching monthly summary:', error);
-    res.status(500).json({
-      error: "Internal server error while fetching summary"
-    });
-  }
-}
-
-export async function getYearlySummary(req: Request, res: Response) {
-  try {
-    const { year } = req.params;
-
-    // Validate year format (YYYY)
-    if (!/^\d{4}$/.test(year)) {
-      return res.status(400).json({
-        error: "Invalid format. Please use YYYY"
-      });
-    }
-
-    // Get the yearly summary
-    const summary = await db.query.yearlySummaries.findFirst({
-      where: eq(yearlySummaries.year, year)
-    });
-
-    if (!summary) {
-      return res.status(404).json({
-        error: "No data available for this year"
-      });
-    }
-
-    // Calculate totals from monthly_summaries for verification
-    const monthlyTotals = await db
-      .select({
-        totalCurtailedEnergy: sql<string>`SUM(${monthlySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`SUM(${monthlySummaries.totalPayment}::numeric)`
-      })
-      .from(monthlySummaries)
-      .where(sql`substring(${monthlySummaries.yearMonth}, 1, 4) = ${year}`);
-
-    res.json({
-      year,
-      totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Math.abs(Number(summary.totalPayment)), // Convert to positive number
-      monthlyTotals: {
-        totalCurtailedEnergy: Number(monthlyTotals[0]?.totalCurtailedEnergy || 0),
-        totalPayment: Math.abs(Number(monthlyTotals[0]?.totalPayment || 0)) // Convert to positive number
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching yearly summary:', error);
     res.status(500).json({
       error: "Internal server error while fetching summary"
     });

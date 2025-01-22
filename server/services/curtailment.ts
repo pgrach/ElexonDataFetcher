@@ -1,5 +1,5 @@
 import { db } from "@db";
-import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "@db/schema";
+import { curtailmentRecords, dailySummaries, monthlySummaries } from "@db/schema";
 import { fetchBidsOffers } from "./elexon";
 import { eq, sql } from "drizzle-orm";
 import fs from "fs/promises";
@@ -28,44 +28,6 @@ async function loadWindFarmIds(): Promise<Set<string>> {
     return windFarmBmuIds;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
-    throw error;
-  }
-}
-
-async function updateYearlySummary(yearMonth: string): Promise<void> {
-  const year = yearMonth.substring(0, 4);
-
-  try {
-    const yearlyTotals = await db
-      .select({
-        totalCurtailedEnergy: sql<string>`SUM(${monthlySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`SUM(${monthlySummaries.totalPayment}::numeric)`
-      })
-      .from(monthlySummaries)
-      .where(sql`substring(${monthlySummaries.yearMonth}, 1, 4) = ${year}`);
-
-    const totals = yearlyTotals[0];
-
-    if (!totals.totalCurtailedEnergy || !totals.totalPayment) {
-      return;
-    }
-
-    await db.insert(yearlySummaries).values({
-      year,
-      totalCurtailedEnergy: totals.totalCurtailedEnergy,
-      totalPayment: totals.totalPayment,
-      updatedAt: new Date()
-    }).onConflictDoUpdate({
-      target: [yearlySummaries.year],
-      set: {
-        totalCurtailedEnergy: totals.totalCurtailedEnergy,
-        totalPayment: totals.totalPayment,
-        updatedAt: new Date()
-      }
-    });
-
-  } catch (error) {
-    console.error(`Error updating yearly summary for ${year}:`, error);
     throw error;
   }
 }
@@ -101,9 +63,6 @@ async function updateMonthlySummary(date: string): Promise<void> {
         updatedAt: new Date()
       }
     });
-
-    // Update yearly summary after monthly summary is updated
-    await updateYearlySummary(yearMonth);
 
   } catch (error) {
     console.error(`Error updating monthly summary for ${yearMonth}:`, error);
