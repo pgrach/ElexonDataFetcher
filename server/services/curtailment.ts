@@ -98,7 +98,9 @@ export async function processDailyCurtailment(date: string): Promise<void> {
           const periodResults = await Promise.all(
             validRecords.map(async record => {
               const volume = Math.abs(record.volume);
-              const payment = volume * record.originalPrice * -1;
+              // Fixed payment calculation: Using the absolute volume and original price directly
+              // since the volume is already negative in the API response, and we've taken its absolute value
+              const payment = volume * record.originalPrice;
 
               await db.insert(curtailmentRecords).values({
                 settlementDate: date,
