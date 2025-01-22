@@ -3,9 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Battery, Calendar as CalendarIcon, Map } from "lucide-react";
-import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
+import { Wind, Battery, Calendar as CalendarIcon } from "lucide-react";
 
 // Define the API response types based on our schema
 interface DailySummary {
@@ -48,15 +46,7 @@ export default function Home() {
 
   return (
     <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold">Wind Farm Curtailment Data</h1>
-        <Link href="/heatmap">
-          <Button className="flex items-center gap-2">
-            <Map className="h-4 w-4" />
-            View Performance Map
-          </Button>
-        </Link>
-      </div>
+      <h1 className="text-4xl font-bold mb-8">Wind Farm Curtailment Data</h1>
 
       <div className="grid md:grid-cols-[300px,1fr] gap-8">
         <div className="space-y-4">

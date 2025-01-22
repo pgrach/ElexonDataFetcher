@@ -2,7 +2,6 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getDailySummary, getMonthlySummary } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
-import { getWindFarmPerformance } from "./controllers/windFarms";
 
 export function registerRoutes(app: Express): Server {
   // Daily summary endpoint
@@ -10,9 +9,6 @@ export function registerRoutes(app: Express): Server {
 
   // Monthly summary endpoint
   app.get("/api/summary/monthly/:yearMonth", getMonthlySummary);
-
-  // Wind farm performance endpoint
-  app.get("/api/wind-farms/performance", getWindFarmPerformance);
 
   // Re-ingest data endpoint
   app.post("/api/ingest/:date", async (req, res) => {
