@@ -20,39 +20,33 @@ async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
 }
 
 async function updateDailySummary(date: string) {
+  // Calculate totals based on volume and original price
   const records = await db
     .select({
-      totalVolume: sql<string>`sum(${curtailmentRecords.volume})`,
-      totalPayment: sql<string>`sum(${curtailmentRecords.volume} * ${curtailmentRecords.original_price})`
+      totalVolume: sql<string>`COALESCE(sum(${curtailmentRecords.volume}), 0)::numeric`,
+      // Payment should be negative (volume * negative_price)
+      totalPayment: sql<string>`COALESCE(sum(${curtailmentRecords.volume}::numeric * ${curtailmentRecords.originalPrice}::numeric), 0)::numeric`
     })
     .from(curtailmentRecords)
     .where(eq(curtailmentRecords.settlementDate, date));
 
   const [totals] = records;
-  console.log("Curtailment records totals:", totals);
+  console.log("Daily totals for", date, ":", totals);
 
   await db
     .insert(dailySummaries)
     .values({
       summaryDate: date,
-      totalCurtailedEnergy: totals.totalVolume || "0",
-      totalPayment: totals.totalPayment || "0"
+      totalCurtailedEnergy: totals.totalVolume?.toString() || "0",
+      totalPayment: totals.totalPayment?.toString() || "0"
     })
     .onConflictDoUpdate({
       target: [dailySummaries.summaryDate],
       set: {
-        totalCurtailedEnergy: totals.totalVolume || "0",
-        totalPayment: totals.totalPayment || "0"
+        totalCurtailedEnergy: totals.totalVolume?.toString() || "0",
+        totalPayment: totals.totalPayment?.toString() || "0"
       }
     });
-
-  const dailySummary = await db
-    .select()
-    .from(dailySummaries)
-    .where(eq(dailySummaries.summaryDate, date))
-    .limit(1);
-
-  console.log("Daily summary:", dailySummary[0]);
 }
 
 async function updateMonthlySummary(yearMonth: string) {
@@ -62,8 +56,9 @@ async function updateMonthlySummary(yearMonth: string) {
 
   const records = await db
     .select({
-      totalVolume: sql<string>`sum(${curtailmentRecords.volume})`,
-      totalPayment: sql<string>`sum(${curtailmentRecords.volume} * ${curtailmentRecords.original_price})`
+      totalVolume: sql<string>`COALESCE(sum(${curtailmentRecords.volume}), 0)::numeric`,
+      // Payment should be negative (volume * negative_price)
+      totalPayment: sql<string>`COALESCE(sum(${curtailmentRecords.volume}::numeric * ${curtailmentRecords.originalPrice}::numeric), 0)::numeric`
     })
     .from(curtailmentRecords)
     .where(
@@ -77,35 +72,40 @@ async function updateMonthlySummary(yearMonth: string) {
     );
 
   const [totals] = records;
+  console.log("Monthly totals for", yearMonth, ":", totals);
 
   await db
     .insert(monthlySummaries)
     .values({
       yearMonth,
-      totalCurtailedEnergy: totals.totalVolume || "0",
-      totalPayment: totals.totalPayment || "0"
+      totalCurtailedEnergy: totals.totalVolume?.toString() || "0",
+      totalPayment: totals.totalPayment?.toString() || "0"
     })
     .onConflictDoUpdate({
       target: [monthlySummaries.yearMonth],
       set: {
-        totalCurtailedEnergy: totals.totalVolume || "0",
-        totalPayment: totals.totalPayment || "0"
+        totalCurtailedEnergy: totals.totalVolume?.toString() || "0",
+        totalPayment: totals.totalPayment?.toString() || "0",
+        updatedAt: new Date()
       }
     });
 }
 
 async function processBidsOffers(records: ElexonBidOffer[]) {
   for (const record of records) {
-    // Volume is already positive from the API, price is negative
-    // Payment should be volume * original_price to get a negative value
+    // Store volume as positive
+    const volume = Math.abs(record.volume);
+    // Payment is negative (volume * negative_price)
+    const payment = volume * record.originalPrice;
+
     await db
       .insert(curtailmentRecords)
       .values({
         settlementDate: record.settlementDate,
         settlementPeriod: record.settlementPeriod,
         farmId: record.id,
-        volume: Math.abs(record.volume).toString(),
-        payment: (record.volume * record.originalPrice).toString(), // Will be negative as expected
+        volume: volume.toString(),
+        payment: payment.toString(),
         originalPrice: record.originalPrice.toString(),
         finalPrice: record.finalPrice.toString(),
         soFlag: record.soFlag,
