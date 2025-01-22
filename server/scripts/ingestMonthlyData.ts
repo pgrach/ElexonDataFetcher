@@ -1,14 +1,15 @@
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
-import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema"; // Added curtailmentRecords import
+import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
 
-const INITIAL_BATCH_SIZE = 10;  
+const INITIAL_BATCH_SIZE = 5;  // Reduced for better reliability
 const MIN_API_DELAY = 200;    
 const MAX_RETRIES = 3;
-const MAX_BATCH_SIZE = 15;     
+const MAX_BATCH_SIZE = 10;     // Reduced max batch size
+const BATCH_RETRY_ATTEMPTS = 2; // New: number of times to retry a failed batch
 
 let apiRequestsPerMinute: { [key: string]: number } = {};
 let totalRequests = 0;
@@ -21,6 +22,7 @@ interface ProcessingMetrics {
   requestCount: number;
   duration: number;
   success: boolean;
+  error?: string;
 }
 
 async function delay(ms: number) {
@@ -49,11 +51,12 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
 
     await processDailyCurtailment(dateStr);
 
+    // Verify the data was properly ingested
     const verifyData = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, dateStr)
     });
 
-    if (!verifyData) {
+    if (!verifyData || !verifyData.totalCurtailedEnergy) {
       throw new Error(`Data verification failed for ${dateStr}`);
     }
 
@@ -73,36 +76,63 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
 
     failedRequests++;
     const duration = performance.now() - startTime;
-    return { requestCount, duration, success: false };
+    return { 
+      requestCount, 
+      duration, 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
   }
 }
 
-async function recordProgress(date: string, status: string, errorMessage?: string) {
-  try {
-    const existing = await db.query.ingestionProgress.findFirst({
-      where: eq(ingestionProgress.lastProcessedDate, date)
-    });
-
-    if (existing) {
-      await db
-        .update(ingestionProgress)
-        .set({
-          status,
-          errorMessage,
-          updatedAt: new Date()
-        })
-        .where(eq(ingestionProgress.lastProcessedDate, date));
-    } else {
-      await db.insert(ingestionProgress).values({
-        lastProcessedDate: date,
-        status,
-        errorMessage,
-        updatedAt: new Date()
+async function verifyBatchData(dates: string[]): Promise<boolean> {
+  const results = await Promise.all(
+    dates.map(async (date) => {
+      const data = await db.query.dailySummaries.findFirst({
+        where: eq(dailySummaries.summaryDate, date)
       });
-    }
-  } catch (error) {
-    console.error('Error updating progress tracking:', error);
+      return { date, exists: !!data?.totalCurtailedEnergy };
+    })
+  );
+
+  const missingDates = results.filter(r => !r.exists).map(r => r.date);
+  if (missingDates.length > 0) {
+    console.log(`Missing data for dates: ${missingDates.join(', ')}`);
+    return false;
   }
+  return true;
+}
+
+async function processBatch(dates: string[], batchNumber: number, totalBatches: number, retryAttempt = 0): Promise<boolean> {
+  console.log(`\nProcessing batch ${batchNumber} of ${totalBatches} (Attempt ${retryAttempt + 1}/${BATCH_RETRY_ATTEMPTS + 1})`);
+  console.log(`Dates: ${dates.join(', ')}`);
+
+  const batchStartTime = performance.now();
+  const results = await Promise.all(
+    dates.map(dateStr => processDay(dateStr))
+  );
+
+  const batchDuration = performance.now() - batchStartTime;
+  const failedDates = dates.filter((_, index) => !results[index].success);
+
+  // Log batch results
+  console.log(`Batch ${batchNumber} completed:`, {
+    successful: `${results.filter(r => r.success).length}/${results.length}`,
+    duration: `${(batchDuration/1000).toFixed(1)}s`,
+    avgDuration: `${(batchDuration/results.length/1000).toFixed(1)}s per day`,
+    failedDates: failedDates.length > 0 ? failedDates : 'None'
+  });
+
+  // Verify all dates were processed correctly
+  const batchSuccessful = await verifyBatchData(dates);
+
+  if (!batchSuccessful && retryAttempt < BATCH_RETRY_ATTEMPTS) {
+    console.log(`\nRetrying failed dates in batch ${batchNumber}...`);
+    await delay(MIN_API_DELAY * 2);
+    return processBatch(dates, batchNumber, totalBatches, retryAttempt + 1);
+  }
+
+  return batchSuccessful;
 }
 
 async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: number) {
@@ -127,54 +157,46 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
     let currentBatchSize = INITIAL_BATCH_SIZE;
     let consecutiveSuccesses = 0;
     let consecutiveFailures = 0;
+    let failedDates: string[] = [];
 
+    // Process in smaller batches with verification
     for (let i = 0; i < daysToProcess.length; i += currentBatchSize) {
-      const batchStartTime = performance.now();
       const batch = daysToProcess.slice(i, i + currentBatchSize);
+      const batchNumber = Math.floor(i/currentBatchSize) + 1;
+      const totalBatches = Math.ceil(daysToProcess.length/currentBatchSize);
 
-      console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(daysToProcess.length/currentBatchSize)}`);
-      console.log(`Dates: ${batch.join(', ')}`);
-
-      // Process batch in parallel with improved concurrency
-      const results = await Promise.all(
-        batch.map(dateStr => processDay(dateStr))
-      );
-
-      const batchDuration = performance.now() - batchStartTime;
-      const batchSuccess = results.every(r => r.success);
-      const avgDuration = batchDuration / results.length;
+      const batchSuccess = await processBatch(batch, batchNumber, totalBatches);
 
       if (batchSuccess) {
         consecutiveSuccesses++;
         consecutiveFailures = 0;
-        if (consecutiveSuccesses >= 2 && avgDuration < 30000) { 
+        if (consecutiveSuccesses >= 2 && currentBatchSize < MAX_BATCH_SIZE) {
           currentBatchSize = Math.min(currentBatchSize + 1, MAX_BATCH_SIZE);
         }
       } else {
         consecutiveFailures++;
         consecutiveSuccesses = 0;
         if (consecutiveFailures >= 2) {
-          currentBatchSize = Math.max(currentBatchSize - 1, 4);
+          currentBatchSize = Math.max(currentBatchSize - 1, 3);
         }
+        failedDates.push(...batch);
       }
 
-      totalProcessingTime += batchDuration;
-      successfulBatches += batchSuccess ? 1 : 0;
-
-      // Enhanced logging
-      console.log(`Batch ${Math.floor(i/currentBatchSize) + 1} completed:`, {
-        successful: `${results.filter(r => r.success).length}/${results.length}`,
-        duration: `${(batchDuration/1000).toFixed(1)}s`,
-        avgDuration: `${(avgDuration/1000).toFixed(1)}s per day`
-      });
-
-      // Optimized delay calculation based on performance
-      const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.1, 3000));
+      // Add delay between batches
+      const optimalDelay = Math.max(MIN_API_DELAY * 2, Math.min(avgProcessingTime * 0.1, 3000));
       await delay(optimalDelay);
     }
 
-    console.log(`\n=== ${yearMonth} (Days ${start}-${end}) Data Ingestion Complete ===`);
+    // Report any failed dates
+    if (failedDates.length > 0) {
+      console.log('\nWarning: The following dates failed to process:');
+      console.log(failedDates.join(', '));
+      throw new Error(`Failed to process ${failedDates.length} dates`);
+    }
 
+    console.log(`\n=== ${yearMonth} Data Ingestion Complete ===`);
+
+    // Generate summary report
     const monthlyData = await db.select({
       summaryDate: dailySummaries.summaryDate,
       totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
@@ -213,6 +235,7 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
   }
 }
 
+// Input validation and script execution
 const args = process.argv.slice(2);
 const yearMonth = args[0];
 const startDay = args[1] ? parseInt(args[1]) : undefined;
