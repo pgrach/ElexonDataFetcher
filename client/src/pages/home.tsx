@@ -56,8 +56,11 @@ export default function Home() {
                 selected={date}
                 onSelect={(newDate) => newDate && setDate(newDate)}
                 disabled={(date) => {
-                  // Allow dates from June 2023 to current date (January 2025)
-                  return date < new Date("2023-06-01") || date > new Date();
+                  // Include June 1st, 2023 by using start of day comparison
+                  const startDate = new Date("2023-06-01");
+                  startDate.setHours(0, 0, 0, 0);
+                  const currentDate = new Date();
+                  return date < startDate || date > currentDate;
                 }}
               />
             </CardContent>
