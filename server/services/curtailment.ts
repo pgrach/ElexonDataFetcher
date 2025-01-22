@@ -16,7 +16,6 @@ async function loadWindFarmIds(): Promise<Set<string>> {
   }
 
   try {
-    console.log('Loading BMU mapping from:', BMU_MAPPING_PATH);
     const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
     const bmuMapping = JSON.parse(mappingContent);
 
@@ -26,7 +25,6 @@ async function loadWindFarmIds(): Promise<Set<string>> {
         .map((bmu: any) => bmu.elexonBmUnit)
     );
 
-    console.log(`Loaded ${windFarmBmuIds.size} wind farm BMU IDs`);
     return windFarmBmuIds;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
