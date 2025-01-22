@@ -23,12 +23,13 @@ async function updateDailySummary(date: string) {
   const records = await db
     .select({
       totalVolume: sql<string>`sum(${curtailmentRecords.volume})`,
-      totalPayment: sql<string>`sum(${curtailmentRecords.payment})`
+      totalPayment: sql<string>`sum(${curtailmentRecords.volume} * ${curtailmentRecords.original_price})`
     })
     .from(curtailmentRecords)
     .where(eq(curtailmentRecords.settlementDate, date));
 
   const [totals] = records;
+  console.log("Curtailment records totals:", totals);
 
   await db
     .insert(dailySummaries)
@@ -44,6 +45,14 @@ async function updateDailySummary(date: string) {
         totalPayment: totals.totalPayment || "0"
       }
     });
+
+  const dailySummary = await db
+    .select()
+    .from(dailySummaries)
+    .where(eq(dailySummaries.summaryDate, date))
+    .limit(1);
+
+  console.log("Daily summary:", dailySummary[0]);
 }
 
 async function updateMonthlySummary(yearMonth: string) {
@@ -54,7 +63,7 @@ async function updateMonthlySummary(yearMonth: string) {
   const records = await db
     .select({
       totalVolume: sql<string>`sum(${curtailmentRecords.volume})`,
-      totalPayment: sql<string>`sum(${curtailmentRecords.payment})`
+      totalPayment: sql<string>`sum(${curtailmentRecords.volume} * ${curtailmentRecords.original_price})`
     })
     .from(curtailmentRecords)
     .where(
@@ -87,10 +96,8 @@ async function updateMonthlySummary(yearMonth: string) {
 
 async function processBidsOffers(records: ElexonBidOffer[]) {
   for (const record of records) {
-    // Fix payment calculation: For curtailment, payment should be negative
-    // If volume is negative and price is negative, payment should be negative
-    const payment = Math.abs(record.volume) * record.originalPrice;
-
+    // Volume is already positive from the API, price is negative
+    // Payment should be volume * original_price to get a negative value
     await db
       .insert(curtailmentRecords)
       .values({
@@ -98,7 +105,7 @@ async function processBidsOffers(records: ElexonBidOffer[]) {
         settlementPeriod: record.settlementPeriod,
         farmId: record.id,
         volume: Math.abs(record.volume).toString(),
-        payment: payment.toString(), // Remove the -1 multiplier to keep payments negative
+        payment: (record.volume * record.originalPrice).toString(), // Will be negative as expected
         originalPrice: record.originalPrice.toString(),
         finalPrice: record.finalPrice.toString(),
         soFlag: record.soFlag,
