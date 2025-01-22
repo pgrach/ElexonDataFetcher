@@ -20,11 +20,10 @@ async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
 }
 
 async function updateDailySummary(date: string) {
-  // Use ABS for payment aggregation to ensure positive values
   const records = await db
     .select({
       totalVolume: sql<string>`sum(${curtailmentRecords.volume})`,
-      totalPayment: sql<string>`sum(ABS(${curtailmentRecords.payment}::numeric))`
+      totalPayment: sql<string>`sum(${curtailmentRecords.payment})`
     })
     .from(curtailmentRecords)
     .where(eq(curtailmentRecords.settlementDate, date));
@@ -36,13 +35,13 @@ async function updateDailySummary(date: string) {
     .values({
       summaryDate: date,
       totalCurtailedEnergy: totals.totalVolume || "0",
-      totalPayment: totals.totalPayment || "0"  // This will be positive due to ABS()
+      totalPayment: totals.totalPayment || "0"
     })
     .onConflictDoUpdate({
       target: [dailySummaries.summaryDate],
       set: {
         totalCurtailedEnergy: totals.totalVolume || "0",
-        totalPayment: totals.totalPayment || "0"  // This will be positive due to ABS()
+        totalPayment: totals.totalPayment || "0"
       }
     });
 }
@@ -52,11 +51,10 @@ async function updateMonthlySummary(yearMonth: string) {
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-31`;
 
-  // Use ABS for payment aggregation to ensure positive values
   const records = await db
     .select({
       totalVolume: sql<string>`sum(${curtailmentRecords.volume})`,
-      totalPayment: sql<string>`sum(ABS(${curtailmentRecords.payment}::numeric))`
+      totalPayment: sql<string>`sum(${curtailmentRecords.payment})`
     })
     .from(curtailmentRecords)
     .where(
@@ -76,31 +74,28 @@ async function updateMonthlySummary(yearMonth: string) {
     .values({
       yearMonth,
       totalCurtailedEnergy: totals.totalVolume || "0",
-      totalPayment: totals.totalPayment || "0"  // This will be positive due to ABS()
+      totalPayment: totals.totalPayment || "0"
     })
     .onConflictDoUpdate({
       target: [monthlySummaries.yearMonth],
       set: {
         totalCurtailedEnergy: totals.totalVolume || "0",
-        totalPayment: totals.totalPayment || "0"  // This will be positive due to ABS()
+        totalPayment: totals.totalPayment || "0"
       }
     });
 }
 
 async function processBidsOffers(records: ElexonBidOffer[]) {
   for (const record of records) {
-    const volume = Math.abs(record.volume);
-    // Payment calculation: Always ensure positive payment values for curtailment
-    const payment = volume * Math.abs(record.originalPrice);
-
     await db
       .insert(curtailmentRecords)
       .values({
         settlementDate: record.settlementDate,
         settlementPeriod: record.settlementPeriod,
         farmId: record.id,
-        volume: volume.toString(),
-        payment: payment.toString(),
+        volume: Math.abs(record.volume).toString(),
+        // Fixed payment calculation: Using the absolute volume and original price directly
+        payment: (Math.abs(record.volume) * record.originalPrice).toString(),
         originalPrice: record.originalPrice.toString(),
         finalPrice: record.finalPrice.toString(),
         soFlag: record.soFlag,

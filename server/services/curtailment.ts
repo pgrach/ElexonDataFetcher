@@ -36,11 +36,10 @@ async function updateMonthlySummary(date: string): Promise<void> {
   const yearMonth = date.substring(0, 7);
 
   try {
-    // Use ABS for payment aggregation to ensure positive values
     const monthlyTotals = await db
       .select({
         totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`SUM(ABS(${dailySummaries.totalPayment}::numeric))`
+        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
       })
       .from(dailySummaries)
       .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${date}::date)`);
@@ -72,49 +71,38 @@ async function updateMonthlySummary(date: string): Promise<void> {
 }
 
 export async function processDailyCurtailment(date: string): Promise<void> {
-  try {
-    // Delete existing records for clean re-ingestion
-    await db.delete(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date));
+  let totalVolume = 0;
+  let totalPayment = 0;
+  let recordsProcessed = 0;
 
-    let totalVolume = 0;
-    let totalPayment = 0;
-    const validWindFarmIds = await loadWindFarmIds();
-    const BATCH_SIZE = 12;
+  const validWindFarmIds = await loadWindFarmIds();
+  const BATCH_SIZE = 12; // Keep original batch size of 12 settlement periods
 
-    for (let startPeriod = 1; startPeriod <= 48; startPeriod += BATCH_SIZE) {
-      const endPeriod = Math.min(startPeriod + BATCH_SIZE - 1, 48);
-      const periodPromises = [];
+  // Process settlement periods in parallel batches
+  for (let startPeriod = 1; startPeriod <= 48; startPeriod += BATCH_SIZE) {
+    const endPeriod = Math.min(startPeriod + BATCH_SIZE - 1, 48);
+    const periodPromises = [];
 
-      for (let period = startPeriod; period <= endPeriod; period++) {
-        periodPromises.push((async () => {
-          try {
-            const records = await fetchBidsOffers(date, period);
+    for (let period = startPeriod; period <= endPeriod; period++) {
+      periodPromises.push((async () => {
+        try {
+          const records = await fetchBidsOffers(date, period);
 
-            const validRecords = records.filter(record =>
-              record.volume < 0 &&  // Filter for curtailment (negative volume)
-              (record.soFlag || record.cadlFlag) &&
-              validWindFarmIds.has(record.id)
-            );
+          // Updated filtering to include CADL flag
+          const validRecords = records.filter(record =>
+            record.volume < 0 &&
+            (record.soFlag || record.cadlFlag) && // Consider both SO and CADL flags
+            validWindFarmIds.has(record.id)
+          );
 
-            if (!validRecords.length) {
-              return { volume: 0, payment: 0 };
-            }
-
-            // Calculate total volume for the period
-            const periodVolume = validRecords.reduce((sum, record) => sum + Math.abs(record.volume), 0);
-
-            // Use the first valid record's price for payment calculation
-            const periodPrice = Math.abs(validRecords[0].originalPrice);
-            const periodPayment = periodVolume * periodPrice;
-
-            // Store individual records with the period price
-            await Promise.all(validRecords.map(record => {
+          const periodResults = await Promise.all(
+            validRecords.map(async record => {
               const volume = Math.abs(record.volume);
-              // Use the same price for all records in this period
-              const payment = volume * periodPrice;
+              // Fixed payment calculation: Using the absolute volume and original price directly
+              // since the volume is already negative in the API response, and we've taken its absolute value
+              const payment = volume * record.originalPrice;
 
-              return db.insert(curtailmentRecords).values({
+              await db.insert(curtailmentRecords).values({
                 settlementDate: date,
                 settlementPeriod: period,
                 farmId: record.id,
@@ -123,49 +111,54 @@ export async function processDailyCurtailment(date: string): Promise<void> {
                 originalPrice: record.originalPrice.toString(),
                 finalPrice: record.finalPrice.toString(),
                 soFlag: record.soFlag,
-                cadlFlag: record.cadlFlag || false
+                cadlFlag: record.cadlFlag
               });
-            }));
 
-            console.log(`[${date} P${period}] Records: ${validRecords.length} (${periodVolume.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
-            return { volume: periodVolume, payment: periodPayment };
-          } catch (error) {
-            console.error(`Error processing period ${period} for date ${date}:`, error);
-            return { volume: 0, payment: 0 };
-          }
-        })());
-      }
+              return { volume, payment };
+            })
+          );
 
-      const batchResults = await Promise.all(periodPromises);
-
-      for (const result of batchResults) {
-        totalVolume += result.volume;
-        totalPayment += result.payment;
-      }
-
-      // Add a small delay between batches to avoid overwhelming the API
-      await new Promise(resolve => setTimeout(resolve, 500));
+          return periodResults.reduce((acc, curr) => ({
+            volume: acc.volume + curr.volume,
+            payment: acc.payment + curr.payment
+          }), { volume: 0, payment: 0 });
+        } catch (error) {
+          console.error(`Error processing period ${period} for date ${date}:`, error);
+          return { volume: 0, payment: 0 };
+        }
+      })());
     }
+
+    const batchResults = await Promise.all(periodPromises);
+
+    for (const result of batchResults) {
+      totalVolume += result.volume;
+      totalPayment += result.payment;
+    }
+
+    // Keep original minimal delay between batches
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  try {
+    await db.insert(dailySummaries).values({
+      summaryDate: date,
+      totalCurtailedEnergy: totalVolume.toString(),
+      totalPayment: totalPayment.toString()
+    }).onConflictDoUpdate({
+      target: [dailySummaries.summaryDate],
+      set: {
+        totalCurtailedEnergy: totalVolume.toString(),
+        totalPayment: totalPayment.toString()
+      }
+    });
+
+    await updateMonthlySummary(date);
 
     console.log('Curtailment records totals:', {
       totalVolume: totalVolume.toString(),
       totalPayment: totalPayment.toString()
     });
-
-    // Update daily summary with the totals
-    await db.insert(dailySummaries).values({
-      summaryDate: date,
-      totalCurtailedEnergy: totalVolume.toString(),
-      totalPayment: totalPayment.toString()  // Store total payment as positive
-    }).onConflictDoUpdate({
-      target: [dailySummaries.summaryDate],
-      set: {
-        totalCurtailedEnergy: totalVolume.toString(),
-        totalPayment: totalPayment.toString()  // Update with positive value
-      }
-    });
-
-    await updateMonthlySummary(date);
 
   } catch (error) {
     console.error(`Error updating daily summary for ${date}:`, error);

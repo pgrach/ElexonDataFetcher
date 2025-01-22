@@ -1,6 +1,6 @@
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
-import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema";
+import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema"; // Added curtailmentRecords import
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
@@ -57,8 +57,7 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
       throw new Error(`Data verification failed for ${dateStr}`);
     }
 
-    // Use absolute value for payment when logging
-    console.log(`[${dateStr}] Successfully processed: ${Number(verifyData.totalCurtailedEnergy).toFixed(2)} MWh, £${Math.abs(Number(verifyData.totalPayment)).toFixed(2)}`);
+    console.log(`[${dateStr}] Successfully processed: ${Number(verifyData.totalCurtailedEnergy).toFixed(2)} MWh, £${Number(verifyData.totalPayment).toFixed(2)}`);
 
     const duration = performance.now() - startTime;
     return { requestCount, duration, success: true };
@@ -176,11 +175,10 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
 
     console.log(`\n=== ${yearMonth} (Days ${start}-${end}) Data Ingestion Complete ===`);
 
-    // Get all daily summaries for the month
     const monthlyData = await db.select({
       summaryDate: dailySummaries.summaryDate,
       totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
-      totalPayment: sql<string>`ABS(${dailySummaries.totalPayment}::numeric)` // Use ABS to ensure positive values
+      totalPayment: dailySummaries.totalPayment
     })
     .from(dailySummaries)
     .where(
@@ -197,7 +195,6 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
     };
 
     monthlyData.forEach(day => {
-      // Use positive payment values in the output
       console.log(`${day.summaryDate}: ${Number(day.totalCurtailedEnergy).toFixed(2)} MWh, £${Number(day.totalPayment).toFixed(2)}`);
       monthlyTotal.energy += Number(day.totalCurtailedEnergy);
       monthlyTotal.payment += Number(day.totalPayment);

@@ -19,11 +19,11 @@ async function generateMonthlySummaries() {
 
     for (const { yearMonth } of months) {
       try {
-        // Calculate monthly totals from daily_summaries using absolute values for payments
+        // Calculate monthly totals from daily_summaries
         const monthlyTotals = await db
           .select({
             totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
-            totalPayment: sql<string>`SUM(ABS(${dailySummaries.totalPayment}::numeric))`
+            totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
           })
           .from(dailySummaries)
           .where(sql`TO_CHAR(${dailySummaries.summaryDate}, 'YYYY-MM') = ${yearMonth}`);
@@ -35,7 +35,7 @@ async function generateMonthlySummaries() {
           continue;
         }
 
-        // Insert or update monthly summary with absolute payment values
+        // Insert or update monthly summary
         await db.insert(monthlySummaries).values({
           yearMonth,
           totalCurtailedEnergy: totals.totalCurtailedEnergy,
@@ -54,14 +54,13 @@ async function generateMonthlySummaries() {
           totalCurtailedEnergy: Number(totals.totalCurtailedEnergy).toFixed(2),
           totalPayment: Number(totals.totalPayment).toFixed(2)
         });
-
       } catch (error) {
         console.error(`Error processing ${yearMonth}:`, error);
       }
     }
 
     console.log('\n=== Monthly Summaries Generation Completed ===');
-
+    
     // Verify the results
     const summaries = await db.query.monthlySummaries.findMany({
       orderBy: (monthlySummaries, { asc }) => [asc(monthlySummaries.yearMonth)]
@@ -69,8 +68,7 @@ async function generateMonthlySummaries() {
 
     console.log('\nGenerated Monthly Summaries:');
     summaries.forEach(summary => {
-      // Always display positive payment values
-      console.log(`${summary.yearMonth}: ${Number(summary.totalCurtailedEnergy).toFixed(2)} MWh, £${Math.abs(Number(summary.totalPayment)).toFixed(2)}`);
+      console.log(`${summary.yearMonth}: ${Number(summary.totalCurtailedEnergy).toFixed(2)} MWh, £${Number(summary.totalPayment).toFixed(2)}`);
     });
 
   } catch (error) {
