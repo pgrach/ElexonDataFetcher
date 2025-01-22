@@ -15,10 +15,11 @@ export async function getDailySummary(req: Request, res: Response) {
     }
 
     // Calculate totals from curtailment_records for verification
+    // Use ABS for payment aggregation to ensure positive values
     const recordTotals = await db
       .select({
         totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
-        totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+        totalPayment: sql<string>`SUM(ABS(${curtailmentRecords.payment}::numeric))`
       })
       .from(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, date));
@@ -41,10 +42,10 @@ export async function getDailySummary(req: Request, res: Response) {
     res.json({
       date,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Number(summary.totalPayment),
+      totalPayment: Math.abs(Number(summary.totalPayment)),  // Ensure positive value
       recordTotals: {
         totalVolume: Number(recordTotals[0]?.totalVolume || 0),
-        totalPayment: Number(recordTotals[0]?.totalPayment || 0)
+        totalPayment: Number(recordTotals[0]?.totalPayment || 0)  // Will be positive due to ABS()
       }
     });
   } catch (error) {
@@ -78,10 +79,11 @@ export async function getMonthlySummary(req: Request, res: Response) {
     }
 
     // Calculate totals from daily_summaries for verification
+    // Use ABS for payment aggregation to ensure positive values
     const dailyTotals = await db
       .select({
         totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
+        totalPayment: sql<string>`SUM(ABS(${dailySummaries.totalPayment}::numeric))`
       })
       .from(dailySummaries)
       .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${yearMonth + '-01'}::date)`);
@@ -89,10 +91,10 @@ export async function getMonthlySummary(req: Request, res: Response) {
     res.json({
       yearMonth,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Number(summary.totalPayment),
+      totalPayment: Math.abs(Number(summary.totalPayment)),  // Ensure positive value
       dailyTotals: {
         totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
-        totalPayment: Number(dailyTotals[0]?.totalPayment || 0)
+        totalPayment: Number(dailyTotals[0]?.totalPayment || 0)  // Will be positive due to ABS()
       }
     });
   } catch (error) {
