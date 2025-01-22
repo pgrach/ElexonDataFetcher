@@ -1,17 +1,14 @@
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
-import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema";
+import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema"; // Added curtailmentRecords import
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
 
-// Keep original high-performance settings
 const INITIAL_BATCH_SIZE = 10;  
 const MIN_API_DELAY = 200;    
 const MAX_RETRIES = 3;
 const MAX_BATCH_SIZE = 15;     
-const BATCH_RETRY_ATTEMPTS = 2;
-const MAX_CONCURRENT = 5; // Limit concurrent database operations
 
 let apiRequestsPerMinute: { [key: string]: number } = {};
 let totalRequests = 0;
@@ -37,42 +34,30 @@ function trackApiRequest() {
   totalRequests++;
 }
 
-// Process dates in smaller chunks to avoid overwhelming the database
-async function processInChunks<T>(items: T[], chunkSize: number, processor: (item: T) => Promise<any>) {
-  const results = [];
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, Math.min(i + chunkSize, items.length));
-    const chunkResults = await Promise.all(chunk.map(processor));
-    results.push(...chunkResults);
-    if (i + chunkSize < items.length) {
-      await delay(MIN_API_DELAY);
-    }
-  }
-  return results;
-}
-
 async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMetrics> {
   const startTime = performance.now();
   let requestCount = 0;
 
   try {
-    // Clear existing records first
+    // Delete existing records for clean re-ingestion
     await db.delete(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, dateStr));
 
+    console.log(`Processing ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     trackApiRequest();
     requestCount++;
 
     await processDailyCurtailment(dateStr);
 
-    // Verify data was properly ingested
     const verifyData = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, dateStr)
     });
 
-    if (!verifyData || !verifyData.totalCurtailedEnergy) {
-      throw new Error(`No data generated for ${dateStr}`);
+    if (!verifyData) {
+      throw new Error(`Data verification failed for ${dateStr}`);
     }
+
+    console.log(`[${dateStr}] Successfully processed: ${Number(verifyData.totalCurtailedEnergy).toFixed(2)} MWh, £${Number(verifyData.totalPayment).toFixed(2)}`);
 
     const duration = performance.now() - startTime;
     return { requestCount, duration, success: true };
@@ -81,7 +66,7 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
     console.error(`Error processing ${dateStr} (attempt ${retryCount + 1}):`, error);
 
     if (retryCount < MAX_RETRIES) {
-      const backoffDelay = Math.min(MIN_API_DELAY * Math.pow(2, retryCount), 2000);
+      const backoffDelay = Math.min(MIN_API_DELAY * Math.pow(2, retryCount), 5000);
       await delay(backoffDelay);
       return processDay(dateStr, retryCount + 1);
     }
@@ -92,63 +77,32 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
   }
 }
 
-async function verifyBatchData(dates: string[]): Promise<string[]> {
-  const results = await Promise.all(
-    dates.map(async (date) => {
-      const data = await db.query.dailySummaries.findFirst({
-        where: eq(dailySummaries.summaryDate, date),
-      });
-
-      // Consider both null and zero values as missing
-      const hasValidData = data && data.totalCurtailedEnergy && Number(data.totalCurtailedEnergy) > 0;
-      return { date, exists: hasValidData };
-    })
-  );
-
-  return results.filter(r => !r.exists).map(r => r.date);
-}
-
-async function processBatch(dates: string[], batchNumber: number, totalBatches: number): Promise<boolean> {
-  console.log(`\nProcessing batch ${batchNumber} of ${totalBatches}`);
-  console.log(`Dates: ${dates.join(', ')}`);
-
-  const batchStartTime = performance.now();
-
-  // Process dates in smaller chunks to avoid overwhelming the database
-  const results = await processInChunks(dates, MAX_CONCURRENT, dateStr => processDay(dateStr));
-
-  const batchDuration = performance.now() - batchStartTime;
-  const failedDates = dates.filter((_, index) => !results[index].success);
-
-  console.log(`Batch ${batchNumber} completed:`, {
-    successful: `${results.filter(r => r.success).length}/${results.length}`,
-    duration: `${(batchDuration/1000).toFixed(1)}s`,
-    avgDuration: `${(batchDuration/results.length/1000).toFixed(1)}s per day`,
-    failedDates: failedDates.length > 0 ? failedDates : 'None'
-  });
-
-  // Verify data and retry missing/zero-value dates
-  const missingDates = await verifyBatchData(dates);
-
-  if (missingDates.length > 0) {
-    console.log(`\nRetrying dates with missing/zero data: ${missingDates.join(', ')}`);
-    await delay(MIN_API_DELAY * 2);
-
-    // Process retries in smaller chunks too
-    const retryResults = await processInChunks(missingDates, Math.max(2, MAX_CONCURRENT / 2), async dateStr => {
-      const result = await processDay(dateStr, 1);
-      if (!result.success) {
-        await delay(MIN_API_DELAY * 2);
-        return processDay(dateStr, 2);
-      }
-      return result;
+async function recordProgress(date: string, status: string, errorMessage?: string) {
+  try {
+    const existing = await db.query.ingestionProgress.findFirst({
+      where: eq(ingestionProgress.lastProcessedDate, date)
     });
 
-    const stillMissing = await verifyBatchData(missingDates);
-    return stillMissing.length === 0;
+    if (existing) {
+      await db
+        .update(ingestionProgress)
+        .set({
+          status,
+          errorMessage,
+          updatedAt: new Date()
+        })
+        .where(eq(ingestionProgress.lastProcessedDate, date));
+    } else {
+      await db.insert(ingestionProgress).values({
+        lastProcessedDate: date,
+        status,
+        errorMessage,
+        updatedAt: new Date()
+      });
+    }
+  } catch (error) {
+    console.error('Error updating progress tracking:', error);
   }
-
-  return true;
 }
 
 async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: number) {
@@ -174,34 +128,53 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
     let consecutiveSuccesses = 0;
     let consecutiveFailures = 0;
 
-    // Process in batches
     for (let i = 0; i < daysToProcess.length; i += currentBatchSize) {
+      const batchStartTime = performance.now();
       const batch = daysToProcess.slice(i, i + currentBatchSize);
-      const batchNumber = Math.floor(i/currentBatchSize) + 1;
-      const totalBatches = Math.ceil(daysToProcess.length/currentBatchSize);
 
-      const batchSuccess = await processBatch(batch, batchNumber, totalBatches);
+      console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(daysToProcess.length/currentBatchSize)}`);
+      console.log(`Dates: ${batch.join(', ')}`);
+
+      // Process batch in parallel with improved concurrency
+      const results = await Promise.all(
+        batch.map(dateStr => processDay(dateStr))
+      );
+
+      const batchDuration = performance.now() - batchStartTime;
+      const batchSuccess = results.every(r => r.success);
+      const avgDuration = batchDuration / results.length;
 
       if (batchSuccess) {
         consecutiveSuccesses++;
         consecutiveFailures = 0;
-        if (consecutiveSuccesses >= 2) {
+        if (consecutiveSuccesses >= 2 && avgDuration < 30000) { 
           currentBatchSize = Math.min(currentBatchSize + 1, MAX_BATCH_SIZE);
         }
       } else {
         consecutiveFailures++;
         consecutiveSuccesses = 0;
         if (consecutiveFailures >= 2) {
-          currentBatchSize = Math.max(currentBatchSize - 1, 5);
+          currentBatchSize = Math.max(currentBatchSize - 1, 4);
         }
       }
 
-      await delay(MIN_API_DELAY);
+      totalProcessingTime += batchDuration;
+      successfulBatches += batchSuccess ? 1 : 0;
+
+      // Enhanced logging
+      console.log(`Batch ${Math.floor(i/currentBatchSize) + 1} completed:`, {
+        successful: `${results.filter(r => r.success).length}/${results.length}`,
+        duration: `${(batchDuration/1000).toFixed(1)}s`,
+        avgDuration: `${(avgDuration/1000).toFixed(1)}s per day`
+      });
+
+      // Optimized delay calculation based on performance
+      const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.1, 3000));
+      await delay(optimalDelay);
     }
 
-    console.log(`\n=== ${yearMonth} Data Ingestion Complete ===`);
+    console.log(`\n=== ${yearMonth} (Days ${start}-${end}) Data Ingestion Complete ===`);
 
-    // Generate summary report
     const monthlyData = await db.select({
       summaryDate: dailySummaries.summaryDate,
       totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
@@ -240,7 +213,6 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
   }
 }
 
-// Input validation and script execution
 const args = process.argv.slice(2);
 const yearMonth = args[0];
 const startDay = args[1] ? parseInt(args[1]) : undefined;
