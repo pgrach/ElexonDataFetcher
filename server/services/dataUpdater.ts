@@ -94,8 +94,7 @@ async function processBidsOffers(records: ElexonBidOffer[]) {
         settlementPeriod: record.settlementPeriod,
         farmId: record.id,
         volume: Math.abs(record.volume).toString(),
-        // Fixed payment calculation: Using the absolute volume and original price directly
-        payment: (Math.abs(record.volume) * record.originalPrice).toString(),
+        payment: (Math.abs(record.volume) * record.originalPrice * -1).toString(),
         originalPrice: record.originalPrice.toString(),
         finalPrice: record.finalPrice.toString(),
         soFlag: record.soFlag,
