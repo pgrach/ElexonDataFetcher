@@ -30,6 +30,14 @@ export const monthlySummaries = pgTable("monthly_summaries", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
+export const yearlySummaries = pgTable("yearly_summaries", {
+  year: text("year").primaryKey(),
+  totalCurtailedEnergy: numeric("total_curtailed_energy"),
+  totalPayment: numeric("total_payment"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
 export const ingestionProgress = pgTable("ingestion_progress", {
   id: serial("id").primaryKey(),
   lastProcessedDate: date("last_processed_date").notNull(),
@@ -46,6 +54,8 @@ export const insertDailySummarySchema = createInsertSchema(dailySummaries);
 export const selectDailySummarySchema = createSelectSchema(dailySummaries);
 export const insertMonthlySummarySchema = createInsertSchema(monthlySummaries);
 export const selectMonthlySummarySchema = createSelectSchema(monthlySummaries);
+export const insertYearlySummarySchema = createInsertSchema(yearlySummaries);
+export const selectYearlySummarySchema = createSelectSchema(yearlySummaries);
 export const insertIngestionProgressSchema = createInsertSchema(ingestionProgress);
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
 
@@ -56,5 +66,7 @@ export type DailySummary = typeof dailySummaries.$inferSelect;
 export type InsertDailySummary = typeof dailySummaries.$inferInsert;
 export type MonthlySummary = typeof monthlySummaries.$inferSelect;
 export type InsertMonthlySummary = typeof monthlySummaries.$inferInsert;
+export type YearlySummary = typeof yearlySummaries.$inferSelect;
+export type InsertYearlySummary = typeof yearlySummaries.$inferInsert;
 export type IngestionProgress = typeof ingestionProgress.$inferSelect;
 export type InsertIngestionProgress = typeof ingestionProgress.$inferInsert;
