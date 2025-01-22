@@ -5,9 +5,10 @@ import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
 
-const INITIAL_BATCH_SIZE = 3;  // Reduced batch size
-const MIN_API_DELAY = 1000;    // 1 second minimum delay
-const MAX_RETRIES = 3;         // Maximum retries per day
+const INITIAL_BATCH_SIZE = 10;  // Increased from 3 to 10
+const MIN_API_DELAY = 200;     // Reduced from 1000ms to 200ms
+const MAX_RETRIES = 3;
+const MAX_BATCH_SIZE = 15;     // Maximum batch size increased
 
 let apiRequestsPerMinute: { [key: string]: number } = {};
 let totalRequests = 0;
@@ -43,11 +44,10 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
     });
 
     if (existingData && Number(existingData.totalCurtailedEnergy) > 0) {
-      console.log(`✓ Valid data exists for ${dateStr}, skipping...`);
       return { requestCount: 0, duration: 0, success: true };
     }
 
-    console.log(`\nProcessing ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+    console.log(`Processing ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     trackApiRequest();
     requestCount++;
 
@@ -68,7 +68,7 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
     console.error(`Error processing ${dateStr} (attempt ${retryCount + 1}):`, error);
 
     if (retryCount < MAX_RETRIES) {
-      const backoffDelay = Math.min(MIN_API_DELAY * Math.pow(2, retryCount), 10000);
+      const backoffDelay = Math.min(MIN_API_DELAY * Math.pow(1.5, retryCount), 5000);
       await delay(backoffDelay);
       return processDay(dateStr, retryCount + 1);
     }
@@ -135,9 +135,8 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
       const batch = daysToProcess.slice(i, i + currentBatchSize);
 
       console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(daysToProcess.length/currentBatchSize)}`);
-      console.log(`Current batch size: ${currentBatchSize}`);
-      console.log(`Processing days: ${batch.join(', ')}`);
 
+      // Process batch in parallel with improved concurrency
       const results = await Promise.all(
         batch.map(dateStr => processDay(dateStr))
       );
@@ -149,35 +148,29 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
       if (batchSuccess) {
         consecutiveSuccesses++;
         consecutiveFailures = 0;
-        if (consecutiveSuccesses >= 2 && avgDuration < 30000) {
-          currentBatchSize = Math.min(currentBatchSize + 1, 5); 
+        if (consecutiveSuccesses >= 2 && avgDuration < 20000) { // Reduced threshold
+          currentBatchSize = Math.min(currentBatchSize + 2, MAX_BATCH_SIZE);
         }
       } else {
         consecutiveFailures++;
         consecutiveSuccesses = 0;
         if (consecutiveFailures >= 2) {
-          currentBatchSize = Math.max(currentBatchSize - 1, 2); 
+          currentBatchSize = Math.max(currentBatchSize - 2, 5);
         }
       }
 
       totalProcessingTime += batchDuration;
       successfulBatches += batchSuccess ? 1 : 0;
 
-      console.log('\nBatch Performance Metrics:');
-      console.log(`Duration: ${(batchDuration/1000).toFixed(2)}s`);
-      console.log(`Average processing time per day: ${(avgDuration/1000).toFixed(2)}s`);
-      console.log(`Success rate: ${(results.filter(r => r.success).length/results.length*100).toFixed(1)}%`);
+      // Minimal logging for performance
+      console.log(`Batch ${Math.floor(i/currentBatchSize) + 1} completed: ${results.filter(r => r.success).length}/${results.length} successful`);
 
-      const optimalDelay = Math.max(MIN_API_DELAY * 2, Math.min(avgDuration * 0.2, 8000));
+      // Optimized delay calculation based on performance
+      const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.05, 2000));
       await delay(optimalDelay);
     }
 
     console.log(`\n=== ${yearMonth} (Days ${start}-${end}) Data Ingestion Complete ===`);
-    console.log('\nPerformance Statistics:');
-    console.log(`Total API Requests: ${totalRequests}`);
-    console.log(`Failed Requests: ${failedRequests}`);
-    console.log(`Success Rate: ${((totalRequests-failedRequests)/totalRequests*100).toFixed(1)}%`);
-    console.log(`Average Processing Time per Day: ${(totalProcessingTime/(daysInMonth*1000)).toFixed(2)}s`);
 
     const monthlyData = await db.select({
       summaryDate: dailySummaries.summaryDate,
