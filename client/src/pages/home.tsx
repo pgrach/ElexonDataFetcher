@@ -27,8 +27,12 @@ interface MonthlySummary {
 }
 
 export default function Home() {
-  // Default to December 1st, 2023 as the initial date to show the new data
-  const [date, setDate] = useState<Date>(new Date("2023-12-01"));
+  // Default to current date, but not before January 1st, 2023
+  const [date, setDate] = useState<Date>(() => {
+    const today = new Date();
+    const startDate = new Date("2023-01-01");
+    return today < startDate ? startDate : today;
+  });
 
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`],
@@ -56,8 +60,8 @@ export default function Home() {
                 selected={date}
                 onSelect={(newDate) => newDate && setDate(newDate)}
                 disabled={(date) => {
-                  // Include June 1st, 2023 by using start of day comparison
-                  const startDate = new Date("2023-06-01");
+                  // Allow dates from January 1st, 2023
+                  const startDate = new Date("2023-01-01");
                   startDate.setHours(0, 0, 0, 0);
                   const currentDate = new Date();
                   return date < startDate || date > currentDate;
