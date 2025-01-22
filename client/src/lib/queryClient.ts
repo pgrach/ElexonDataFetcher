@@ -1,7 +1,8 @@
 import { QueryClient } from "@tanstack/react-query";
 
 // Set up WebSocket connection for cache invalidation
-const ws = new WebSocket(`ws://${window.location.host}`);
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const ws = new WebSocket(`${protocol}//${window.location.host}`);
 
 ws.onmessage = (event) => {
   try {
@@ -22,6 +23,18 @@ ws.onmessage = (event) => {
   } catch (error) {
     console.error('Error processing WebSocket message:', error);
   }
+};
+
+// Handle WebSocket errors and reconnection
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = () => {
+  console.log('WebSocket connection closed, attempting to reconnect...');
+  setTimeout(() => {
+    window.location.reload();
+  }, 3000);
 };
 
 export const queryClient = new QueryClient({
