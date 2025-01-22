@@ -1,42 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
 
-// Set up WebSocket connection for cache invalidation
-const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const ws = new WebSocket(`${protocol}//${window.location.host}`);
-
-ws.onmessage = (event) => {
-  try {
-    const message = JSON.parse(event.data);
-    if (message.type === 'CACHE_INVALIDATE') {
-      const { yearMonth } = message.data;
-      // Invalidate both monthly and daily queries for the affected month
-      queryClient.invalidateQueries({
-        queryKey: [`/api/summary/monthly/${yearMonth}`]
-      });
-      // Also invalidate any daily summaries for this month
-      queryClient.invalidateQueries({
-        predicate: (query) => 
-          typeof query.queryKey[0] === 'string' &&
-          query.queryKey[0].startsWith(`/api/summary/daily/${yearMonth}`)
-      });
-    }
-  } catch (error) {
-    console.error('Error processing WebSocket message:', error);
-  }
-};
-
-// Handle WebSocket errors and reconnection
-ws.onerror = (error) => {
-  console.error('WebSocket error:', error);
-};
-
-ws.onclose = () => {
-  console.log('WebSocket connection closed, attempting to reconnect...');
-  setTimeout(() => {
-    window.location.reload();
-  }, 3000);
-};
-
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

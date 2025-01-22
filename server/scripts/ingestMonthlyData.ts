@@ -3,8 +3,7 @@ import { db } from "@db";
 import { dailySummaries, ingestionProgress } from "@db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
-import { format, getDaysInMonth } from "date-fns";
-import fetch from "node-fetch";
+import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
 
 const INITIAL_BATCH_SIZE = 10;  // Increased from 3 to 10
 const MIN_API_DELAY = 200;     // Reduced from 1000ms to 200ms
@@ -108,19 +107,6 @@ async function recordProgress(date: string, status: string, errorMessage?: strin
   }
 }
 
-async function invalidateCache(yearMonth: string) {
-  try {
-    const response = await fetch(`http://localhost:5000/api/cache/invalidate/${yearMonth}`, {
-      method: 'POST'
-    });
-    if (!response.ok) {
-      console.error('Failed to invalidate cache:', await response.text());
-    }
-  } catch (error) {
-    console.error('Error invalidating cache:', error);
-  }
-}
-
 async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: number) {
   try {
     const [year, month] = yearMonth.split('-').map(Number);
@@ -150,6 +136,7 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
 
       console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(daysToProcess.length/currentBatchSize)}`);
 
+      // Process batch in parallel with improved concurrency
       const results = await Promise.all(
         batch.map(dateStr => processDay(dateStr))
       );
@@ -161,7 +148,7 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
       if (batchSuccess) {
         consecutiveSuccesses++;
         consecutiveFailures = 0;
-        if (consecutiveSuccesses >= 2 && avgDuration < 20000) {
+        if (consecutiveSuccesses >= 2 && avgDuration < 20000) { // Reduced threshold
           currentBatchSize = Math.min(currentBatchSize + 2, MAX_BATCH_SIZE);
         }
       } else {
@@ -175,14 +162,13 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
       totalProcessingTime += batchDuration;
       successfulBatches += batchSuccess ? 1 : 0;
 
+      // Minimal logging for performance
       console.log(`Batch ${Math.floor(i/currentBatchSize) + 1} completed: ${results.filter(r => r.success).length}/${results.length} successful`);
 
+      // Optimized delay calculation based on performance
       const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.05, 2000));
       await delay(optimalDelay);
     }
-
-    // Invalidate frontend cache after successful ingestion
-    await invalidateCache(yearMonth);
 
     console.log(`\n=== ${yearMonth} (Days ${start}-${end}) Data Ingestion Complete ===`);
 
