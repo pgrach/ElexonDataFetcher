@@ -110,7 +110,9 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
 
     if (allRecords.length > 0) {
       const periodTotal = allRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-      const periodPayment = allRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
+      // Fix payment calculation: For curtailment, payment should be negative
+      // If volume is negative and price is negative, payment should be negative
+      const periodPayment = allRecords.reduce((sum, r) => sum + (r.volume * r.originalPrice), 0);
       console.log(`[${date} P${period}] Records: ${allRecords.length} (${periodTotal.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
     }
 

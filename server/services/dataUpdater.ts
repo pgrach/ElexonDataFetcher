@@ -87,6 +87,10 @@ async function updateMonthlySummary(yearMonth: string) {
 
 async function processBidsOffers(records: ElexonBidOffer[]) {
   for (const record of records) {
+    // Fix payment calculation: For curtailment, payment should be negative
+    // If volume is negative and price is negative, payment should be negative
+    const payment = Math.abs(record.volume) * record.originalPrice;
+
     await db
       .insert(curtailmentRecords)
       .values({
@@ -94,7 +98,7 @@ async function processBidsOffers(records: ElexonBidOffer[]) {
         settlementPeriod: record.settlementPeriod,
         farmId: record.id,
         volume: Math.abs(record.volume).toString(),
-        payment: (Math.abs(record.volume) * record.originalPrice * -1).toString(),
+        payment: payment.toString(), // Remove the -1 multiplier to keep payments negative
         originalPrice: record.originalPrice.toString(),
         finalPrice: record.finalPrice.toString(),
         soFlag: record.soFlag,
