@@ -135,7 +135,6 @@ export async function ingestMonthlyData(yearMonth: string, startDay?: number, en
       console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(daysToProcess.length/currentBatchSize)}`);
       console.log(`Dates: ${batch.join(', ')}`);
 
-      // Process batch in parallel with improved concurrency
       const results = await Promise.all(
         batch.map(dateStr => processDay(dateStr))
       );
@@ -161,14 +160,12 @@ export async function ingestMonthlyData(yearMonth: string, startDay?: number, en
       totalProcessingTime += batchDuration;
       successfulBatches += batchSuccess ? 1 : 0;
 
-      // Enhanced logging
       console.log(`Batch ${Math.floor(i/currentBatchSize) + 1} completed:`, {
         successful: `${results.filter(r => r.success).length}/${results.length}`,
         duration: `${(batchDuration/1000).toFixed(1)}s`,
         avgDuration: `${(avgDuration/1000).toFixed(1)}s per day`
       });
 
-      // Optimized delay calculation based on performance
       const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.1, 3000));
       await delay(optimalDelay);
     }
@@ -209,26 +206,29 @@ export async function ingestMonthlyData(yearMonth: string, startDay?: number, en
 
   } catch (error) {
     console.error('Fatal error during ingestion:', error);
-    throw error; // Re-throw to handle in the calling function
+    throw error;
   }
 }
 
-// Only run if this is the main module
+// Run the script directly only if it's the main module
 if (import.meta.url === new URL(import.meta.url).href) {
+  // Optional command line processing
   const args = process.argv.slice(2);
-  const yearMonth = args[0];
-  const startDay = args[1] ? parseInt(args[1]) : undefined;
-  const endDay = args[2] ? parseInt(args[2]) : undefined;
+  if (args.length > 0) {
+    const yearMonth = args[0];
+    const startDay = args[1] ? parseInt(args[1]) : undefined;
+    const endDay = args[2] ? parseInt(args[2]) : undefined;
 
-  if (!yearMonth || !yearMonth.match(/^\d{4}-\d{2}$/)) {
-    console.error('Please provide arguments in the format: YYYY-MM [startDay] [endDay]');
-    console.error('Example: npm run ingest-month 2024-08');
-    console.error('Example with date range: npm run ingest-month 2024-08 1 5');
-    process.exit(1);
+    if (!yearMonth || !yearMonth.match(/^\d{4}-\d{2}$/)) {
+      console.error('Please provide arguments in the format: YYYY-MM [startDay] [endDay]');
+      console.error('Example: npm run ingest-month 2024-08');
+      console.error('Example with date range: npm run ingest-month 2024-08 1 5');
+      process.exit(1);
+    }
+
+    ingestMonthlyData(yearMonth, startDay, endDay).catch(error => {
+      console.error('Error:', error);
+      process.exit(1);
+    });
   }
-
-  ingestMonthlyData(yearMonth, startDay, endDay).catch(error => {
-    console.error('Error:', error);
-    process.exit(1);
-  });
 }
