@@ -65,21 +65,19 @@ export default function Home() {
                   <span>Select Date</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-0 pb-4">
-                <div className="p-3">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={(newDate) => newDate && setDate(newDate)}
-                    disabled={(date) => {
-                      const startDate = new Date("2023-01-01");
-                      startDate.setHours(0, 0, 0, 0);
-                      const currentDate = new Date();
-                      return date < startDate || date > currentDate;
-                    }}
-                    className="rounded-md border-0"
-                  />
-                </div>
+              <CardContent className="p-4">
+                <Calendar
+                  mode="single"
+                  selected={date}
+                  onSelect={(newDate) => newDate && setDate(newDate)}
+                  disabled={(date) => {
+                    const startDate = new Date("2023-01-01");
+                    startDate.setHours(0, 0, 0, 0);
+                    const currentDate = new Date();
+                    return date < startDate || date > currentDate;
+                  }}
+                  className="rounded-md border shadow-sm bg-card"
+                />
               </CardContent>
             </Card>
           </div>
