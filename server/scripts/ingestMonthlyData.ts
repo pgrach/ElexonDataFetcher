@@ -1,6 +1,6 @@
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
-import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema"; // Added curtailmentRecords import
+import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
@@ -105,7 +105,7 @@ async function recordProgress(date: string, status: string, errorMessage?: strin
   }
 }
 
-async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: number) {
+export async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: number) {
   try {
     const [year, month] = yearMonth.split('-').map(Number);
     const daysInMonth = getDaysInMonth(new Date(year, month - 1));
@@ -209,20 +209,26 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
 
   } catch (error) {
     console.error('Fatal error during ingestion:', error);
-    process.exit(1);
+    throw error; // Re-throw to handle in the calling function
   }
 }
 
-const args = process.argv.slice(2);
-const yearMonth = args[0];
-const startDay = args[1] ? parseInt(args[1]) : undefined;
-const endDay = args[2] ? parseInt(args[2]) : undefined;
+// Only run if this is the main module
+if (import.meta.url === new URL(import.meta.url).href) {
+  const args = process.argv.slice(2);
+  const yearMonth = args[0];
+  const startDay = args[1] ? parseInt(args[1]) : undefined;
+  const endDay = args[2] ? parseInt(args[2]) : undefined;
 
-if (!yearMonth || !yearMonth.match(/^\d{4}-\d{2}$/)) {
-  console.error('Please provide arguments in the format: YYYY-MM [startDay] [endDay]');
-  console.error('Example: npm run ingest-month 2024-08');
-  console.error('Example with date range: npm run ingest-month 2024-08 1 5');
-  process.exit(1);
+  if (!yearMonth || !yearMonth.match(/^\d{4}-\d{2}$/)) {
+    console.error('Please provide arguments in the format: YYYY-MM [startDay] [endDay]');
+    console.error('Example: npm run ingest-month 2024-08');
+    console.error('Example with date range: npm run ingest-month 2024-08 1 5');
+    process.exit(1);
+  }
+
+  ingestMonthlyData(yearMonth, startDay, endDay).catch(error => {
+    console.error('Error:', error);
+    process.exit(1);
+  });
 }
-
-ingestMonthlyData(yearMonth, startDay, endDay);
