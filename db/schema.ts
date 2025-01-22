@@ -23,23 +23,23 @@ export const dailySummaries = pgTable("daily_summaries", {
 });
 
 export const monthlySummaries = pgTable("monthly_summaries", {
-  yearMonth: text("year_month").primaryKey(), // Format: YYYY-MM
+  yearMonth: text("year_month").primaryKey(),
   totalCurtailedEnergy: numeric("total_curtailed_energy"),
   totalPayment: numeric("total_payment"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
-// New table to track ingestion progress
 export const ingestionProgress = pgTable("ingestion_progress", {
   id: serial("id").primaryKey(),
   lastProcessedDate: date("last_processed_date").notNull(),
-  status: text("status").notNull(), // 'completed' | 'in_progress' | 'failed'
+  status: text("status").notNull(),
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
+// Export schemas for validation
 export const insertCurtailmentRecordSchema = createInsertSchema(curtailmentRecords);
 export const selectCurtailmentRecordSchema = createSelectSchema(curtailmentRecords);
 export const insertDailySummarySchema = createInsertSchema(dailySummaries);
@@ -49,6 +49,7 @@ export const selectMonthlySummarySchema = createSelectSchema(monthlySummaries);
 export const insertIngestionProgressSchema = createInsertSchema(ingestionProgress);
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
 
+// Export types for TypeScript
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
 export type DailySummary = typeof dailySummaries.$inferSelect;
