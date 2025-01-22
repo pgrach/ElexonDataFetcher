@@ -1,14 +1,14 @@
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
-import { dailySummaries, ingestionProgress } from "@db/schema";
+import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema"; // Added curtailmentRecords import
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
 
-const INITIAL_BATCH_SIZE = 10;  // Increased from 3 to 10
-const MIN_API_DELAY = 200;     // Reduced from 1000ms to 200ms
+const INITIAL_BATCH_SIZE = 10;  
+const MIN_API_DELAY = 200;    
 const MAX_RETRIES = 3;
-const MAX_BATCH_SIZE = 15;     // Maximum batch size increased
+const MAX_BATCH_SIZE = 15;     
 
 let apiRequestsPerMinute: { [key: string]: number } = {};
 let totalRequests = 0;
@@ -39,13 +39,9 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
   let requestCount = 0;
 
   try {
-    const existingData = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, dateStr)
-    });
-
-    if (existingData && Number(existingData.totalCurtailedEnergy) > 0) {
-      return { requestCount: 0, duration: 0, success: true };
-    }
+    // Delete existing records for clean re-ingestion
+    await db.delete(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, dateStr));
 
     console.log(`Processing ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     trackApiRequest();
@@ -61,6 +57,8 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
       throw new Error(`Data verification failed for ${dateStr}`);
     }
 
+    console.log(`[${dateStr}] Successfully processed: ${Number(verifyData.totalCurtailedEnergy).toFixed(2)} MWh, £${Number(verifyData.totalPayment).toFixed(2)}`);
+
     const duration = performance.now() - startTime;
     return { requestCount, duration, success: true };
 
@@ -68,7 +66,7 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
     console.error(`Error processing ${dateStr} (attempt ${retryCount + 1}):`, error);
 
     if (retryCount < MAX_RETRIES) {
-      const backoffDelay = Math.min(MIN_API_DELAY * Math.pow(1.5, retryCount), 5000);
+      const backoffDelay = Math.min(MIN_API_DELAY * Math.pow(2, retryCount), 5000);
       await delay(backoffDelay);
       return processDay(dateStr, retryCount + 1);
     }
@@ -135,6 +133,7 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
       const batch = daysToProcess.slice(i, i + currentBatchSize);
 
       console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(daysToProcess.length/currentBatchSize)}`);
+      console.log(`Dates: ${batch.join(', ')}`);
 
       // Process batch in parallel with improved concurrency
       const results = await Promise.all(
@@ -148,25 +147,29 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
       if (batchSuccess) {
         consecutiveSuccesses++;
         consecutiveFailures = 0;
-        if (consecutiveSuccesses >= 2 && avgDuration < 20000) { // Reduced threshold
-          currentBatchSize = Math.min(currentBatchSize + 2, MAX_BATCH_SIZE);
+        if (consecutiveSuccesses >= 2 && avgDuration < 30000) { 
+          currentBatchSize = Math.min(currentBatchSize + 1, MAX_BATCH_SIZE);
         }
       } else {
         consecutiveFailures++;
         consecutiveSuccesses = 0;
         if (consecutiveFailures >= 2) {
-          currentBatchSize = Math.max(currentBatchSize - 2, 5);
+          currentBatchSize = Math.max(currentBatchSize - 1, 4);
         }
       }
 
       totalProcessingTime += batchDuration;
       successfulBatches += batchSuccess ? 1 : 0;
 
-      // Minimal logging for performance
-      console.log(`Batch ${Math.floor(i/currentBatchSize) + 1} completed: ${results.filter(r => r.success).length}/${results.length} successful`);
+      // Enhanced logging
+      console.log(`Batch ${Math.floor(i/currentBatchSize) + 1} completed:`, {
+        successful: `${results.filter(r => r.success).length}/${results.length}`,
+        duration: `${(batchDuration/1000).toFixed(1)}s`,
+        avgDuration: `${(avgDuration/1000).toFixed(1)}s per day`
+      });
 
       // Optimized delay calculation based on performance
-      const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.05, 2000));
+      const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.1, 3000));
       await delay(optimalDelay);
     }
 
@@ -187,18 +190,22 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
     console.log(`\n${yearMonth} Summary:`);
     let monthlyTotal = {
       energy: 0,
-      payment: 0
+      payment: 0,
+      daysProcessed: 0
     };
 
     monthlyData.forEach(day => {
       console.log(`${day.summaryDate}: ${Number(day.totalCurtailedEnergy).toFixed(2)} MWh, £${Number(day.totalPayment).toFixed(2)}`);
       monthlyTotal.energy += Number(day.totalCurtailedEnergy);
       monthlyTotal.payment += Number(day.totalPayment);
+      monthlyTotal.daysProcessed++;
     });
 
     console.log(`\nMonthly Totals for ${yearMonth}:`);
+    console.log(`Days Processed: ${monthlyTotal.daysProcessed}`);
     console.log(`Total Energy Curtailed: ${monthlyTotal.energy.toFixed(2)} MWh`);
     console.log(`Total Payment: £${monthlyTotal.payment.toFixed(2)}`);
+    console.log(`Average Daily Curtailment: ${(monthlyTotal.energy / monthlyTotal.daysProcessed).toFixed(2)} MWh`);
 
   } catch (error) {
     console.error('Fatal error during ingestion:', error);

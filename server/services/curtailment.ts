@@ -76,14 +76,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
   let recordsProcessed = 0;
 
   const validWindFarmIds = await loadWindFarmIds();
-
-  // First, delete existing records for this date to ensure clean re-ingestion
-  await db.delete(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlementDate, date));
-
-  // Reduce batch size and increase delay for more reliable data fetching
-  const BATCH_SIZE = 6; // Process 6 settlement periods in parallel
-  const FETCH_DELAY = 1000; // 1 second delay between batches
+  const BATCH_SIZE = 12; // Keep original batch size of 12 settlement periods
 
   // Process settlement periods in parallel batches
   for (let startPeriod = 1; startPeriod <= 48; startPeriod += BATCH_SIZE) {
@@ -95,9 +88,9 @@ export async function processDailyCurtailment(date: string): Promise<void> {
         try {
           const records = await fetchBidsOffers(date, period);
 
-          // Enhanced filtering to ensure we capture all valid records
-          const validRecords = records.filter(record => 
-            record.volume < 0 && 
+          // Updated filtering to include CADL flag
+          const validRecords = records.filter(record =>
+            record.volume < 0 &&
             (record.soFlag || record.cadlFlag) && // Consider both SO and CADL flags
             validWindFarmIds.has(record.id)
           );
@@ -125,12 +118,11 @@ export async function processDailyCurtailment(date: string): Promise<void> {
 
           return periodResults.reduce((acc, curr) => ({
             volume: acc.volume + curr.volume,
-            payment: acc.payment + curr.payment,
-            records: acc.records + 1
-          }), { volume: 0, payment: 0, records: 0 });
+            payment: acc.payment + curr.payment
+          }), { volume: 0, payment: 0 });
         } catch (error) {
           console.error(`Error processing period ${period} for date ${date}:`, error);
-          return { volume: 0, payment: 0, records: 0 };
+          return { volume: 0, payment: 0 };
         }
       })());
     }
@@ -140,11 +132,10 @@ export async function processDailyCurtailment(date: string): Promise<void> {
     for (const result of batchResults) {
       totalVolume += result.volume;
       totalPayment += result.payment;
-      recordsProcessed += result.records;
     }
 
-    // Increased delay between batches for more reliable data fetching
-    await new Promise(resolve => setTimeout(resolve, FETCH_DELAY));
+    // Keep original minimal delay between batches
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   try {
