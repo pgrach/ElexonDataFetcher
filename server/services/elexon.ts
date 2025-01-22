@@ -98,41 +98,19 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
       return [];
     }
 
-    // Enhanced filtering for bids and offers
-    const validBids = bidsResponse.data.data.filter((record: any) => {
-      const isValid = record.volume < 0 && 
-                     record.soFlag === true && // Strict equality check
-                     validWindFarmIds.has(record.id) &&
-                     !record.cadlFlag; // Exclude CADL flagged records
+    const validBids = bidsResponse.data.data.filter((record: any) => 
+      record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
+    );
 
-      if (isValid) {
-        console.log(`[${date} P${period}] Including bid: ID=${record.id}, Volume=${Math.abs(record.volume)}, Price=${record.originalPrice}, SO=${record.soFlag}, CADL=${record.cadlFlag}`);
-      }
-      return isValid;
-    });
-
-    const validOffers = offersResponse.data.data.filter((record: any) => {
-      const isValid = record.volume < 0 && 
-                     record.soFlag === true && // Strict equality check
-                     validWindFarmIds.has(record.id) &&
-                     !record.cadlFlag; // Exclude CADL flagged records
-
-      if (isValid) {
-        console.log(`[${date} P${period}] Including offer: ID=${record.id}, Volume=${Math.abs(record.volume)}, Price=${record.originalPrice}, SO=${record.soFlag}, CADL=${record.cadlFlag}`);
-      }
-      return isValid;
-    });
+    const validOffers = offersResponse.data.data.filter((record: any) => 
+      record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
+    );
 
     const allRecords = [...validBids, ...validOffers];
 
-    // Add debug logging for payment calculations
     if (allRecords.length > 0) {
       const periodTotal = allRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-      const periodPayment = allRecords.reduce((sum, r) => {
-        const payment = Math.abs(r.volume) * r.originalPrice * -1;
-        console.log(`[${date} P${period}] Record payment: Volume=${Math.abs(r.volume)}, Price=${r.originalPrice}, Payment=${payment}`);
-        return sum + payment;
-      }, 0);
+      const periodPayment = allRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
       console.log(`[${date} P${period}] Records: ${allRecords.length} (${periodTotal.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
     }
 
