@@ -65,7 +65,7 @@ export default function Home() {
                   <span>Select Date</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4">
+              <CardContent className="px-3 pb-3">
                 <Calendar
                   mode="single"
                   selected={date}
@@ -76,7 +76,7 @@ export default function Home() {
                     const currentDate = new Date();
                     return date < startDate || date > currentDate;
                   }}
-                  className="rounded-md border shadow-sm bg-card"
+                  className="w-full"
                 />
               </CardContent>
             </Card>
