@@ -3,19 +3,16 @@ import { db } from "@db";
 import { dailySummaries, ingestionProgress } from "@db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
-import { format, getDaysInMonth, startOfMonth, endOfMonth } from "date-fns";
+import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
 
-const INITIAL_BATCH_SIZE = 5;  // Start with moderate batch size
+const INITIAL_BATCH_SIZE = 3;  // Reduced batch size
 const MIN_API_DELAY = 1000;    // 1 second minimum delay
-const MAX_RETRIES = 3;         // Reduced retries for faster failure detection
+const MAX_RETRIES = 3;         // Maximum retries per day
 
-// Tracking structures
 let apiRequestsPerMinute: { [key: string]: number } = {};
 let totalRequests = 0;
 let failedRequests = 0;
 let totalProcessingTime = 0;
-
-// Performance tracking
 let avgProcessingTime = 0;
 let successfulBatches = 0;
 
@@ -41,7 +38,6 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
   let requestCount = 0;
 
   try {
-    // Check for existing valid data
     const existingData = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, dateStr)
     });
@@ -57,7 +53,6 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
 
     await processDailyCurtailment(dateStr);
 
-    // Verify data storage
     const verifyData = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, dateStr)
     });
@@ -112,16 +107,22 @@ async function recordProgress(date: string, status: string, errorMessage?: strin
   }
 }
 
-async function ingestMonthlyData(yearMonth: string) {
+async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: number) {
   try {
     const [year, month] = yearMonth.split('-').map(Number);
     const daysInMonth = getDaysInMonth(new Date(year, month - 1));
 
-    console.log(`\n=== Starting Data Ingestion for ${yearMonth} ===`);
+    const start = startDay || 1;
+    const end = endDay || daysInMonth;
 
-    // Generate all days in the specified month
-    const allDays = Array.from({ length: daysInMonth }, (_, i) => {
-      const day = (i + 1).toString().padStart(2, '0');
+    if (start > end || start < 1 || end > daysInMonth) {
+      throw new Error('Invalid date range specified');
+    }
+
+    console.log(`\n=== Starting Data Ingestion for ${yearMonth} (Days ${start}-${end}) ===`);
+
+    const daysToProcess = Array.from({ length: end - start + 1 }, (_, i) => {
+      const day = (i + start).toString().padStart(2, '0');
       return `${yearMonth}-${day}`;
     });
 
@@ -129,84 +130,55 @@ async function ingestMonthlyData(yearMonth: string) {
     let consecutiveSuccesses = 0;
     let consecutiveFailures = 0;
 
-    // Process in optimized batches
-    for (let i = 0; i < allDays.length; i += currentBatchSize) {
+    for (let i = 0; i < daysToProcess.length; i += currentBatchSize) {
       const batchStartTime = performance.now();
-      const batch = allDays.slice(i, i + currentBatchSize);
+      const batch = daysToProcess.slice(i, i + currentBatchSize);
 
-      console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(allDays.length/currentBatchSize)}`);
+      console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(daysToProcess.length/currentBatchSize)}`);
       console.log(`Current batch size: ${currentBatchSize}`);
+      console.log(`Processing days: ${batch.join(', ')}`);
 
-      // Process batch in parallel
       const results = await Promise.all(
-        batch.map(async dateStr => {
-          const metrics = await processDay(dateStr);
-
-          if (metrics.success) {
-            const data = await db.query.dailySummaries.findFirst({
-              where: eq(dailySummaries.summaryDate, dateStr)
-            });
-
-            if (data) {
-              console.log(`${dateStr} Summary:`);
-              console.log(`- Total Curtailed Energy: ${Number(data.totalCurtailedEnergy).toFixed(2)} MWh`);
-              console.log(`- Total Payment: £${Number(data.totalPayment).toFixed(2)}`);
-
-              await recordProgress(dateStr, 'completed');
-            }
-          } else {
-            await recordProgress(dateStr, 'failed', 'Processing failed after max retries');
-          }
-
-          return { dateStr, ...metrics };
-        })
+        batch.map(dateStr => processDay(dateStr))
       );
 
-      // Calculate batch performance metrics
       const batchDuration = performance.now() - batchStartTime;
       const batchSuccess = results.every(r => r.success);
       const avgDuration = batchDuration / results.length;
 
-      // Adapt batch size based on performance
       if (batchSuccess) {
         consecutiveSuccesses++;
         consecutiveFailures = 0;
-        if (consecutiveSuccesses >= 2 && avgDuration < 30000) { // If batch completes in under 30s
-          currentBatchSize = Math.min(currentBatchSize + 2, 10); // Increase batch size up to max 10
+        if (consecutiveSuccesses >= 2 && avgDuration < 30000) {
+          currentBatchSize = Math.min(currentBatchSize + 1, 5); 
         }
       } else {
         consecutiveFailures++;
         consecutiveSuccesses = 0;
         if (consecutiveFailures >= 2) {
-          currentBatchSize = Math.max(currentBatchSize - 2, 3); // Decrease batch size but maintain minimum of 3
+          currentBatchSize = Math.max(currentBatchSize - 1, 2); 
         }
       }
 
-      // Update progress tracking
       totalProcessingTime += batchDuration;
       successfulBatches += batchSuccess ? 1 : 0;
 
-      // Log performance metrics
       console.log('\nBatch Performance Metrics:');
       console.log(`Duration: ${(batchDuration/1000).toFixed(2)}s`);
       console.log(`Average processing time per day: ${(avgDuration/1000).toFixed(2)}s`);
       console.log(`Success rate: ${(results.filter(r => r.success).length/results.length*100).toFixed(1)}%`);
-      console.log(`API requests this batch: ${results.reduce((sum, r) => sum + r.requestCount, 0)}`);
 
-      // Adaptive delay between batches
-      const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.1, 5000));
+      const optimalDelay = Math.max(MIN_API_DELAY * 2, Math.min(avgDuration * 0.2, 8000));
       await delay(optimalDelay);
     }
 
-    // Final statistics
-    console.log(`\n=== ${yearMonth} Data Ingestion Complete ===`);
+    console.log(`\n=== ${yearMonth} (Days ${start}-${end}) Data Ingestion Complete ===`);
     console.log('\nPerformance Statistics:');
     console.log(`Total API Requests: ${totalRequests}`);
     console.log(`Failed Requests: ${failedRequests}`);
     console.log(`Success Rate: ${((totalRequests-failedRequests)/totalRequests*100).toFixed(1)}%`);
     console.log(`Average Processing Time per Day: ${(totalProcessingTime/(daysInMonth*1000)).toFixed(2)}s`);
 
-    // Show monthly summary
     const monthlyData = await db.select({
       summaryDate: dailySummaries.summaryDate,
       totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
@@ -241,13 +213,16 @@ async function ingestMonthlyData(yearMonth: string) {
   }
 }
 
-// Get the command line argument for year-month
-const yearMonth = process.argv[2];
+const args = process.argv.slice(2);
+const yearMonth = args[0];
+const startDay = args[1] ? parseInt(args[1]) : undefined;
+const endDay = args[2] ? parseInt(args[2]) : undefined;
+
 if (!yearMonth || !yearMonth.match(/^\d{4}-\d{2}$/)) {
-  console.error('Please provide a year-month in the format YYYY-MM');
-  console.error('Example: npm run ingest-month 2024-10');
+  console.error('Please provide arguments in the format: YYYY-MM [startDay] [endDay]');
+  console.error('Example: npm run ingest-month 2024-08');
+  console.error('Example with date range: npm run ingest-month 2024-08 1 5');
   process.exit(1);
 }
 
-// Run the ingestion for the specified month
-ingestMonthlyData(yearMonth);
+ingestMonthlyData(yearMonth, startDay, endDay);
