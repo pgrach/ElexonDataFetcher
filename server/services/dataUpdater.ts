@@ -94,7 +94,7 @@ async function processBidsOffers(records: ElexonBidOffer[]) {
         settlementPeriod: record.settlementPeriod,
         farmId: record.id,
         volume: Math.abs(record.volume).toString(),
-        payment: (Math.abs(record.volume) * record.originalPrice * -1).toString(),
+        payment: (Math.abs(record.volume) * record.originalPrice).toString(),
         originalPrice: record.originalPrice.toString(),
         finalPrice: record.finalPrice.toString(),
         soFlag: record.soFlag,
