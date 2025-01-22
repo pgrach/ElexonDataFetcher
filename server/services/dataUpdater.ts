@@ -20,31 +20,28 @@ async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
 }
 
 async function updateDailySummary(date: string) {
-  // Calculate totals based on volume and original price
   const records = await db
     .select({
-      totalVolume: sql<string>`COALESCE(sum(${curtailmentRecords.volume}), 0)::numeric`,
-      // Payment should be negative (volume * negative_price)
-      totalPayment: sql<string>`COALESCE(sum(${curtailmentRecords.volume}::numeric * ${curtailmentRecords.originalPrice}::numeric), 0)::numeric`
+      totalVolume: sql<string>`sum(${curtailmentRecords.volume})`,
+      totalPayment: sql<string>`sum(${curtailmentRecords.payment})`
     })
     .from(curtailmentRecords)
     .where(eq(curtailmentRecords.settlementDate, date));
 
   const [totals] = records;
-  console.log("Daily totals for", date, ":", totals);
 
   await db
     .insert(dailySummaries)
     .values({
       summaryDate: date,
-      totalCurtailedEnergy: totals.totalVolume?.toString() || "0",
-      totalPayment: totals.totalPayment?.toString() || "0"
+      totalCurtailedEnergy: totals.totalVolume || "0",
+      totalPayment: totals.totalPayment || "0"
     })
     .onConflictDoUpdate({
       target: [dailySummaries.summaryDate],
       set: {
-        totalCurtailedEnergy: totals.totalVolume?.toString() || "0",
-        totalPayment: totals.totalPayment?.toString() || "0"
+        totalCurtailedEnergy: totals.totalVolume || "0",
+        totalPayment: totals.totalPayment || "0"
       }
     });
 }
@@ -56,9 +53,8 @@ async function updateMonthlySummary(yearMonth: string) {
 
   const records = await db
     .select({
-      totalVolume: sql<string>`COALESCE(sum(${curtailmentRecords.volume}), 0)::numeric`,
-      // Payment should be negative (volume * negative_price)
-      totalPayment: sql<string>`COALESCE(sum(${curtailmentRecords.volume}::numeric * ${curtailmentRecords.originalPrice}::numeric), 0)::numeric`
+      totalVolume: sql<string>`sum(${curtailmentRecords.volume})`,
+      totalPayment: sql<string>`sum(${curtailmentRecords.payment})`
     })
     .from(curtailmentRecords)
     .where(
@@ -72,40 +68,33 @@ async function updateMonthlySummary(yearMonth: string) {
     );
 
   const [totals] = records;
-  console.log("Monthly totals for", yearMonth, ":", totals);
 
   await db
     .insert(monthlySummaries)
     .values({
       yearMonth,
-      totalCurtailedEnergy: totals.totalVolume?.toString() || "0",
-      totalPayment: totals.totalPayment?.toString() || "0"
+      totalCurtailedEnergy: totals.totalVolume || "0",
+      totalPayment: totals.totalPayment || "0"
     })
     .onConflictDoUpdate({
       target: [monthlySummaries.yearMonth],
       set: {
-        totalCurtailedEnergy: totals.totalVolume?.toString() || "0",
-        totalPayment: totals.totalPayment?.toString() || "0",
-        updatedAt: new Date()
+        totalCurtailedEnergy: totals.totalVolume || "0",
+        totalPayment: totals.totalPayment || "0"
       }
     });
 }
 
 async function processBidsOffers(records: ElexonBidOffer[]) {
   for (const record of records) {
-    // Store volume as positive
-    const volume = Math.abs(record.volume);
-    // Payment is negative (volume * negative_price)
-    const payment = volume * record.originalPrice;
-
     await db
       .insert(curtailmentRecords)
       .values({
         settlementDate: record.settlementDate,
         settlementPeriod: record.settlementPeriod,
         farmId: record.id,
-        volume: volume.toString(),
-        payment: payment.toString(),
+        volume: Math.abs(record.volume).toString(),
+        payment: (Math.abs(record.volume) * record.originalPrice * -1).toString(),
         originalPrice: record.originalPrice.toString(),
         finalPrice: record.finalPrice.toString(),
         soFlag: record.soFlag,
