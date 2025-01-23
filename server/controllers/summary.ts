@@ -24,26 +24,30 @@ export async function getLeadParties(req: Request, res: Response) {
 
 export async function getDailySummary(req: Request, res: Response) {
   try {
-    const { date, leadParty } = req.query;
+    const { date } = req.params;
+    const { leadParty } = req.query;
+
+    console.log('Received request for date:', date, 'leadParty:', leadParty);
 
     // Validate date format
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date as string)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      console.error('Invalid date format received:', date);
       return res.status(400).json({
         error: "Invalid date format. Please use YYYY-MM-DD"
       });
     }
 
-    // Base query
+    // Base query for curtailment records
     let query = db
       .select({
         totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
         totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
       })
       .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date as string));
+      .where(eq(curtailmentRecords.settlementDate, date));
 
     // Add lead party filter if specified
-    if (leadParty) {
+    if (leadParty && leadParty !== 'all') {
       query = query.where(eq(curtailmentRecords.leadPartyName, leadParty as string));
     }
 
@@ -52,17 +56,18 @@ export async function getDailySummary(req: Request, res: Response) {
 
     // Get the daily summary (aggregate only)
     const summary = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, date as string)
+      where: eq(dailySummaries.summaryDate, date)
     });
 
     console.log('Daily summary:', summary);
 
-    if (!summary && !recordTotals[0]?.totalVolume) {
+    if (!summary && (!recordTotals[0] || !recordTotals[0].totalVolume)) {
       return res.status(404).json({
         error: "No data available for this date"
       });
     }
 
+    // Return the appropriate data based on whether a lead party filter was applied
     res.json({
       date,
       totalCurtailedEnergy: leadParty ? 
