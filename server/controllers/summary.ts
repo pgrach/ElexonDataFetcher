@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "@db";
-import { dailySummaries, curtailmentRecords } from "@db/schema";
+import { dailySummaries, curtailmentRecords, monthlySummaries } from "@db/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function getLeadParties(req: Request, res: Response) {
@@ -154,33 +154,38 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
     const dailyTotal = Number(dailySummary?.totalCurtailedEnergy || 0);
     console.log(`Daily summary total for ${date}:`, dailyTotal);
 
+    // Base query to get settlement period data
+    let query = db
+      .select({
+        settlementPeriod: curtailmentRecords.settlementPeriod,
+        volume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date));
+
+    // Add lead party filter if specified
+    if (leadParty && leadParty !== 'all') {
+      query = query.where(eq(curtailmentRecords.leadPartyName, leadParty as string));
+    }
+
+    const records = await query
+      .groupBy(curtailmentRecords.settlementPeriod)
+      .orderBy(curtailmentRecords.settlementPeriod);
+
     // Initialize 24-hour array with zeros
     const hourlyResults = Array.from({ length: 24 }, (_, i) => ({
       hour: `${i.toString().padStart(2, '0')}:00`,
       curtailedEnergy: 0
     }));
 
-    // Get all periods data first
-    let query = db
-      .select({
-        settlementPeriod: curtailmentRecords.settlementPeriod,
-        volume: curtailmentRecords.volume,
-      })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date))
-      .orderBy(curtailmentRecords.settlementPeriod);
-
-    if (leadParty && leadParty !== 'all') {
-      query = query.where(eq(curtailmentRecords.leadPartyName, leadParty as string));
-    }
-
-    const allPeriodData = await query;
-
     console.log(`\nSettlement period data for ${date}:`);
-    allPeriodData.forEach((record) => {
-      if (record.settlementPeriod && record.volume !== null) {
+    records.forEach(record => {
+      if (record.settlementPeriod && record.volume) {
+        // Get hour index (0-23) from settlement period (1-48)
+        // Period 1-2 → Hour 0, Period 3-4 → Hour 1, etc.
         const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
         const volume = Number(record.volume);
+
         console.log(`[P${record.settlementPeriod}] Volume: ${volume.toFixed(2)} MWh -> Hour ${hour}`);
 
         if (hour >= 0 && hour < 24) {
