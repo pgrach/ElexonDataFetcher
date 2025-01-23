@@ -182,7 +182,8 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
     const periodMap = new Map<number, number>();
     records.forEach(record => {
       if (record.settlementPeriod && record.volume) {
-        periodMap.set(Number(record.settlementPeriod), Number(record.volume));
+        // Convert volume to MWh and store
+        periodMap.set(Number(record.settlementPeriod), Number(record.volume) / 24); // Convert from daily to hourly rate
       }
     });
 
@@ -195,9 +196,12 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       const volumePeriod1 = periodMap.get(periodStart) || 0;
       const volumePeriod2 = periodMap.get(periodEnd) || 0;
 
+      // Sum the two 30-minute periods to get the hourly value
+      const hourlyVolume = volumePeriod1 + volumePeriod2;
+
       console.log(`Hour ${hour}: Period ${periodStart} (${volumePeriod1.toFixed(2)} MWh) + Period ${periodEnd} (${volumePeriod2.toFixed(2)} MWh)`);
 
-      hourlyResults[hour].curtailedEnergy = volumePeriod1 + volumePeriod2;
+      hourlyResults[hour].curtailedEnergy = hourlyVolume;
     }
 
     // Sum up all hourly values
