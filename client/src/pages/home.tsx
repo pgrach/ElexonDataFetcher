@@ -32,7 +32,7 @@ export default function Home() {
     error: monthlyError,
     isLoading: isMonthlyLoading,
   } = useQuery<MonthlySummary>({
-    queryKey: [`/api/summary/monthly/${formattedDate}`],
+    queryKey: [`/api/summary/monthly/${format(initialDate, "yyyy-MM")}`],
     enabled: !!formattedDate,
   });
 
@@ -41,14 +41,23 @@ export default function Home() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to load data",
+        description: "Failed to load data. Please try again later.",
       });
     }
   }, [dailyError, monthlyError, toast]);
 
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
-      setLocation(`/${format(date, "yyyy-MM-dd")}`);
+      try {
+        const formattedNewDate = format(date, "yyyy-MM-dd");
+        setLocation(`/${formattedNewDate}`);
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Invalid date selected",
+        });
+      }
     }
   };
 
