@@ -10,7 +10,7 @@ import type { DailySummary, MonthlySummary } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
-  const [location, navigate] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
 
   // Get date from URL or use today
@@ -48,7 +48,7 @@ export default function Home() {
 
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
-      navigate(`/${format(date, "yyyy-MM-dd")}`);
+      setLocation(`/${format(date, "yyyy-MM-dd")}`);
     }
   };
 
@@ -82,6 +82,7 @@ export default function Home() {
                       startDate.setHours(0, 0, 0, 0);
                       return date < startDate || date > new Date();
                     }}
+                    initialFocus
                   />
                 </CardContent>
               </Card>
