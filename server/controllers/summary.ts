@@ -182,8 +182,8 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
     const periodMap = new Map<number, number>();
     records.forEach(record => {
       if (record.settlementPeriod && record.volume) {
-        // Convert volume to MWh and store
-        periodMap.set(Number(record.settlementPeriod), Number(record.volume) / 24); // Convert from daily to hourly rate
+        // Store raw volume without any division
+        periodMap.set(Number(record.settlementPeriod), Math.abs(Number(record.volume)));
       }
     });
 
