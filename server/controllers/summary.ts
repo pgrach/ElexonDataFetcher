@@ -146,14 +146,6 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       });
     }
 
-    // First get the daily summary total for validation
-    const dailySummary = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, date)
-    });
-
-    const dailyTotal = Number(dailySummary?.totalCurtailedEnergy || 0);
-    console.log(`Daily summary total for ${date}:`, dailyTotal);
-
     // Base query to get settlement period data
     let query = db
       .select({
@@ -172,44 +164,32 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       .groupBy(curtailmentRecords.settlementPeriod)
       .orderBy(curtailmentRecords.settlementPeriod);
 
+    // Create a map of settlement period to volume for easier access
+    const periodVolumes = new Map<number, number>();
+    records.forEach(record => {
+      if (record.settlementPeriod && record.volume) {
+        periodVolumes.set(Number(record.settlementPeriod), Number(record.volume));
+      }
+    });
+
     // Initialize 24-hour array with zeros
     const hourlyResults = Array.from({ length: 24 }, (_, i) => ({
       hour: `${i.toString().padStart(2, '0')}:00`,
       curtailedEnergy: 0
     }));
 
-    console.log(`\nSettlement period data for ${date}:`);
-    records.forEach(record => {
-      if (record.settlementPeriod && record.volume) {
-        const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
-        const volume = Number(record.volume);
+    // Map periods to hours and sum volumes
+    for (let hour = 0; hour < 24; hour++) {
+      const periodStart = hour * 2 + 1; // First period of the hour
+      const periodEnd = periodStart + 1;  // Second period of the hour
 
-        console.log(`[P${record.settlementPeriod}] Volume: ${volume.toFixed(2)} MWh -> Hour ${hour}`);
+      const volume1 = periodVolumes.get(periodStart) || 0;
+      const volume2 = periodVolumes.get(periodEnd) || 0;
 
-        if (hour >= 0 && hour < 24) {
-          hourlyResults[hour].curtailedEnergy += volume;
-        }
-      }
-    });
+      console.log(`Hour ${hour}:00 - Period ${periodStart}: ${volume1.toFixed(2)} MWh, Period ${periodEnd}: ${volume2.toFixed(2)} MWh`);
 
-    // Sum up all hourly values to calculate scaling factor
-    const rawTotal = hourlyResults.reduce((sum, hour) => sum + hour.curtailedEnergy, 0);
-
-    if (rawTotal > 0) {
-      // Scale all hours to match the daily total
-      const scaleFactor = dailyTotal / rawTotal;
-      hourlyResults.forEach(hour => {
-        hour.curtailedEnergy *= scaleFactor;
-      });
+      hourlyResults[hour].curtailedEnergy = volume1 + volume2;
     }
-
-    console.log(`\nHourly distribution check for ${date}:`);
-    let totalDistributed = 0;
-    hourlyResults.forEach(result => {
-      totalDistributed += result.curtailedEnergy;
-      console.log(`${result.hour}: ${result.curtailedEnergy.toFixed(2)} MWh`);
-    });
-    console.log(`Total distributed: ${totalDistributed.toFixed(2)} MWh (Daily total: ${dailyTotal.toFixed(2)} MWh)`);
 
     // For current day, zero out future hours
     const currentDate = new Date();
