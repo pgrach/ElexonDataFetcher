@@ -1,13 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Battery, Calendar as CalendarIcon, TrendingUp, Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Wind, Battery, Calendar as CalendarIcon } from "lucide-react";
 
-// Keep existing interfaces
+// Define the API response types based on our schema
 interface DailySummary {
   date: string;
   totalCurtailedEnergy: number;
@@ -28,47 +26,8 @@ interface MonthlySummary {
   };
 }
 
-function ThemeToggle() {
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
-      return localStorage.getItem('theme') as 'light' | 'dark' | 'system';
-    }
-    return 'system';
-  });
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="w-9 px-0">
-          <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Toggle theme</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => setTheme('light')}>Light</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('dark')}>Dark</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('system')}>System</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 export default function Home() {
+  // Default to current date, but not before January 1st, 2023
   const [date, setDate] = useState<Date>(() => {
     const today = new Date();
     const startDate = new Date("2023-01-01");
@@ -86,164 +45,137 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-accent/5">
-      <div className="container mx-auto px-4 py-6 lg:py-8">
-        <header className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
-              Wind Farm Curtailment Dashboard
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Monitor and analyze wind farm curtailment data and payments
-            </p>
-          </div>
-          <ThemeToggle />
-        </header>
+    <div className="container mx-auto py-8">
+      <h1 className="text-4xl font-bold mb-8">Wind Farm Curtailment Data</h1>
 
-        <div className="grid lg:grid-cols-[280px,1fr] gap-6">
-          {/* Calendar Section */}
-          <div className="space-y-4">
-            <Card className="border-accent/20 shadow-lg hover:shadow-xl transition-shadow duration-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CalendarIcon className="h-5 w-5 text-primary animate-in fade-in-50" />
-                  <span>Select Date</span>
+      <div className="grid md:grid-cols-[300px,1fr] gap-8">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Select Date</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={(newDate) => newDate && setDate(newDate)}
+                disabled={(date) => {
+                  // Allow dates from January 1st, 2023
+                  const startDate = new Date("2023-01-01");
+                  startDate.setHours(0, 0, 0, 0);
+                  const currentDate = new Date();
+                  return date < startDate || date > currentDate;
+                }}
+              />
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-8">
+          {/* Monthly Summary Section */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Monthly Curtailed Energy
                 </CardTitle>
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent className="px-3 pb-3">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={(newDate) => {
-                    if (newDate) {
-                      // Add a subtle scale animation when selecting a date
-                      const elem = document.activeElement as HTMLElement;
-                      if (elem) {
-                        elem.classList.add('scale-95');
-                        setTimeout(() => elem.classList.remove('scale-95'), 100);
-                      }
-                      setDate(newDate);
-                    }
-                  }}
-                  disabled={(date) => {
-                    const startDate = new Date("2023-01-01");
-                    startDate.setHours(0, 0, 0, 0);
-                    const currentDate = new Date();
-                    return date < startDate || date > currentDate;
-                  }}
-                  className="w-full select-none [&_.rdp-day]:transition-all [&_.rdp-day]:duration-200 [&_.rdp-day:hover]:scale-110 [&_.rdp-day:hover]:bg-primary/10 [&_.rdp-day:focus]:scale-110 [&_.rdp-day[aria-selected='true']]:!bg-primary [&_.rdp-day[aria-selected='true']]:animate-in [&_.rdp-day[aria-selected='true']]:fade-in-50 [&_.rdp-day[aria-selected='true']]:zoom-in-95 [&_.rdp-day[aria-disabled='true']]:opacity-50 [&_.rdp-nav_button]:transition-colors [&_.rdp-nav_button:hover]:bg-primary/10"
-                />
+              <CardContent>
+                {isMonthlyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : monthlyError ? (
+                  <div className="text-sm text-red-500">Failed to load monthly data</div>
+                ) : monthlyData ? (
+                  <div className="text-2xl font-bold">
+                    {Number(monthlyData.totalCurtailedEnergy).toLocaleString()} MWh
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Total curtailed energy for {format(date, 'MMMM yyyy')}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Monthly Payment
+                </CardTitle>
+                <Battery className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isMonthlyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : monthlyError ? (
+                  <div className="text-sm text-red-500">Failed to load monthly data</div>
+                ) : monthlyData ? (
+                  <div className="text-2xl font-bold">
+                    £{Number(monthlyData.totalPayment).toLocaleString()}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Total payment for {format(date, 'MMMM yyyy')}
+                </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Statistics Grid */}
-          <div className="space-y-6">
-            {/* Monthly Summary Cards */}
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Card className="border-accent/20 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02]">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Monthly Curtailed Energy
-                  </CardTitle>
-                  <Wind className="h-5 w-5 text-primary" />
-                </CardHeader>
-                <CardContent>
-                  {isMonthlyLoading ? (
-                    <div className="h-8 w-32 bg-muted/20 animate-pulse rounded" />
-                  ) : monthlyError ? (
-                    <div className="text-sm text-destructive">Failed to load data</div>
-                  ) : monthlyData ? (
-                    <div className="text-2xl font-bold text-primary">
-                      {Number(monthlyData.totalCurtailedEnergy).toLocaleString()} MWh
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No data available</div>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Total curtailed energy for {format(date, 'MMMM yyyy')}
-                  </p>
-                </CardContent>
-              </Card>
+          {/* Daily Summary Section */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Daily Curtailed Energy
+                </CardTitle>
+                <Wind className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isDailyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : dailyError ? (
+                  <div className="text-sm text-red-500">Failed to load daily data</div>
+                ) : dailyData ? (
+                  <div className="text-2xl font-bold">
+                    {Number(dailyData.totalCurtailedEnergy).toLocaleString()} MWh
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No daily data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Daily curtailed energy for {format(date, 'MMM d, yyyy')}
+                </div>
+              </CardContent>
+            </Card>
 
-              <Card className="border-accent/20 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02]">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Monthly Payment
-                  </CardTitle>
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                </CardHeader>
-                <CardContent>
-                  {isMonthlyLoading ? (
-                    <div className="h-8 w-32 bg-muted/20 animate-pulse rounded" />
-                  ) : monthlyError ? (
-                    <div className="text-sm text-destructive">Failed to load data</div>
-                  ) : monthlyData ? (
-                    <div className="text-2xl font-bold text-primary">
-                      £{Number(monthlyData.totalPayment).toLocaleString()}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No data available</div>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Total payment for {format(date, 'MMMM yyyy')}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Daily Summary Cards */}
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Card className="border-accent/20 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02]">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Daily Curtailed Energy
-                  </CardTitle>
-                  <Battery className="h-5 w-5 text-primary" />
-                </CardHeader>
-                <CardContent>
-                  {isDailyLoading ? (
-                    <div className="h-8 w-32 bg-muted/20 animate-pulse rounded" />
-                  ) : dailyError ? (
-                    <div className="text-sm text-destructive">Failed to load data</div>
-                  ) : dailyData ? (
-                    <div className="text-2xl font-bold text-primary">
-                      {Number(dailyData.totalCurtailedEnergy).toLocaleString()} MWh
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No data available</div>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Daily curtailed energy for {format(date, 'MMM d, yyyy')}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card className="border-accent/20 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-[1.02]">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Daily Payment
-                  </CardTitle>
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                </CardHeader>
-                <CardContent>
-                  {isDailyLoading ? (
-                    <div className="h-8 w-32 bg-muted/20 animate-pulse rounded" />
-                  ) : dailyError ? (
-                    <div className="text-sm text-destructive">Failed to load data</div>
-                  ) : dailyData ? (
-                    <div className="text-2xl font-bold text-primary">
-                      £{Number(dailyData.totalPayment).toLocaleString()}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No data available</div>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Daily payment for {format(date, 'MMM d, yyyy')}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Daily Payment
+                </CardTitle>
+                <Battery className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isDailyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : dailyError ? (
+                  <div className="text-sm text-red-500">Failed to load daily data</div>
+                ) : dailyData ? (
+                  <div className="text-2xl font-bold">
+                    £{Number(dailyData.totalPayment).toLocaleString()}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No daily data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Daily payment for {format(date, 'MMM d, yyyy')}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
