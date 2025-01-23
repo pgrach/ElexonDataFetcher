@@ -178,10 +178,7 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       curtailedEnergy: 0
     }));
 
-    console.log(`Settlement period data for ${date}:`);
-    let hourlyVolumes: { [key: number]: number } = {};
-
-    // First aggregate settlement periods into hours
+    console.log(`\nSettlement period data for ${date}:`);
     records.forEach(record => {
       if (record.settlementPeriod && record.volume) {
         const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
@@ -189,22 +186,22 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
 
         console.log(`[P${record.settlementPeriod}] Volume: ${volume.toFixed(2)} MWh -> Hour ${hour}`);
 
-        if (!hourlyVolumes[hour]) {
-          hourlyVolumes[hour] = 0;
+        if (hour >= 0 && hour < 24) {
+          hourlyResults[hour].curtailedEnergy += volume;
         }
-        hourlyVolumes[hour] += volume;
       }
     });
 
-    // Calculate total from hourly volumes for scaling
-    const totalVolume = Object.values(hourlyVolumes).reduce((sum, vol) => sum + vol, 0);
-    const scaleFactor = totalVolume > 0 ? dailyTotal / totalVolume : 0;
+    // Sum up all hourly values to calculate scaling factor
+    const rawTotal = hourlyResults.reduce((sum, hour) => sum + hour.curtailedEnergy, 0);
 
-    // Apply the scaling to match daily total
-    Object.entries(hourlyVolumes).forEach(([hour, volume]) => {
-      const scaledVolume = volume * scaleFactor;
-      hourlyResults[Number(hour)].curtailedEnergy = scaledVolume;
-    });
+    if (rawTotal > 0) {
+      // Scale all hours to match the daily total
+      const scaleFactor = dailyTotal / rawTotal;
+      hourlyResults.forEach(hour => {
+        hour.curtailedEnergy *= scaleFactor;
+      });
+    }
 
     console.log(`\nHourly distribution check for ${date}:`);
     let totalDistributed = 0;
