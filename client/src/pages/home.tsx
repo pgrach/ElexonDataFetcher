@@ -52,7 +52,8 @@ export default function Home() {
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, selectedLeadParty],
     queryFn: async () => {
-      const url = new URL(`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, window.location.origin);
+      const url = new URL(`/api/summary/daily`, window.location.origin);
+      url.searchParams.set('date', format(date, 'yyyy-MM-dd'));
       if (selectedLeadParty) {
         url.searchParams.set('leadParty', selectedLeadParty);
       }
@@ -76,7 +77,6 @@ export default function Home() {
   const chartConfig = {
     curtailedEnergy: {
       label: "Curtailed Energy (MWh)",
-      color: "hsl(var(--primary))",
       theme: {
         light: "hsl(var(--primary))",
         dark: "hsl(var(--primary))"
