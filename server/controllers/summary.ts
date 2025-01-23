@@ -146,11 +146,22 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       });
     }
 
-    // Base query to get hourly curtailment data
+    // Debug: Get daily total for validation
+    const dailyTotal = await db
+      .select({
+        totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date))
+      .execute();
+
+    console.log(`Daily total for ${date}:`, dailyTotal[0]?.totalVolume);
+
+    // Base query to get settlement period data
     let query = db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
-        totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
+        volume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`
       })
       .from(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, date));
@@ -170,19 +181,34 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       curtailedEnergy: 0
     }));
 
+    // Debug: Track total energy being distributed
+    let totalDistributedEnergy = 0;
+
     // Process each settlement period
     records.forEach(record => {
-      if (record.settlementPeriod && record.totalVolume) {
-        // Convert settlement period to hour (0-23)
-        // Settlement periods 1-2 = hour 0, 3-4 = hour 1, etc.
+      if (record.settlementPeriod && record.volume) {
+        const periodVolume = Number(record.volume);
+        // Convert settlement period (1-48) to hour (0-23)
         const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
 
         if (hour >= 0 && hour < 24) {
-          // Add the volume to the corresponding hour
-          hourlyResults[hour].curtailedEnergy += Number(record.totalVolume) || 0;
+          // Since each hour has two settlement periods, divide by 2 to get hourly average
+          const hourlyVolume = periodVolume / 2;
+          hourlyResults[hour].curtailedEnergy += hourlyVolume;
+          totalDistributedEnergy += hourlyVolume;
         }
       }
     });
+
+    console.log(`Total distributed energy for ${date}:`, totalDistributedEnergy);
+
+    // Validate total matches
+    if (Math.abs(totalDistributedEnergy - Number(dailyTotal[0]?.totalVolume || 0)) > 0.1) {
+      console.warn('Energy total mismatch:', {
+        distributed: totalDistributedEnergy,
+        daily: dailyTotal[0]?.totalVolume
+      });
+    }
 
     // For current day, zero out future hours
     const currentDate = new Date();
@@ -193,14 +219,20 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       requestDate.getDate() === currentDate.getDate()
     ) {
       const currentHour = currentDate.getHours();
-
-      // Zero out future hours
       hourlyResults.forEach((result, index) => {
         if (index > currentHour) {
           result.curtailedEnergy = 0;
         }
       });
     }
+
+    // Final validation to catch any unreasonable values
+    hourlyResults.forEach(result => {
+      if (result.curtailedEnergy > totalDistributedEnergy) {
+        console.error(`Unreasonable value detected for hour ${result.hour}:`, result.curtailedEnergy);
+        result.curtailedEnergy = 0; // Reset suspicious value
+      }
+    });
 
     res.json(hourlyResults);
   } catch (error) {
