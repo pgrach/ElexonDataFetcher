@@ -178,38 +178,36 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       curtailedEnergy: 0
     }));
 
-    console.log(`\nSettlement period data for ${date}:`);
+    // Create a map to store period data
+    const periodMap = new Map<number, number>();
     records.forEach(record => {
       if (record.settlementPeriod && record.volume) {
-        const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
-        const volume = Number(record.volume);
-
-        console.log(`[P${record.settlementPeriod}] Volume: ${volume.toFixed(2)} MWh -> Hour ${hour}`);
-
-        if (hour >= 0 && hour < 24) {
-          hourlyResults[hour].curtailedEnergy += volume;
-        }
+        periodMap.set(Number(record.settlementPeriod), Number(record.volume));
       }
     });
 
-    // Sum up all hourly values to calculate scaling factor
-    const rawTotal = hourlyResults.reduce((sum, hour) => sum + hour.curtailedEnergy, 0);
+    console.log(`\nSettlement period mapping for ${date}:`);
+    // Map settlement periods to hours (2 periods per hour)
+    for (let hour = 0; hour < 24; hour++) {
+      const periodStart = hour * 2 + 1; // First period of the hour
+      const periodEnd = periodStart + 1;  // Second period of the hour
 
-    if (rawTotal > 0) {
-      // Scale all hours to match the daily total
-      const scaleFactor = dailyTotal / rawTotal;
-      hourlyResults.forEach(hour => {
-        hour.curtailedEnergy *= scaleFactor;
-      });
+      const volumePeriod1 = periodMap.get(periodStart) || 0;
+      const volumePeriod2 = periodMap.get(periodEnd) || 0;
+
+      console.log(`Hour ${hour}: Period ${periodStart} (${volumePeriod1.toFixed(2)} MWh) + Period ${periodEnd} (${volumePeriod2.toFixed(2)} MWh)`);
+
+      hourlyResults[hour].curtailedEnergy = volumePeriod1 + volumePeriod2;
     }
 
+    // Sum up all hourly values
+    const calculatedTotal = hourlyResults.reduce((sum, hour) => sum + hour.curtailedEnergy, 0);
+
     console.log(`\nHourly distribution check for ${date}:`);
-    let totalDistributed = 0;
     hourlyResults.forEach(result => {
-      totalDistributed += result.curtailedEnergy;
       console.log(`${result.hour}: ${result.curtailedEnergy.toFixed(2)} MWh`);
     });
-    console.log(`Total distributed: ${totalDistributed.toFixed(2)} MWh (Daily total: ${dailyTotal.toFixed(2)} MWh)`);
+    console.log(`Total distributed: ${calculatedTotal.toFixed(2)} MWh (Daily total: ${dailyTotal.toFixed(2)} MWh)`);
 
     // For current day, zero out future hours
     const currentDate = new Date();
