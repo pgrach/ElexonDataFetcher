@@ -70,7 +70,7 @@ export async function getDailySummary(req: Request, res: Response) {
     // Return the appropriate data based on whether a lead party filter was applied
     res.json({
       date,
-      totalCurtailedEnergy: leadParty ? 
+      totalCurtailedEnergy: leadParty ?
         Number(recordTotals[0]?.totalVolume || 0) :
         Number(summary?.totalCurtailedEnergy || 0),
       totalPayment: leadParty ?
@@ -137,6 +137,7 @@ export async function getMonthlySummary(req: Request, res: Response) {
 export async function getHourlyCurtailment(req: Request, res: Response) {
   try {
     const { date } = req.params;
+    const { leadParty } = req.query;
 
     // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -145,29 +146,61 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       });
     }
 
-    // Query to get hourly curtailment data
-    // We need to combine adjacent settlement periods into hourly data
-    const hourlyData = await db
+    // Base query to get hourly curtailment data
+    let query = db
       .select({
-        hour: sql<number>`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`,
+        settlementPeriod: curtailmentRecords.settlementPeriod,
         totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
       })
       .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date))
-      .groupBy(sql`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`)
-      .orderBy(sql`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`);
+      .where(eq(curtailmentRecords.settlementDate, date));
 
-    // Transform the data into a 24-hour format
+    // Add lead party filter if specified
+    if (leadParty && leadParty !== 'all') {
+      query = query.where(eq(curtailmentRecords.leadPartyName, leadParty as string));
+    }
+
+    const records = await query
+      .groupBy(curtailmentRecords.settlementPeriod)
+      .orderBy(curtailmentRecords.settlementPeriod);
+
+    // Initialize 24-hour array with zeros
     const hourlyResults = Array.from({ length: 24 }, (_, i) => ({
       hour: `${i.toString().padStart(2, '0')}:00`,
       curtailedEnergy: 0
     }));
 
-    hourlyData.forEach(record => {
-      if (record.hour >= 0 && record.hour < 24) {
-        hourlyResults[record.hour].curtailedEnergy = Number(record.totalVolume) || 0;
+    // Process each settlement period
+    records.forEach(record => {
+      if (record.settlementPeriod && record.totalVolume) {
+        // Convert settlement period to hour (0-23)
+        // Settlement periods 1-2 = hour 0, 3-4 = hour 1, etc.
+        const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
+
+        if (hour >= 0 && hour < 24) {
+          // Add the volume to the corresponding hour
+          hourlyResults[hour].curtailedEnergy += Number(record.totalVolume) || 0;
+        }
       }
     });
+
+    // For current day, zero out future hours
+    const currentDate = new Date();
+    const requestDate = new Date(date);
+    if (
+      requestDate.getFullYear() === currentDate.getFullYear() &&
+      requestDate.getMonth() === currentDate.getMonth() &&
+      requestDate.getDate() === currentDate.getDate()
+    ) {
+      const currentHour = currentDate.getHours();
+
+      // Zero out future hours
+      hourlyResults.forEach((result, index) => {
+        if (index > currentHour) {
+          result.curtailedEnergy = 0;
+        }
+      });
+    }
 
     res.json(hourlyResults);
   } catch (error) {
