@@ -53,12 +53,12 @@ export default function Home() {
   const [selectedFarm, setSelectedFarm] = useState<string>("");
 
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
-    queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`],
+    queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}${selectedFarm ? `/${selectedFarm}` : ''}`],
     enabled: !!date
   });
 
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
-    queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
+    queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}${selectedFarm ? `/${selectedFarm}` : ''}`],
     enabled: !!date
   });
 
@@ -244,20 +244,20 @@ export default function Home() {
                   </div>
                 ) : hourlyData ? (
                   <ChartContainer config={chartConfig}>
-                    <BarChart 
+                    <BarChart
                       data={hourlyData}
                       margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="hour" 
+                      <XAxis
+                        dataKey="hour"
                         interval={2}
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
-                        label={{ 
-                          value: 'Curtailed Energy (MWh)', 
-                          angle: -90, 
+                        label={{
+                          value: 'Curtailed Energy (MWh)',
+                          angle: -90,
                           position: 'insideLeft',
                           offset: -40,
                           style: { fontSize: 12 }
@@ -376,20 +376,20 @@ export default function Home() {
                     </div>
                   ) : hourlyData ? (
                     <ChartContainer config={chartConfig}>
-                      <BarChart 
+                      <BarChart
                         data={hourlyData}
                         margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="hour" 
+                        <XAxis
+                          dataKey="hour"
                           interval={2}
                           tick={{ fontSize: 12 }}
                         />
                         <YAxis
-                          label={{ 
-                            value: 'Curtailed Energy (MWh)', 
-                            angle: -90, 
+                          label={{
+                            value: 'Curtailed Energy (MWh)',
+                            angle: -90,
                             position: 'insideLeft',
                             offset: -40,
                             style: { fontSize: 12 }
