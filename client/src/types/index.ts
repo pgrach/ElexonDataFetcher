@@ -22,6 +22,12 @@ export interface DailySummary {
   hourlyData: AggregatedData[];
 }
 
+export interface MonthlySummary {
+  yearMonth: string;
+  totalCurtailedEnergy: number;
+  totalPayment: number;
+}
+
 export interface FarmDetail {
   farmId: string;
   curtailedEnergy: number;

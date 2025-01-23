@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Bitcoin, PoundSterling } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
+import { EnergyChart } from "@/components/EnergyChart";
 import type { DailySummary, MonthlySummary } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 
@@ -31,7 +32,7 @@ export default function Home() {
     error: monthlyError,
     isLoading: isMonthlyLoading,
   } = useQuery<MonthlySummary>({
-    queryKey: [`/api/summary/monthly/${format(initialDate, "yyyy-MM")}`],
+    queryKey: [`/api/summary/monthly/${formattedDate}`],
     enabled: !!formattedDate,
   });
 
@@ -45,8 +46,10 @@ export default function Home() {
     }
   }, [dailyError, monthlyError, toast]);
 
-  const handleDateChange = (date: Date) => {
-    navigate(`/${format(date, "yyyy-MM-dd")}`);
+  const handleDateChange = (date: Date | undefined) => {
+    if (date) {
+      navigate(`/${format(date, "yyyy-MM-dd")}`);
+    }
   };
 
   return (
@@ -73,7 +76,7 @@ export default function Home() {
                   <Calendar
                     mode="single"
                     selected={initialDate}
-                    onSelect={(newDate) => newDate && handleDateChange(newDate)}
+                    onSelect={handleDateChange}
                     disabled={(date) => {
                       const startDate = new Date("2023-01-01");
                       startDate.setHours(0, 0, 0, 0);
@@ -169,15 +172,15 @@ export default function Home() {
           </Card>
         </div>
 
-        {/* Chart Section - To be implemented */}
-        {dailyData && !dailyError && (
+        {/* Chart Section */}
+        {dailyData?.hourlyData && !dailyError && (
           <Card>
             <CardHeader>
               <CardTitle>Hourly Breakdown</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[400px] flex items-center justify-center text-muted-foreground">
-                Chart component will be implemented here
+              <div className="h-[400px]">
+                <EnergyChart data={dailyData.hourlyData} />
               </div>
             </CardContent>
           </Card>
