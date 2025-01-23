@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Battery, Calendar as CalendarIcon, TrendingUp } from "lucide-react";
+import { Wind, Battery, Calendar as CalendarIcon, TrendingUp, Moon, Sun } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 // Keep existing interfaces
 interface DailySummary {
@@ -26,6 +28,46 @@ interface MonthlySummary {
   };
 }
 
+function ThemeToggle() {
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
+      return localStorage.getItem('theme') as 'light' | 'dark' | 'system';
+    }
+    return 'system';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.classList.add(systemTheme);
+    } else {
+      root.classList.add(theme);
+    }
+
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="w-9 px-0">
+          <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">Toggle theme</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => setTheme('light')}>Light</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme('dark')}>Dark</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme('system')}>System</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export default function Home() {
   const [date, setDate] = useState<Date>(() => {
     const today = new Date();
@@ -46,13 +88,16 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-accent/5">
       <div className="container mx-auto px-4 py-6 lg:py-8">
-        <header className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
-            Wind Farm Curtailment Dashboard
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Monitor and analyze wind farm curtailment data and payments
-          </p>
+        <header className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">
+              Wind Farm Curtailment Dashboard
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Monitor and analyze wind farm curtailment data and payments
+            </p>
+          </div>
+          <ThemeToggle />
         </header>
 
         <div className="grid lg:grid-cols-[280px,1fr] gap-6">
