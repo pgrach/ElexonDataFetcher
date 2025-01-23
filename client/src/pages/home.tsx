@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon } from "lucide-react";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
 interface DailySummary {
@@ -56,8 +56,12 @@ export default function Home() {
 
   const chartConfig = {
     curtailedEnergy: {
-      label: "Curtailed Energy",
-      color: "hsl(var(--primary))"
+      label: "Curtailed Energy (MWh)",
+      color: "hsl(var(--primary))",
+      theme: {
+        light: "hsl(var(--primary))",
+        dark: "hsl(var(--primary))"
+      }
     }
   };
 
@@ -222,12 +226,19 @@ export default function Home() {
                   <ChartTooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
+                      const data = payload[0];
                       return (
-                        <ChartTooltipContent
-                          nameKey="hour"
-                          labelKey="curtailedEnergy"
-                          payload={payload}
-                        />
+                        <div className="rounded-lg border bg-background p-2 shadow-md">
+                          <div className="grid gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 w-2 rounded-full bg-primary" />
+                              <span className="font-medium">{data.payload.hour}</span>
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {Number(data.value).toFixed(2)} MWh
+                            </div>
+                          </div>
+                        </div>
                       );
                     }}
                   />
@@ -235,6 +246,11 @@ export default function Home() {
                     dataKey="curtailedEnergy"
                     name="Curtailed Energy"
                     fill="hsl(var(--primary))"
+                  />
+                  <ChartLegend
+                    content={({ payload }) => (
+                      <ChartLegendContent payload={payload} />
+                    )}
                   />
                 </BarChart>
               </ChartContainer>
