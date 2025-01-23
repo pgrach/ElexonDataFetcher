@@ -3,9 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Battery, Calendar as CalendarIcon, Factory } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { Wind, Battery, Calendar as CalendarIcon } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
@@ -34,36 +32,6 @@ interface HourlyData {
   curtailedEnergy: number;
 }
 
-interface FarmDailySummary {
-  farmId: string;
-  summaryDate: string;
-  totalCurtailedEnergy: number;
-  totalPayment: number;
-  averageOriginalPrice: number;
-  averageFinalPrice: number;
-  curtailmentEvents: number;
-  soFlaggedEvents: number;
-  cadlFlaggedEvents: number;
-}
-
-interface FarmDateRangeSummary {
-  farmId: string;
-  startDate: string;
-  endDate: string;
-  periodTotals: {
-    totalCurtailedEnergy: number;
-    totalPayment: number;
-    totalEvents: number;
-    daysWithCurtailment: number;
-    averageOriginalPrice: number;
-    averageFinalPrice: number;
-  };
-  dailySummaries: FarmDailySummary[];
-}
-
-// Mock data for farm IDs - replace with actual API call later
-const FARM_IDS = ["FARM001", "FARM002", "FARM003", "FARM004", "FARM005"];
-
 export default function Home() {
   const [date, setDate] = useState<Date>(() => {
     const today = new Date();
@@ -71,14 +39,12 @@ export default function Home() {
     return today < startDate ? startDate : today;
   });
 
-  const [selectedFarmId, setSelectedFarmId] = useState<string>(FARM_IDS[0]);
-
-  const { data: dailyData, isLoading: isDailyLoading } = useQuery<DailySummary>({
+  const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`],
     enabled: !!date
   });
 
-  const { data: monthlyData, isLoading: isMonthlyLoading } = useQuery<MonthlySummary>({
+  const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
     queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
     enabled: !!date
   });
@@ -88,27 +54,14 @@ export default function Home() {
     enabled: !!date
   });
 
-  const { data: farmDailyData, isLoading: isFarmDailyLoading } = useQuery<FarmDailySummary>({
-    queryKey: [`/api/farms/${selectedFarmId}/summary/${format(date, 'yyyy-MM-dd')}`],
-    enabled: !!date && !!selectedFarmId
-  });
-
-  const { data: farmRangeData, isLoading: isFarmRangeLoading } = useQuery<FarmDateRangeSummary>({
-    queryKey: [`/api/farms/${selectedFarmId}/summaries`],
-    queryFn: async () => {
-      const startDate = format(new Date(date.getFullYear(), date.getMonth(), 1), 'yyyy-MM-dd');
-      const endDate = format(new Date(date.getFullYear(), date.getMonth() + 1, 0), 'yyyy-MM-dd');
-      const response = await fetch(`/api/farms/${selectedFarmId}/summaries?startDate=${startDate}&endDate=${endDate}`);
-      if (!response.ok) throw new Error('Failed to fetch farm range data');
-      return response.json();
-    },
-    enabled: !!date && !!selectedFarmId
-  });
-
   const chartConfig = {
     curtailedEnergy: {
       label: "Curtailed Energy (MWh)",
-      color: "hsl(var(--primary))"
+      color: "hsl(var(--primary))",
+      theme: {
+        light: "hsl(var(--primary))",
+        dark: "hsl(var(--primary))"
+      }
     }
   };
 
@@ -118,9 +71,12 @@ export default function Home() {
     const now = new Date();
     const selectedDate = new Date(date);
 
+    // If the date is today, check the hour
     if (format(now, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')) {
       return hour > now.getHours();
     }
+
+    // If the date is in the future, all hours are in the future
     return selectedDate > now;
   };
 
@@ -128,296 +84,211 @@ export default function Home() {
     <div className="container mx-auto py-8">
       <h1 className="text-4xl font-bold mb-8">Wind Farm Curtailment Data</h1>
 
-      <ResizablePanelGroup direction="horizontal" className="min-h-[800px] rounded-lg border">
-        <ResizablePanel defaultSize={25}>
-          <div className="p-4 space-y-4">
+      <div className="grid md:grid-cols-[300px,1fr] gap-8">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Select Date</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={(newDate) => newDate && setDate(newDate)}
+                disabled={(date) => {
+                  const startDate = new Date("2023-01-01");
+                  startDate.setHours(0, 0, 0, 0);
+                  const currentDate = new Date();
+                  return date < startDate || date > currentDate;
+                }}
+              />
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-8">
+          <div className="grid md:grid-cols-2 gap-4">
             <Card>
-              <CardHeader>
-                <CardTitle>Select Farm</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Monthly Curtailed Energy
+                </CardTitle>
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <Select value={selectedFarmId} onValueChange={setSelectedFarmId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a farm" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FARM_IDS.map(farmId => (
-                      <SelectItem key={farmId} value={farmId}>
-                        {farmId}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isMonthlyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : monthlyError ? (
+                  <div className="text-sm text-red-500">Failed to load monthly data</div>
+                ) : monthlyData ? (
+                  <div className="text-2xl font-bold">
+                    {Number(monthlyData.totalCurtailedEnergy).toLocaleString()} MWh
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Total curtailed energy for {format(date, 'MMMM yyyy')}
+                </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Select Date</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Monthly Payment
+                </CardTitle>
+                <Battery className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={(newDate) => newDate && setDate(newDate)}
-                  disabled={(date) => {
-                    const startDate = new Date("2023-01-01");
-                    startDate.setHours(0, 0, 0, 0);
-                    const currentDate = new Date();
-                    return date < startDate || date > currentDate;
-                  }}
-                />
+                {isMonthlyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : monthlyError ? (
+                  <div className="text-sm text-red-500">Failed to load monthly data</div>
+                ) : monthlyData ? (
+                  <div className="text-2xl font-bold">
+                    £{Number(monthlyData.totalPayment).toLocaleString()}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Total payment for {format(date, 'MMMM yyyy')}
+                </div>
               </CardContent>
             </Card>
           </div>
-        </ResizablePanel>
 
-        <ResizableHandle withHandle />
-
-        <ResizablePanel defaultSize={75}>
-          <div className="p-4 space-y-8">
-            <div className="grid md:grid-cols-2 gap-4">
-              {/* Overall Summary Cards */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Monthly Curtailed Energy
-                  </CardTitle>
-                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  {isMonthlyLoading ? (
-                    <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                  ) : monthlyData ? (
-                    <div className="text-2xl font-bold">
-                      {Number(monthlyData.totalCurtailedEnergy).toLocaleString()} MWh
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No monthly data available</div>
-                  )}
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Total curtailed energy for {format(date, 'MMMM yyyy')}
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Daily Curtailed Energy
+                </CardTitle>
+                <Wind className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isDailyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : dailyError ? (
+                  <div className="text-sm text-red-500">Failed to load daily data</div>
+                ) : dailyData ? (
+                  <div className="text-2xl font-bold">
+                    {Number(dailyData.totalCurtailedEnergy).toLocaleString()} MWh
                   </div>
-                </CardContent>
-              </Card>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No daily data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Daily curtailed energy for {format(date, 'MMM d, yyyy')}
+                </div>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Monthly Payment
-                  </CardTitle>
-                  <Battery className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  {isMonthlyLoading ? (
-                    <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                  ) : monthlyData ? (
-                    <div className="text-2xl font-bold">
-                      £{Number(monthlyData.totalPayment).toLocaleString()}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No monthly data available</div>
-                  )}
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Total payment for {format(date, 'MMMM yyyy')}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Daily Payment
+                </CardTitle>
+                <Battery className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isDailyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : dailyError ? (
+                  <div className="text-sm text-red-500">Failed to load daily data</div>
+                ) : dailyData ? (
+                  <div className="text-2xl font-bold">
+                    £{Number(dailyData.totalPayment).toLocaleString()}
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Farm-level Summary Cards */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Farm Daily Curtailed Energy
-                  </CardTitle>
-                  <Factory className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  {isFarmDailyLoading ? (
-                    <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                  ) : farmDailyData ? (
-                    <div className="text-2xl font-bold">
-                      {Number(farmDailyData.totalCurtailedEnergy).toLocaleString()} MWh
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No farm data available</div>
-                  )}
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Farm {selectedFarmId} curtailment for {format(date, 'MMM d, yyyy')}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Farm Daily Events
-                  </CardTitle>
-                  <Wind className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  {isFarmDailyLoading ? (
-                    <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                  ) : farmDailyData ? (
-                    <div>
-                      <div className="text-2xl font-bold">
-                        {farmDailyData.curtailmentEvents}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        SO Flagged: {farmDailyData.soFlaggedEvents} | CADL Flagged: {farmDailyData.cadlFlaggedEvents}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No event data available</div>
-                  )}
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Events for {format(date, 'MMM d, yyyy')}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Charts */}
-            <div className="grid gap-8">
-              {/* Hourly Curtailment Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Hourly Curtailment</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] w-full">
-                    {isHourlyLoading ? (
-                      <div className="h-full flex items-center justify-center">
-                        <div className="animate-pulse">Loading chart data...</div>
-                      </div>
-                    ) : hourlyData ? (
-                      <ChartContainer config={chartConfig}>
-                        <BarChart 
-                          data={hourlyData}
-                          margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis 
-                            dataKey="hour" 
-                            interval={2}
-                            tick={{ fontSize: 12 }}
-                          />
-                          <YAxis
-                            label={{ 
-                              value: 'Curtailed Energy (MWh)', 
-                              angle: -90, 
-                              position: 'insideLeft',
-                              offset: -40,
-                              style: { fontSize: 12 }
-                            }}
-                            tick={{ fontSize: 12 }}
-                          />
-                          <ChartTooltip
-                            content={({ active, payload }) => {
-                              if (!active || !payload?.length) return null;
-                              const data = payload[0];
-                              const hour = data.payload.hour;
-                              const value = Number(data.value);
-
-                              let message = "";
-                              if (isHourInFuture(hour)) {
-                                message = "Data not available yet";
-                              } else if (value === 0) {
-                                message = "No curtailment detected";
-                              } else {
-                                message = `${value.toFixed(2)} MWh`;
-                              }
-
-                              return (
-                                <div className="rounded-lg border bg-background p-2 shadow-md">
-                                  <div className="grid gap-2">
-                                    <div className="flex items-center gap-2">
-                                      <div className="h-2 w-2 rounded-full bg-primary" />
-                                      <span className="font-medium">{hour}</span>
-                                    </div>
-                                    <div className="text-sm text-muted-foreground">
-                                      {message}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            }}
-                          />
-                          <Bar
-                            dataKey="curtailedEnergy"
-                            name="Curtailed Energy"
-                            fill="hsl(var(--primary))"
-                          />
-                          <ChartLegend
-                            content={({ payload }) => (
-                              <ChartLegendContent payload={payload} />
-                            )}
-                          />
-                        </BarChart>
-                      </ChartContainer>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-muted-foreground">
-                        No hourly data available
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Farm Monthly Trend Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Farm Monthly Trend</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] w-full">
-                    {isFarmRangeLoading ? (
-                      <div className="h-full flex items-center justify-center">
-                        <div className="animate-pulse">Loading chart data...</div>
-                      </div>
-                    ) : farmRangeData ? (
-                      <ChartContainer config={chartConfig}>
-                        <BarChart 
-                          data={farmRangeData.dailySummaries}
-                          margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis 
-                            dataKey="summaryDate" 
-                            interval={2}
-                            tick={{ fontSize: 12 }}
-                          />
-                          <YAxis
-                            label={{ 
-                              value: 'Curtailed Energy (MWh)', 
-                              angle: -90, 
-                              position: 'insideLeft',
-                              offset: -40,
-                              style: { fontSize: 12 }
-                            }}
-                            tick={{ fontSize: 12 }}
-                          />
-                          <ChartTooltip />
-                          <Bar
-                            dataKey="totalCurtailedEnergy"
-                            name="Curtailed Energy"
-                            fill="hsl(var(--primary))"
-                          />
-                          <ChartLegend />
-                        </BarChart>
-                      </ChartContainer>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-muted-foreground">
-                        No farm trend data available
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No daily data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Daily payment for {format(date, 'MMM d, yyyy')}
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+
+          <div className="h-[400px] w-full">
+            {isHourlyLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="animate-pulse">Loading chart data...</div>
+              </div>
+            ) : hourlyData ? (
+              <ChartContainer config={chartConfig}>
+                <BarChart 
+                  data={hourlyData}
+                  margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="hour" 
+                    interval={2}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis
+                    label={{ 
+                      value: 'Curtailed Energy (MWh)', 
+                      angle: -90, 
+                      position: 'insideLeft',
+                      offset: -40,
+                      style: { fontSize: 12 }
+                    }}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <ChartTooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const data = payload[0];
+                      const hour = data.payload.hour;
+                      const value = Number(data.value);
+
+                      let message = "";
+                      if (isHourInFuture(hour)) {
+                        message = "Data not available yet";
+                      } else if (value === 0) {
+                        message = "No curtailment detected";
+                      } else {
+                        message = `${value.toFixed(2)} MWh`;
+                      }
+
+                      return (
+                        <div className="rounded-lg border bg-background p-2 shadow-md">
+                          <div className="grid gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 w-2 rounded-full bg-primary" />
+                              <span className="font-medium">{hour}</span>
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {message}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar
+                    dataKey="curtailedEnergy"
+                    name="Curtailed Energy"
+                    fill="hsl(var(--primary))"
+                  />
+                  <ChartLegend
+                    content={({ payload }) => (
+                      <ChartLegendContent payload={payload} />
+                    )}
+                  />
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground">
+                No hourly data available
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
