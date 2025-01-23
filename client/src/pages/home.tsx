@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building } from "lucide-react";
@@ -55,6 +55,11 @@ export default function Home() {
     queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
       try {
+        // Validate date before making the request
+        if (!isValid(date)) {
+          throw new Error('Invalid date selected');
+        }
+
         const url = new URL(`/api/summary/daily/${formattedDate}`, window.location.origin);
         if (selectedLeadParty && selectedLeadParty !== 'all') {
           url.searchParams.set('leadParty', selectedLeadParty);
@@ -118,11 +123,7 @@ export default function Home() {
   const chartConfig = {
     curtailedEnergy: {
       label: "Curtailed Energy (MWh)",
-      color: "hsl(var(--primary))",
-      theme: {
-        light: "hsl(var(--primary))",
-        dark: "hsl(var(--primary))"
-      }
+      color: "hsl(var(--primary))"
     }
   };
 
