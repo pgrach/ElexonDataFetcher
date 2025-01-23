@@ -146,10 +146,11 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       });
     }
 
-    // Base query to get settlement period data
-    let query = db
+    // First get farm-level totals for each period
+    const farmPeriodTotals = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
+        farmId: curtailmentRecords.farmId,
         volume: sql<string>`SUM(CASE 
           WHEN ${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true 
           THEN ${curtailmentRecords.volume}::numeric 
@@ -162,22 +163,19 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
           eq(curtailmentRecords.settlementDate, date),
           sql`${curtailmentRecords.volume}::numeric > 0`
         )
-      );
+      )
+      .groupBy(curtailmentRecords.settlementPeriod, curtailmentRecords.farmId);
 
-    // Add lead party filter if specified
-    if (leadParty && leadParty !== 'all') {
-      query = query.where(eq(curtailmentRecords.leadPartyName, leadParty as string));
-    }
 
-    const records = await query
-      .groupBy(curtailmentRecords.settlementPeriod)
-      .orderBy(curtailmentRecords.settlementPeriod);
+    // Create a map to store period totals
+    const periodTotals = new Map<number, number>();
 
-    // Create a map of settlement period to volume for easier access
-    const periodVolumes = new Map<number, number>();
-    records.forEach(record => {
+    // Sum up volumes across farms for each period
+    farmPeriodTotals.forEach(record => {
       if (record.settlementPeriod && record.volume) {
-        periodVolumes.set(Number(record.settlementPeriod), Number(record.volume));
+        const period = Number(record.settlementPeriod);
+        const currentTotal = periodTotals.get(period) || 0;
+        periodTotals.set(period, currentTotal + Number(record.volume));
       }
     });
 
@@ -187,13 +185,16 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       curtailedEnergy: 0
     }));
 
-    // Map periods to hours and sum volumes
+    // Map periods to hours:
+    // Hour 0 (00:00-01:00) = Periods 1-2
+    // Hour 1 (01:00-02:00) = Periods 3-4
+    // etc.
     for (let hour = 0; hour < 24; hour++) {
-      const periodStart = hour * 2 + 1; // First period of the hour
-      const periodEnd = periodStart + 1;  // Second period of the hour
+      const periodStart = (hour * 2) + 1;  // First period of the hour
+      const periodEnd = periodStart + 1;    // Second period of the hour
 
-      const volume1 = periodVolumes.get(periodStart) || 0;
-      const volume2 = periodVolumes.get(periodEnd) || 0;
+      const volume1 = periodTotals.get(periodStart) || 0;
+      const volume2 = periodTotals.get(periodEnd) || 0;
 
       console.log(`Hour ${hour}:00 - Period ${periodStart}: ${volume1.toFixed(2)} MWh, Period ${periodEnd}: ${volume2.toFixed(2)} MWh`);
 
