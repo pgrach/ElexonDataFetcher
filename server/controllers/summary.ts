@@ -181,6 +181,8 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
     console.log(`\nSettlement period data for ${date}:`);
     records.forEach(record => {
       if (record.settlementPeriod && record.volume) {
+        // Get hour index (0-23) from settlement period (1-48)
+        // Period 1-2 → Hour 0, Period 3-4 → Hour 1, etc.
         const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
         const volume = Number(record.volume);
 
@@ -191,17 +193,6 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
         }
       }
     });
-
-    // Sum up all hourly values to calculate scaling factor
-    const rawTotal = hourlyResults.reduce((sum, hour) => sum + hour.curtailedEnergy, 0);
-
-    if (rawTotal > 0) {
-      // Scale all hours to match the daily total
-      const scaleFactor = dailyTotal / rawTotal;
-      hourlyResults.forEach(hour => {
-        hour.curtailedEnergy *= scaleFactor;
-      });
-    }
 
     console.log(`\nHourly distribution check for ${date}:`);
     let totalDistributed = 0;
