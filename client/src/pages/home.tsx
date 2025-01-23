@@ -65,6 +65,21 @@ export default function Home() {
     }
   };
 
+  // Function to check if a given hour is in the future
+  const isHourInFuture = (hourStr: string) => {
+    const [hour] = hourStr.split(':').map(Number);
+    const now = new Date();
+    const selectedDate = new Date(date);
+
+    // If the date is today, check the hour
+    if (format(now, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')) {
+      return hour > now.getHours();
+    }
+
+    // If the date is in the future, all hours are in the future
+    return selectedDate > now;
+  };
+
   return (
     <div className="container mx-auto py-8">
       <h1 className="text-4xl font-bold mb-8">Wind Farm Curtailment Data</h1>
@@ -227,15 +242,27 @@ export default function Home() {
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
                       const data = payload[0];
+                      const hour = data.payload.hour;
+                      const value = Number(data.value);
+
+                      let message = "";
+                      if (isHourInFuture(hour)) {
+                        message = "Data not available yet";
+                      } else if (value === 0) {
+                        message = "No curtailment detected";
+                      } else {
+                        message = `${value.toFixed(2)} MWh`;
+                      }
+
                       return (
                         <div className="rounded-lg border bg-background p-2 shadow-md">
                           <div className="grid gap-2">
                             <div className="flex items-center gap-2">
                               <div className="h-2 w-2 rounded-full bg-primary" />
-                              <span className="font-medium">{data.payload.hour}</span>
+                              <span className="font-medium">{hour}</span>
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {Number(data.value).toFixed(2)} MWh
+                              {message}
                             </div>
                           </div>
                         </div>
