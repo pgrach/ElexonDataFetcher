@@ -49,39 +49,52 @@ export default function Home() {
     queryKey: ['/api/lead-parties'],
   });
 
+  const formattedDate = format(date, 'yyyy-MM-dd');
+
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
-    queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, selectedLeadParty],
+    queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
-      const url = new URL(`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, window.location.origin);
-      if (selectedLeadParty && selectedLeadParty !== 'all') {
-        url.searchParams.set('leadParty', selectedLeadParty);
+      try {
+        const url = new URL(`/api/summary/daily/${formattedDate}`, window.location.origin);
+        if (selectedLeadParty && selectedLeadParty !== 'all') {
+          url.searchParams.set('leadParty', selectedLeadParty);
+        }
+        const response = await fetch(url);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to fetch daily data: ${errorText}`);
+        }
+        return response.json();
+      } catch (error) {
+        console.error('Daily data fetch error:', error);
+        throw error;
       }
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch daily data');
-      return response.json();
     },
-    enabled: !!date
+    enabled: !!formattedDate
   });
 
-  // Monthly data query - no need to filter by lead party as it's always aggregate
+  // Monthly data query remains unchanged
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
     queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
     enabled: !!date
   });
 
-  // Hourly data query - should respect the lead party filter
+  // Hourly data query remains unchanged
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
-    queryKey: [`/api/curtailment/hourly/${format(date, 'yyyy-MM-dd')}`, selectedLeadParty],
+    queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
-      const url = new URL(`/api/curtailment/hourly/${format(date, 'yyyy-MM-dd')}`, window.location.origin);
+      const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
       if (selectedLeadParty && selectedLeadParty !== 'all') {
         url.searchParams.set('leadParty', selectedLeadParty);
       }
       const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch hourly data');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch hourly data: ${errorText}`);
+      }
       return response.json();
     },
-    enabled: !!date
+    enabled: !!formattedDate
   });
 
   const chartConfig = {
@@ -225,7 +238,9 @@ export default function Home() {
                 {isDailyLoading ? (
                   <div className="text-2xl font-bold animate-pulse">Loading...</div>
                 ) : dailyError ? (
-                  <div className="text-sm text-red-500">Failed to load daily data</div>
+                  <div className="text-sm text-red-500">
+                    {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
+                  </div>
                 ) : dailyData ? (
                   <div className="text-2xl font-bold">
                     {Number(dailyData.totalCurtailedEnergy).toLocaleString()} MWh
@@ -254,7 +269,9 @@ export default function Home() {
                 {isDailyLoading ? (
                   <div className="text-2xl font-bold animate-pulse">Loading...</div>
                 ) : dailyError ? (
-                  <div className="text-sm text-red-500">Failed to load daily data</div>
+                  <div className="text-sm text-red-500">
+                    {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
+                  </div>
                 ) : dailyData ? (
                   <div className="text-2xl font-bold">
                     £{Number(dailyData.totalPayment).toLocaleString()}
