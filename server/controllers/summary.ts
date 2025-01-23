@@ -146,16 +146,13 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       });
     }
 
-    // Debug: Get daily total for validation
-    const dailyTotal = await db
-      .select({
-        totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`
-      })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date))
-      .execute();
+    // First get the daily summary total for validation
+    const dailySummary = await db.query.dailySummaries.findFirst({
+      where: eq(dailySummaries.summaryDate, date)
+    });
 
-    console.log(`Daily total for ${date}:`, dailyTotal[0]?.totalVolume);
+    const dailyTotal = Number(dailySummary?.totalCurtailedEnergy || 0);
+    console.log(`Daily summary total for ${date}:`, dailyTotal);
 
     // Base query to get settlement period data
     let query = db
@@ -175,40 +172,42 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       .groupBy(curtailmentRecords.settlementPeriod)
       .orderBy(curtailmentRecords.settlementPeriod);
 
+    // Calculate the total volume from records for normalization
+    const totalRecordVolume = records.reduce((sum, record) => 
+      sum + (Number(record.volume) || 0), 0);
+
     // Initialize 24-hour array with zeros
     const hourlyResults = Array.from({ length: 24 }, (_, i) => ({
       hour: `${i.toString().padStart(2, '0')}:00`,
       curtailedEnergy: 0
     }));
 
-    // Debug: Track total energy being distributed
-    let totalDistributedEnergy = 0;
+    // Process each settlement period and normalize to match daily total
+    if (totalRecordVolume > 0) {
+      const normalizationFactor = dailyTotal / totalRecordVolume;
 
-    // Process each settlement period
-    records.forEach(record => {
-      if (record.settlementPeriod && record.volume) {
-        const periodVolume = Number(record.volume);
-        // Convert settlement period (1-48) to hour (0-23)
-        const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
+      records.forEach(record => {
+        if (record.settlementPeriod && record.volume) {
+          const periodVolume = Number(record.volume);
+          // Convert settlement period (1-48) to hour (0-23)
+          const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
 
-        if (hour >= 0 && hour < 24) {
-          // Since each hour has two settlement periods, divide by 2 to get hourly average
-          const hourlyVolume = periodVolume / 2;
-          hourlyResults[hour].curtailedEnergy += hourlyVolume;
-          totalDistributedEnergy += hourlyVolume;
+          if (hour >= 0 && hour < 24) {
+            // Normalize the volume and add to the corresponding hour
+            const normalizedVolume = periodVolume * normalizationFactor;
+            hourlyResults[hour].curtailedEnergy += normalizedVolume;
+          }
         }
-      }
-    });
-
-    console.log(`Total distributed energy for ${date}:`, totalDistributedEnergy);
-
-    // Validate total matches
-    if (Math.abs(totalDistributedEnergy - Number(dailyTotal[0]?.totalVolume || 0)) > 0.1) {
-      console.warn('Energy total mismatch:', {
-        distributed: totalDistributedEnergy,
-        daily: dailyTotal[0]?.totalVolume
       });
     }
+
+    console.log(`Hourly distribution check for ${date}:`);
+    let totalDistributed = 0;
+    hourlyResults.forEach(result => {
+      totalDistributed += result.curtailedEnergy;
+      console.log(`${result.hour}: ${result.curtailedEnergy.toFixed(2)} MWh`);
+    });
+    console.log(`Total distributed: ${totalDistributed.toFixed(2)} MWh (Daily total: ${dailyTotal.toFixed(2)} MWh)`);
 
     // For current day, zero out future hours
     const currentDate = new Date();
@@ -225,14 +224,6 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
         }
       });
     }
-
-    // Final validation to catch any unreasonable values
-    hourlyResults.forEach(result => {
-      if (result.curtailedEnergy > totalDistributedEnergy) {
-        console.error(`Unreasonable value detected for hour ${result.hour}:`, result.curtailedEnergy);
-        result.curtailedEnergy = 0; // Reset suspicious value
-      }
-    });
 
     res.json(hourlyResults);
   } catch (error) {
