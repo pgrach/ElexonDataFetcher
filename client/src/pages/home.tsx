@@ -52,8 +52,7 @@ export default function Home() {
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, selectedLeadParty],
     queryFn: async () => {
-      const url = new URL(`/api/summary/daily`, window.location.origin);
-      url.searchParams.set('date', format(date, 'yyyy-MM-dd'));
+      const url = new URL(`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, window.location.origin);
       if (selectedLeadParty) {
         url.searchParams.set('leadParty', selectedLeadParty);
       }
@@ -65,16 +64,7 @@ export default function Home() {
   });
 
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
-    queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`, selectedLeadParty],
-    queryFn: async () => {
-      const url = new URL(`/api/summary/monthly/${format(date, 'yyyy-MM')}`, window.location.origin);
-      if (selectedLeadParty) {
-        url.searchParams.set('leadParty', selectedLeadParty);
-      }
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch monthly data');
-      return response.json();
-    },
+    queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
     enabled: !!date
   });
 
@@ -86,6 +76,7 @@ export default function Home() {
   const chartConfig = {
     curtailedEnergy: {
       label: "Curtailed Energy (MWh)",
+      color: "hsl(var(--primary))",
       theme: {
         light: "hsl(var(--primary))",
         dark: "hsl(var(--primary))"
@@ -139,14 +130,14 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <Select
-                value={selectedLeadParty || 'all'}
-                onValueChange={(value) => setSelectedLeadParty(value === 'all' ? null : value)}
+                value={selectedLeadParty || ''}
+                onValueChange={(value) => setSelectedLeadParty(value === '' ? null : value)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="All Farms" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Farms</SelectItem>
+                  <SelectItem value="">All Farms</SelectItem>
                   {leadParties.map((party) => (
                     <SelectItem key={party} value={party}>
                       {party}
@@ -278,20 +269,20 @@ export default function Home() {
               </div>
             ) : hourlyData ? (
               <ChartContainer config={chartConfig}>
-                <BarChart
+                <BarChart 
                   data={hourlyData}
                   margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="hour"
+                  <XAxis 
+                    dataKey="hour" 
                     interval={2}
                     tick={{ fontSize: 12 }}
                   />
                   <YAxis
-                    label={{
-                      value: 'Curtailed Energy (MWh)',
-                      angle: -90,
+                    label={{ 
+                      value: 'Curtailed Energy (MWh)', 
+                      angle: -90, 
                       position: 'insideLeft',
                       offset: -40,
                       style: { fontSize: 12 }

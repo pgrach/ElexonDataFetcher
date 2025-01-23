@@ -8,7 +8,7 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/lead-parties", getLeadParties);
 
   // Daily summary endpoint
-  app.get("/api/summary/daily", getDailySummary);
+  app.get("/api/summary/daily/:date", getDailySummary);
 
   // Monthly summary endpoint
   app.get("/api/summary/monthly/:yearMonth", getMonthlySummary);
