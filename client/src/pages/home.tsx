@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building } from "lucide-react";
@@ -60,11 +60,23 @@ export default function Home() {
           url.searchParams.set('leadParty', selectedLeadParty);
         }
         const response = await fetch(url);
+        const text = await response.text();
+
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Failed to fetch daily data: ${errorText}`);
+          console.error('API Error Response:', {
+            status: response.status,
+            statusText: response.statusText,
+            body: text
+          });
+          throw new Error(`API Error: ${response.status} - ${text}`);
         }
-        return response.json();
+
+        try {
+          return JSON.parse(text);
+        } catch (parseError) {
+          console.error('JSON Parse Error:', parseError, 'Raw response:', text);
+          throw new Error('Failed to parse API response');
+        }
       } catch (error) {
         console.error('Daily data fetch error:', error);
         throw error;
@@ -79,20 +91,26 @@ export default function Home() {
     enabled: !!date
   });
 
-  // Hourly data query remains unchanged
+  // Hourly data query with improved error handling
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
-      const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
-      if (selectedLeadParty && selectedLeadParty !== 'all') {
-        url.searchParams.set('leadParty', selectedLeadParty);
+      try {
+        const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
+        if (selectedLeadParty && selectedLeadParty !== 'all') {
+          url.searchParams.set('leadParty', selectedLeadParty);
+        }
+        const response = await fetch(url);
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Hourly data error:', errorText);
+          throw new Error(`Failed to fetch hourly data: ${errorText}`);
+        }
+        return response.json();
+      } catch (error) {
+        console.error('Hourly data fetch error:', error);
+        throw error;
       }
-      const response = await fetch(url);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch hourly data: ${errorText}`);
-      }
-      return response.json();
     },
     enabled: !!formattedDate
   });
