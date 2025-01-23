@@ -79,7 +79,6 @@ export default function Home() {
                 selected={date}
                 onSelect={(newDate) => newDate && setDate(newDate)}
                 disabled={(date) => {
-                  // Allow dates from January 1st, 2023
                   const startDate = new Date("2023-01-01");
                   startDate.setHours(0, 0, 0, 0);
                   const currentDate = new Date();
@@ -91,7 +90,6 @@ export default function Home() {
         </div>
 
         <div className="space-y-8">
-          {/* Monthly Summary Section */}
           <div className="grid md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -144,7 +142,6 @@ export default function Home() {
             </Card>
           </div>
 
-          {/* Daily Summary Section */}
           <div className="grid md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -197,20 +194,22 @@ export default function Home() {
             </Card>
           </div>
 
-          {/* Hourly Curtailment Chart */}
           <Card>
             <CardHeader>
               <CardTitle>Hourly Curtailment</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0 sm:p-2">
               {isHourlyLoading ? (
                 <div className="h-[400px] flex items-center justify-center">
                   <div className="animate-pulse">Loading chart data...</div>
                 </div>
               ) : hourlyData ? (
-                <div className="h-[400px]">
+                <div className="h-[400px] w-full">
                   <ChartContainer config={chartConfig}>
-                    <BarChart data={hourlyData}>
+                    <BarChart 
+                      data={hourlyData}
+                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis 
                         dataKey="hour" 
@@ -222,6 +221,7 @@ export default function Home() {
                           value: 'Curtailed Energy (MWh)', 
                           angle: -90, 
                           position: 'insideLeft',
+                          offset: -40,
                           style: { fontSize: 12 }
                         }}
                         tick={{ fontSize: 12 }}
