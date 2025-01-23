@@ -1,200 +1,183 @@
-import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
-import { format } from "date-fns";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Battery, Bitcoin, PoundSterling } from "lucide-react";
+import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
-import { EnergyChart } from "@/components/EnergyChart";
-import type { DailySummary, MonthlySummary } from "@/types";
-import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Wind, Battery, Calendar as CalendarIcon } from "lucide-react";
+
+// Define the API response types based on our schema
+interface DailySummary {
+  date: string;
+  totalCurtailedEnergy: number;
+  totalPayment: number;
+  recordTotals: {
+    totalVolume: number;
+    totalPayment: number;
+  };
+}
+
+interface MonthlySummary {
+  yearMonth: string;
+  totalCurtailedEnergy: number;
+  totalPayment: number;
+  dailyTotals: {
+    totalCurtailedEnergy: number;
+    totalPayment: number;
+  };
+}
 
 export default function Home() {
-  const [location, setLocation] = useLocation();
-  const { toast } = useToast();
-
-  // Get date from URL or use today
-  const urlDate = location.split("/")[1];
-  const initialDate = urlDate ? new Date(urlDate) : new Date();
-  const formattedDate = format(initialDate, "yyyy-MM-dd");
-
-  const {
-    data: dailyData,
-    error: dailyError,
-    isLoading: isDailyLoading,
-  } = useQuery<DailySummary>({
-    queryKey: [`/api/summary/${formattedDate}`],
-    enabled: !!formattedDate,
+  // Default to current date, but not before January 1st, 2023
+  const [date, setDate] = useState<Date>(() => {
+    const today = new Date();
+    const startDate = new Date("2023-01-01");
+    return today < startDate ? startDate : today;
   });
 
-  const {
-    data: monthlyData,
-    error: monthlyError,
-    isLoading: isMonthlyLoading,
-  } = useQuery<MonthlySummary>({
-    queryKey: [`/api/summary/monthly/${format(initialDate, "yyyy-MM")}`],
-    enabled: !!formattedDate,
+  const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
+    queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`],
+    enabled: !!date
   });
 
-  useEffect(() => {
-    if (dailyError || monthlyError) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to load data. Please try again later.",
-      });
-    }
-  }, [dailyError, monthlyError, toast]);
-
-  const handleDateChange = (date: Date | undefined) => {
-    if (date) {
-      try {
-        const formattedNewDate = format(date, "yyyy-MM-dd");
-        setLocation(`/${formattedNewDate}`);
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Invalid date selected",
-        });
-      }
-    }
-  };
+  const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
+    queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
+    enabled: !!date
+  });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-100 to-white dark:from-sky-900 dark:to-gray-900">
-      <div className="container mx-auto p-4 space-y-8">
-        {/* Header */}
-        <header className="py-6">
-          <div className="flex flex-col gap-6">
-            <div>
-              <h1 className="text-4xl font-bold text-sky-900 dark:text-sky-100 flex items-center gap-2">
-                <Wind className="h-8 w-8 text-sky-500" />
-                Wind Farm Curtailment Dashboard
-              </h1>
-              <p className="text-xl text-sky-700 dark:text-sky-300">
-                Monitoring and Analysis Platform
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Card className="w-full sm:w-auto">
-                <CardHeader>
-                  <CardTitle className="text-lg">Select Date</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Calendar
-                    mode="single"
-                    selected={initialDate}
-                    onSelect={handleDateChange}
-                    disabled={(date) => {
-                      const startDate = new Date("2023-01-01");
-                      startDate.setHours(0, 0, 0, 0);
-                      return date < startDate || date > new Date();
-                    }}
-                    initialFocus
-                  />
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </header>
+    <div className="container mx-auto py-8">
+      <h1 className="text-4xl font-bold mb-8">Wind Farm Curtailment Data</h1>
 
-        {/* Stats Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid md:grid-cols-[300px,1fr] gap-8">
+        <div className="space-y-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Daily Curtailed Energy
-              </CardTitle>
-              <Wind className="h-4 w-4 text-muted-foreground" />
+            <CardHeader>
+              <CardTitle>Select Date</CardTitle>
             </CardHeader>
             <CardContent>
-              {isDailyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : dailyError ? (
-                <div className="text-sm text-red-500">Failed to load data</div>
-              ) : (
-                <div className="text-2xl font-bold">
-                  {Number(dailyData?.totalCurtailedEnergy || 0).toLocaleString()} MWh
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Monthly Curtailed Energy
-              </CardTitle>
-              <Battery className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {isMonthlyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : monthlyError ? (
-                <div className="text-sm text-red-500">Failed to load data</div>
-              ) : (
-                <div className="text-2xl font-bold">
-                  {Number(monthlyData?.totalCurtailedEnergy || 0).toLocaleString()} MWh
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Potential BTC
-              </CardTitle>
-              <Bitcoin className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {isDailyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : dailyError ? (
-                <div className="text-sm text-red-500">Failed to load data</div>
-              ) : (
-                <div className="text-2xl font-bold">
-                  {Number(dailyData?.totalPotentialBtc || 0).toFixed(8)} BTC
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                Daily Payment
-              </CardTitle>
-              <PoundSterling className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {isDailyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : dailyError ? (
-                <div className="text-sm text-red-500">Failed to load data</div>
-              ) : (
-                <div className="text-2xl font-bold">
-                  £{Number(dailyData?.totalPayment || 0).toLocaleString()}
-                </div>
-              )}
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={(newDate) => newDate && setDate(newDate)}
+                disabled={(date) => {
+                  // Allow dates from January 1st, 2023
+                  const startDate = new Date("2023-01-01");
+                  startDate.setHours(0, 0, 0, 0);
+                  const currentDate = new Date();
+                  return date < startDate || date > currentDate;
+                }}
+              />
             </CardContent>
           </Card>
         </div>
 
-        {/* Chart Section */}
-        {dailyData?.hourlyData && !dailyError && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Hourly Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[400px]">
-                <EnergyChart data={dailyData.hourlyData} />
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <div className="space-y-8">
+          {/* Monthly Summary Section */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Monthly Curtailed Energy
+                </CardTitle>
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isMonthlyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : monthlyError ? (
+                  <div className="text-sm text-red-500">Failed to load monthly data</div>
+                ) : monthlyData ? (
+                  <div className="text-2xl font-bold">
+                    {Number(monthlyData.totalCurtailedEnergy).toLocaleString()} MWh
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Total curtailed energy for {format(date, 'MMMM yyyy')}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Monthly Payment
+                </CardTitle>
+                <Battery className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isMonthlyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : monthlyError ? (
+                  <div className="text-sm text-red-500">Failed to load monthly data</div>
+                ) : monthlyData ? (
+                  <div className="text-2xl font-bold">
+                    £{Number(monthlyData.totalPayment).toLocaleString()}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Total payment for {format(date, 'MMMM yyyy')}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Daily Summary Section */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Daily Curtailed Energy
+                </CardTitle>
+                <Wind className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isDailyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : dailyError ? (
+                  <div className="text-sm text-red-500">Failed to load daily data</div>
+                ) : dailyData ? (
+                  <div className="text-2xl font-bold">
+                    {Number(dailyData.totalCurtailedEnergy).toLocaleString()} MWh
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No daily data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Daily curtailed energy for {format(date, 'MMM d, yyyy')}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Daily Payment
+                </CardTitle>
+                <Battery className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isDailyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : dailyError ? (
+                  <div className="text-sm text-red-500">Failed to load daily data</div>
+                ) : dailyData ? (
+                  <div className="text-2xl font-bold">
+                    £{Number(dailyData.totalPayment).toLocaleString()}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No daily data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Daily payment for {format(date, 'MMM d, yyyy')}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
