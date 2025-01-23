@@ -3,18 +3,22 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Battery, Calendar as CalendarIcon } from "lucide-react";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
+import { Wind, Battery, Calendar as CalendarIcon, Building } from "lucide-react";
+import { ChartContainer, ChartTooltip, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface DailySummary {
   date: string;
   totalCurtailedEnergy: number;
   totalPayment: number;
-  recordTotals: {
-    totalVolume: number;
-    totalPayment: number;
-  };
+  leadParty: string | null;
 }
 
 interface MonthlySummary {
@@ -38,9 +42,24 @@ export default function Home() {
     const startDate = new Date("2023-01-01");
     return today < startDate ? startDate : today;
   });
+  const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
+
+  // Fetch lead parties for the dropdown
+  const { data: leadParties = [] } = useQuery<string[]>({
+    queryKey: ['/api/lead-parties'],
+  });
 
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
-    queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`],
+    queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, selectedLeadParty],
+    queryFn: async () => {
+      const url = new URL(`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, window.location.origin);
+      if (selectedLeadParty) {
+        url.searchParams.set('leadParty', selectedLeadParty);
+      }
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch daily data');
+      return response.json();
+    },
     enabled: !!date
   });
 
@@ -104,6 +123,30 @@ export default function Home() {
               />
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Select Farm</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Select
+                value={selectedLeadParty || ''}
+                onValueChange={(value) => setSelectedLeadParty(value === '' ? null : value)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All Farms" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Farms</SelectItem>
+                  {leadParties.map((party) => (
+                    <SelectItem key={party} value={party}>
+                      {party}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="space-y-8">
@@ -163,7 +206,7 @@ export default function Home() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Daily Curtailed Energy
+                  {selectedLeadParty ? 'Farm Curtailed Energy' : 'Daily Curtailed Energy'}
                 </CardTitle>
                 <Wind className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -180,7 +223,11 @@ export default function Home() {
                   <div className="text-sm text-muted-foreground">No daily data available</div>
                 )}
                 <div className="text-xs text-muted-foreground mt-1">
-                  Daily curtailed energy for {format(date, 'MMM d, yyyy')}
+                  {selectedLeadParty ? (
+                    <>Farm curtailed energy for {selectedLeadParty}</>
+                  ) : (
+                    <>Daily curtailed energy for {format(date, 'MMM d, yyyy')}</>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -188,9 +235,9 @@ export default function Home() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Daily Payment
+                  {selectedLeadParty ? 'Farm Payment' : 'Daily Payment'}
                 </CardTitle>
-                <Battery className="h-4 w-4 text-muted-foreground" />
+                <Building className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 {isDailyLoading ? (
@@ -205,7 +252,11 @@ export default function Home() {
                   <div className="text-sm text-muted-foreground">No daily data available</div>
                 )}
                 <div className="text-xs text-muted-foreground mt-1">
-                  Daily payment for {format(date, 'MMM d, yyyy')}
+                  {selectedLeadParty ? (
+                    <>Farm payment for {selectedLeadParty}</>
+                  ) : (
+                    <>Daily payment for {format(date, 'MMM d, yyyy')}</>
+                  )}
                 </div>
               </CardContent>
             </Card>

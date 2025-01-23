@@ -51,6 +51,31 @@ async function loadWindFarmIds(): Promise<Set<string>> {
   }
 }
 
+// Function to update existing records with lead party names
+export async function updateLeadPartyNames(): Promise<void> {
+  try {
+    await loadWindFarmIds(); // Ensure mappings are loaded
+
+    if (!bmuLeadPartyMap) {
+      throw new Error('BMU lead party mapping not initialized');
+    }
+
+    // Update records in batches
+    for (const [bmuId, leadPartyName] of bmuLeadPartyMap.entries()) {
+      await db.update(curtailmentRecords)
+        .set({ leadPartyName })
+        .where(eq(curtailmentRecords.farmId, bmuId));
+
+      console.log(`Updated lead party name for BMU ${bmuId} to ${leadPartyName}`);
+    }
+
+    console.log('Completed updating lead party names');
+  } catch (error) {
+    console.error('Error updating lead party names:', error);
+    throw error;
+  }
+}
+
 async function updateMonthlySummary(date: string): Promise<void> {
   const yearMonth = date.substring(0, 7);
 

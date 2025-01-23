@@ -1,9 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { getDailySummary, getMonthlySummary, getHourlyCurtailment } from "./controllers/summary";
+import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
 
 export function registerRoutes(app: Express): Server {
+  // Get lead parties endpoint
+  app.get("/api/lead-parties", getLeadParties);
+
   // Daily summary endpoint
   app.get("/api/summary/daily/:date", getDailySummary);
 

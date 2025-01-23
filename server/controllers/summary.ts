@@ -3,36 +3,61 @@ import { db } from "@db";
 import { dailySummaries, curtailmentRecords, monthlySummaries } from "@db/schema";
 import { eq, sql } from "drizzle-orm";
 
+export async function getLeadParties(req: Request, res: Response) {
+  try {
+    const leadParties = await db
+      .select({
+        leadPartyName: curtailmentRecords.leadPartyName,
+      })
+      .from(curtailmentRecords)
+      .groupBy(curtailmentRecords.leadPartyName)
+      .orderBy(curtailmentRecords.leadPartyName);
+
+    res.json(leadParties.map(party => party.leadPartyName));
+  } catch (error) {
+    console.error('Error fetching lead parties:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching lead parties"
+    });
+  }
+}
+
 export async function getDailySummary(req: Request, res: Response) {
   try {
-    const { date } = req.params;
+    const { date, leadParty } = req.query;
 
     // Validate date format
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date as string)) {
       return res.status(400).json({
         error: "Invalid date format. Please use YYYY-MM-DD"
       });
     }
 
-    // Calculate totals from curtailment_records for verification
-    const recordTotals = await db
+    // Base query
+    let query = db
       .select({
         totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
         totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
       })
       .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date));
+      .where(eq(curtailmentRecords.settlementDate, date as string));
 
+    // Add lead party filter if specified
+    if (leadParty) {
+      query = query.where(eq(curtailmentRecords.leadPartyName, leadParty as string));
+    }
+
+    const recordTotals = await query;
     console.log('Curtailment records totals:', recordTotals[0]);
 
-    // Get the daily summary
+    // Get the daily summary (aggregate only)
     const summary = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, date)
+      where: eq(dailySummaries.summaryDate, date as string)
     });
 
     console.log('Daily summary:', summary);
 
-    if (!summary) {
+    if (!summary && !recordTotals[0]?.totalVolume) {
       return res.status(404).json({
         error: "No data available for this date"
       });
@@ -40,12 +65,13 @@ export async function getDailySummary(req: Request, res: Response) {
 
     res.json({
       date,
-      totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Math.abs(Number(summary.totalPayment)), // Convert to positive number
-      recordTotals: {
-        totalVolume: Number(recordTotals[0]?.totalVolume || 0),
-        totalPayment: Math.abs(Number(recordTotals[0]?.totalPayment || 0)) // Convert to positive number
-      }
+      totalCurtailedEnergy: leadParty ? 
+        Number(recordTotals[0]?.totalVolume || 0) :
+        Number(summary?.totalCurtailedEnergy || 0),
+      totalPayment: leadParty ?
+        Math.abs(Number(recordTotals[0]?.totalPayment || 0)) :
+        Math.abs(Number(summary?.totalPayment || 0)),
+      leadParty: leadParty || null
     });
   } catch (error) {
     console.error('Error fetching daily summary:', error);
