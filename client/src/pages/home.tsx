@@ -130,14 +130,14 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <Select
-                value={selectedLeadParty || ''}
-                onValueChange={(value) => setSelectedLeadParty(value === '' ? null : value)}
+                value={selectedLeadParty || 'all'}
+                onValueChange={(value) => setSelectedLeadParty(value === 'all' ? null : value)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="All Farms" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Farms</SelectItem>
+                  <SelectItem value="all">All Farms</SelectItem>
                   {leadParties.map((party) => (
                     <SelectItem key={party} value={party}>
                       {party}
@@ -269,20 +269,20 @@ export default function Home() {
               </div>
             ) : hourlyData ? (
               <ChartContainer config={chartConfig}>
-                <BarChart 
+                <BarChart
                   data={hourlyData}
                   margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="hour" 
+                  <XAxis
+                    dataKey="hour"
                     interval={2}
                     tick={{ fontSize: 12 }}
                   />
                   <YAxis
-                    label={{ 
-                      value: 'Curtailed Energy (MWh)', 
-                      angle: -90, 
+                    label={{
+                      value: 'Curtailed Energy (MWh)',
+                      angle: -90,
                       position: 'insideLeft',
                       offset: -40,
                       style: { fontSize: 12 }
