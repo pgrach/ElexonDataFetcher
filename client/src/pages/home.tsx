@@ -5,9 +5,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
-// Define the API response types based on our schema
 interface DailySummary {
   date: string;
   totalCurtailedEnergy: number;
@@ -34,7 +33,6 @@ interface HourlyData {
 }
 
 export default function Home() {
-  // Default to current date, but not before January 1st, 2023
   const [date, setDate] = useState<Date>(() => {
     const today = new Date();
     const startDate = new Date("2023-01-01");
@@ -194,65 +192,58 @@ export default function Home() {
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Hourly Curtailment</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 sm:p-2">
-              {isHourlyLoading ? (
-                <div className="h-[400px] flex items-center justify-center">
-                  <div className="animate-pulse">Loading chart data...</div>
-                </div>
-              ) : hourlyData ? (
-                <div className="h-[400px] w-full">
-                  <ChartContainer config={chartConfig}>
-                    <BarChart 
-                      data={hourlyData}
-                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="hour" 
-                        interval={2}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis
-                        label={{ 
-                          value: 'Curtailed Energy (MWh)', 
-                          angle: -90, 
-                          position: 'insideLeft',
-                          offset: -40,
-                          style: { fontSize: 12 }
-                        }}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <ChartTooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          return (
-                            <ChartTooltipContent
-                              nameKey="hour"
-                              labelKey="curtailedEnergy"
-                              payload={payload}
-                            />
-                          );
-                        }}
-                      />
-                      <Bar
-                        dataKey="curtailedEnergy"
-                        name="Curtailed Energy"
-                        fill="hsl(var(--primary))"
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                </div>
-              ) : (
-                <div className="h-[400px] flex items-center justify-center text-muted-foreground">
-                  No hourly data available
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <div className="h-[400px] w-full">
+            {isHourlyLoading ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="animate-pulse">Loading chart data...</div>
+              </div>
+            ) : hourlyData ? (
+              <ChartContainer config={chartConfig}>
+                <BarChart 
+                  data={hourlyData}
+                  margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="hour" 
+                    interval={2}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis
+                    label={{ 
+                      value: 'Curtailed Energy (MWh)', 
+                      angle: -90, 
+                      position: 'insideLeft',
+                      offset: -40,
+                      style: { fontSize: 12 }
+                    }}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <ChartTooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      return (
+                        <ChartTooltipContent
+                          nameKey="hour"
+                          labelKey="curtailedEnergy"
+                          payload={payload}
+                        />
+                      );
+                    }}
+                  />
+                  <Bar
+                    dataKey="curtailedEnergy"
+                    name="Curtailed Energy"
+                    fill="hsl(var(--primary))"
+                  />
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground">
+                No hourly data available
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
