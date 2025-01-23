@@ -172,36 +172,41 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       .groupBy(curtailmentRecords.settlementPeriod)
       .orderBy(curtailmentRecords.settlementPeriod);
 
-    // Calculate the total volume from records for normalization
-    const totalRecordVolume = records.reduce((sum, record) => 
-      sum + (Number(record.volume) || 0), 0);
-
     // Initialize 24-hour array with zeros
     const hourlyResults = Array.from({ length: 24 }, (_, i) => ({
       hour: `${i.toString().padStart(2, '0')}:00`,
       curtailedEnergy: 0
     }));
 
-    // Process each settlement period and normalize to match daily total
-    if (totalRecordVolume > 0) {
-      const normalizationFactor = dailyTotal / totalRecordVolume;
+    console.log(`Settlement period data for ${date}:`);
+    let hourlyVolumes: { [key: number]: number } = {};
 
-      records.forEach(record => {
-        if (record.settlementPeriod && record.volume) {
-          const periodVolume = Number(record.volume);
-          // Convert settlement period (1-48) to hour (0-23)
-          const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
+    // First aggregate settlement periods into hours
+    records.forEach(record => {
+      if (record.settlementPeriod && record.volume) {
+        const hour = Math.floor((Number(record.settlementPeriod) - 1) / 2);
+        const volume = Number(record.volume);
 
-          if (hour >= 0 && hour < 24) {
-            // Normalize the volume and add to the corresponding hour
-            const normalizedVolume = periodVolume * normalizationFactor;
-            hourlyResults[hour].curtailedEnergy += normalizedVolume;
-          }
+        console.log(`[P${record.settlementPeriod}] Volume: ${volume.toFixed(2)} MWh -> Hour ${hour}`);
+
+        if (!hourlyVolumes[hour]) {
+          hourlyVolumes[hour] = 0;
         }
-      });
-    }
+        hourlyVolumes[hour] += volume;
+      }
+    });
 
-    console.log(`Hourly distribution check for ${date}:`);
+    // Calculate total from hourly volumes for scaling
+    const totalVolume = Object.values(hourlyVolumes).reduce((sum, vol) => sum + vol, 0);
+    const scaleFactor = totalVolume > 0 ? dailyTotal / totalVolume : 0;
+
+    // Apply the scaling to match daily total
+    Object.entries(hourlyVolumes).forEach(([hour, volume]) => {
+      const scaledVolume = volume * scaleFactor;
+      hourlyResults[Number(hour)].curtailedEnergy = scaledVolume;
+    });
+
+    console.log(`\nHourly distribution check for ${date}:`);
     let totalDistributed = 0;
     hourlyResults.forEach(result => {
       totalDistributed += result.curtailedEnergy;
