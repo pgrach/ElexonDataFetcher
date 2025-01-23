@@ -1,20 +1,11 @@
 import { pgTable, text, serial, date, integer, numeric, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
-export const farms = pgTable("farms", {
-  id: text("id").primaryKey(), // BMU ID
-  name: text("name").notNull(),
-  fuelType: text("fuel_type").notNull(),
-  generationCapacity: numeric("generation_capacity").notNull(),
-  leadPartyName: text("lead_party_name").notNull(),
-  createdAt: timestamp("created_at").defaultNow()
-});
-
 export const curtailmentRecords = pgTable("curtailment_records", {
   id: serial("id").primaryKey(),
   settlementDate: date("settlement_date").notNull(),
   settlementPeriod: integer("settlement_period").notNull(),
-  farmId: text("farm_id").notNull().references(() => farms.id),
+  farmId: text("farm_id").notNull(),
   volume: numeric("volume").notNull(),
   payment: numeric("payment").notNull(),
   originalPrice: numeric("original_price").notNull(),
@@ -49,8 +40,6 @@ export const ingestionProgress = pgTable("ingestion_progress", {
 });
 
 // Export schemas for validation
-export const insertFarmSchema = createInsertSchema(farms);
-export const selectFarmSchema = createSelectSchema(farms);
 export const insertCurtailmentRecordSchema = createInsertSchema(curtailmentRecords);
 export const selectCurtailmentRecordSchema = createSelectSchema(curtailmentRecords);
 export const insertDailySummarySchema = createInsertSchema(dailySummaries);
@@ -61,8 +50,6 @@ export const insertIngestionProgressSchema = createInsertSchema(ingestionProgres
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
 
 // Export types for TypeScript
-export type Farm = typeof farms.$inferSelect;
-export type InsertFarm = typeof farms.$inferInsert;
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
 export type DailySummary = typeof dailySummaries.$inferSelect;

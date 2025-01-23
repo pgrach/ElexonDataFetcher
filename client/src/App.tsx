@@ -8,7 +8,9 @@ import Home from "@/pages/home";
 function Router() {
   return (
     <Switch>
+      {/* Add pages below */}
       <Route path="/" component={Home}/>
+      {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>
   );
@@ -17,10 +19,8 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="relative">
-        <Router />
-        <Toaster />
-      </div>
+      <Router />
+      <Toaster />
     </QueryClientProvider>
   );
 }
