@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "@db";
 import { dailySummaries, curtailmentRecords, monthlySummaries } from "@db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 
 export async function getLeadParties(req: Request, res: Response) {
   try {
@@ -150,10 +150,19 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
     let query = db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
-        volume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`
+        volume: sql<string>`SUM(CASE 
+          WHEN ${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true 
+          THEN ${curtailmentRecords.volume}::numeric 
+          ELSE 0 
+        END)`
       })
       .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date));
+      .where(
+        and(
+          eq(curtailmentRecords.settlementDate, date),
+          sql`${curtailmentRecords.volume}::numeric > 0`
+        )
+      );
 
     // Add lead party filter if specified
     if (leadParty && leadParty !== 'all') {
