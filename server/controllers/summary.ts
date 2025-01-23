@@ -178,12 +178,15 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       curtailedEnergy: 0
     }));
 
-    // Create a map to store period data
+    // Get total volume across all periods for scaling
+    let totalVolume = 0;
     const periodMap = new Map<number, number>();
+
     records.forEach(record => {
       if (record.settlementPeriod && record.volume) {
-        // Store raw volume without any division
-        periodMap.set(Number(record.settlementPeriod), Math.abs(Number(record.volume)));
+        const volume = Math.abs(Number(record.volume));
+        periodMap.set(Number(record.settlementPeriod), volume);
+        totalVolume += volume;
       }
     });
 
@@ -196,15 +199,16 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       const volumePeriod1 = periodMap.get(periodStart) || 0;
       const volumePeriod2 = periodMap.get(periodEnd) || 0;
 
-      // Sum the two 30-minute periods to get the hourly value
-      const hourlyVolume = volumePeriod1 + volumePeriod2;
+      // Calculate the proportion of the daily total
+      const hourlyProportion = (volumePeriod1 + volumePeriod2) / totalVolume;
+      const hourlyVolume = dailyTotal * hourlyProportion;
 
-      console.log(`Hour ${hour}: Period ${periodStart} (${volumePeriod1.toFixed(2)} MWh) + Period ${periodEnd} (${volumePeriod2.toFixed(2)} MWh)`);
+      console.log(`Hour ${hour}: Period ${periodStart} (${volumePeriod1.toFixed(2)} MWh) + Period ${periodEnd} (${volumePeriod2.toFixed(2)} MWh) = ${hourlyVolume.toFixed(2)} MWh`);
 
       hourlyResults[hour].curtailedEnergy = hourlyVolume;
     }
 
-    // Sum up all hourly values
+    // Sum up all hourly values for verification
     const calculatedTotal = hourlyResults.reduce((sum, hour) => sum + hour.curtailedEnergy, 0);
 
     console.log(`\nHourly distribution check for ${date}:`);
