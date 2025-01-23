@@ -4,6 +4,8 @@ import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon } from "lucide-react";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 // Define the API response types based on our schema
 interface DailySummary {
@@ -26,6 +28,11 @@ interface MonthlySummary {
   };
 }
 
+interface HourlyData {
+  hour: string;
+  curtailedEnergy: number;
+}
+
 export default function Home() {
   // Default to current date, but not before January 1st, 2023
   const [date, setDate] = useState<Date>(() => {
@@ -43,6 +50,18 @@ export default function Home() {
     queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
     enabled: !!date
   });
+
+  const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
+    queryKey: [`/api/curtailment/hourly/${format(date, 'yyyy-MM-dd')}`],
+    enabled: !!date
+  });
+
+  const chartConfig = {
+    curtailedEnergy: {
+      label: "Curtailed Energy",
+      color: "hsl(var(--primary))"
+    }
+  };
 
   return (
     <div className="container mx-auto py-8">
@@ -177,6 +196,63 @@ export default function Home() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Hourly Curtailment Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Hourly Curtailment</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isHourlyLoading ? (
+                <div className="h-[400px] flex items-center justify-center">
+                  <div className="animate-pulse">Loading chart data...</div>
+                </div>
+              ) : hourlyData ? (
+                <div className="h-[400px]">
+                  <ChartContainer config={chartConfig}>
+                    <BarChart data={hourlyData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="hour" 
+                        interval={2}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        label={{ 
+                          value: 'Curtailed Energy (MWh)', 
+                          angle: -90, 
+                          position: 'insideLeft',
+                          style: { fontSize: 12 }
+                        }}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <ChartTooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          return (
+                            <ChartTooltipContent
+                              nameKey="hour"
+                              labelKey="curtailedEnergy"
+                              payload={payload}
+                            />
+                          );
+                        }}
+                      />
+                      <Bar
+                        dataKey="curtailedEnergy"
+                        name="Curtailed Energy"
+                        fill="hsl(var(--primary))"
+                      />
+                    </BarChart>
+                  </ChartContainer>
+                </div>
+              ) : (
+                <div className="h-[400px] flex items-center justify-center text-muted-foreground">
+                  No hourly data available
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
