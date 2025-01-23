@@ -9,21 +9,40 @@ import path from "path";
 const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 
 let windFarmBmuIds: Set<string> | null = null;
+let bmuLeadPartyMap: Map<string, string> | null = null;
 
 async function loadWindFarmIds(): Promise<Set<string>> {
-  if (windFarmBmuIds !== null) {
-    return windFarmBmuIds;
-  }
-
   try {
-    const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
-    const bmuMapping = JSON.parse(mappingContent);
+    // Always reload in development to catch mapping updates
+    if (process.env.NODE_ENV === 'development' || windFarmBmuIds === null || bmuLeadPartyMap === null) {
+      console.log('Loading BMU mapping from:', BMU_MAPPING_PATH);
 
-    windFarmBmuIds = new Set(
-      bmuMapping
-        .filter((bmu: any) => bmu.fuelType === "WIND")
-        .map((bmu: any) => bmu.elexonBmUnit)
-    );
+      const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
+      const bmuMapping = JSON.parse(mappingContent);
+
+      console.log(`Loaded ${bmuMapping.length} BMU mappings`);
+
+      windFarmBmuIds = new Set(
+        bmuMapping
+          .filter((bmu: any) => bmu.fuelType === "WIND")
+          .map((bmu: any) => bmu.elexonBmUnit)
+      );
+
+      // Initialize the lead party mapping
+      bmuLeadPartyMap = new Map(
+        bmuMapping
+          .filter((bmu: any) => bmu.fuelType === "WIND")
+          .map((bmu: any) => [bmu.elexonBmUnit, bmu.leadPartyName || 'Unknown'])
+      );
+
+      console.log(`Found ${windFarmBmuIds.size} wind farm BMUs`);
+      console.log('Sample lead party mappings:', 
+        Array.from(bmuLeadPartyMap.entries()).slice(0, 3));
+    }
+
+    if (!windFarmBmuIds || !bmuLeadPartyMap) {
+      throw new Error('Failed to initialize BMU mappings');
+    }
 
     return windFarmBmuIds;
   } catch (error) {
@@ -99,6 +118,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
                 settlementDate: date,
                 settlementPeriod: period,
                 farmId: record.id,
+                leadPartyName: bmuLeadPartyMap?.get(record.id) || 'Unknown',
                 volume: volume.toString(),
                 payment: payment.toString(),
                 originalPrice: record.originalPrice.toString(),

@@ -6,6 +6,7 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   settlementDate: date("settlement_date").notNull(),
   settlementPeriod: integer("settlement_period").notNull(),
   farmId: text("farm_id").notNull(),
+  leadPartyName: text("lead_party_name"),  // Making it nullable initially
   volume: numeric("volume").notNull(),
   payment: numeric("payment").notNull(),
   originalPrice: numeric("original_price").notNull(),
