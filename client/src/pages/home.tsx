@@ -53,7 +53,7 @@ export default function Home() {
     queryKey: [`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, selectedLeadParty],
     queryFn: async () => {
       const url = new URL(`/api/summary/daily/${format(date, 'yyyy-MM-dd')}`, window.location.origin);
-      if (selectedLeadParty) {
+      if (selectedLeadParty && selectedLeadParty !== 'all') {
         url.searchParams.set('leadParty', selectedLeadParty);
       }
       const response = await fetch(url);
@@ -63,13 +63,24 @@ export default function Home() {
     enabled: !!date
   });
 
+  // Monthly data query - no need to filter by lead party as it's always aggregate
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
     queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
     enabled: !!date
   });
 
+  // Hourly data query - should respect the lead party filter
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
-    queryKey: [`/api/curtailment/hourly/${format(date, 'yyyy-MM-dd')}`],
+    queryKey: [`/api/curtailment/hourly/${format(date, 'yyyy-MM-dd')}`, selectedLeadParty],
+    queryFn: async () => {
+      const url = new URL(`/api/curtailment/hourly/${format(date, 'yyyy-MM-dd')}`, window.location.origin);
+      if (selectedLeadParty && selectedLeadParty !== 'all') {
+        url.searchParams.set('leadParty', selectedLeadParty);
+      }
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch hourly data');
+      return response.json();
+    },
     enabled: !!date
   });
 
