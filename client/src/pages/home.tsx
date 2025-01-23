@@ -61,7 +61,7 @@ export default function Home() {
             <Card className="border-accent/20 shadow-lg hover:shadow-xl transition-shadow duration-200">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <CalendarIcon className="h-5 w-5 text-primary" />
+                  <CalendarIcon className="h-5 w-5 text-primary animate-in fade-in-50" />
                   <span>Select Date</span>
                 </CardTitle>
               </CardHeader>
@@ -69,14 +69,24 @@ export default function Home() {
                 <Calendar
                   mode="single"
                   selected={date}
-                  onSelect={(newDate) => newDate && setDate(newDate)}
+                  onSelect={(newDate) => {
+                    if (newDate) {
+                      // Add a subtle scale animation when selecting a date
+                      const elem = document.activeElement as HTMLElement;
+                      if (elem) {
+                        elem.classList.add('scale-95');
+                        setTimeout(() => elem.classList.remove('scale-95'), 100);
+                      }
+                      setDate(newDate);
+                    }
+                  }}
                   disabled={(date) => {
                     const startDate = new Date("2023-01-01");
                     startDate.setHours(0, 0, 0, 0);
                     const currentDate = new Date();
                     return date < startDate || date > currentDate;
                   }}
-                  className="w-full"
+                  className="w-full select-none [&_.rdp-day]:transition-all [&_.rdp-day]:duration-200 [&_.rdp-day:hover]:scale-110 [&_.rdp-day:hover]:bg-primary/10 [&_.rdp-day:focus]:scale-110 [&_.rdp-day[aria-selected='true']]:!bg-primary [&_.rdp-day[aria-selected='true']]:animate-in [&_.rdp-day[aria-selected='true']]:fade-in-50 [&_.rdp-day[aria-selected='true']]:zoom-in-95 [&_.rdp-day[aria-disabled='true']]:opacity-50 [&_.rdp-nav_button]:transition-colors [&_.rdp-nav_button:hover]:bg-primary/10"
                 />
               </CardContent>
             </Card>
