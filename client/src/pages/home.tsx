@@ -130,14 +130,14 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <Select
-                value={selectedLeadParty || ''}
-                onValueChange={(value) => setSelectedLeadParty(value === '' ? null : value)}
+                value={selectedLeadParty || 'all'}
+                onValueChange={(value) => setSelectedLeadParty(value === 'all' ? null : value)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="All Farms" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Farms</SelectItem>
+                  <SelectItem value="all">All Farms</SelectItem>
                   {leadParties.map((party) => (
                     <SelectItem key={party} value={party}>
                       {party}
