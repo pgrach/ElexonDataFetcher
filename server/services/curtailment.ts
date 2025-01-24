@@ -61,7 +61,7 @@ export async function updateLeadPartyNames(): Promise<void> {
     }
 
     // Update records in batches
-    for (const [bmuId, leadPartyName] of bmuLeadPartyMap.entries()) {
+    for (const [bmuId, leadPartyName] of Array.from(bmuLeadPartyMap?.entries() ?? [])) {
       await db.update(curtailmentRecords)
         .set({ leadPartyName })
         .where(eq(curtailmentRecords.farmId, bmuId));
@@ -139,6 +139,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
               const volume = Math.abs(record.volume);
               const payment = volume * record.originalPrice;
 
+              // Use insert with onConflictDoUpdate to handle duplicates
               await db.insert(curtailmentRecords).values({
                 settlementDate: date,
                 settlementPeriod: period,
@@ -150,6 +151,21 @@ export async function processDailyCurtailment(date: string): Promise<void> {
                 finalPrice: record.finalPrice.toString(),
                 soFlag: record.soFlag,
                 cadlFlag: record.cadlFlag
+              }).onConflictDoUpdate({
+                target: [
+                  curtailmentRecords.settlementDate,
+                  curtailmentRecords.settlementPeriod,
+                  curtailmentRecords.farmId
+                ],
+                set: {
+                  volume: volume.toString(),
+                  payment: payment.toString(),
+                  originalPrice: record.originalPrice.toString(),
+                  finalPrice: record.finalPrice.toString(),
+                  soFlag: record.soFlag,
+                  cadlFlag: record.cadlFlag,
+                  leadPartyName: bmuLeadPartyMap?.get(record.id) || 'Unknown'
+                }
               });
 
               return { volume, payment };

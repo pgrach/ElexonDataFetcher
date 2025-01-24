@@ -1,5 +1,6 @@
-import { pgTable, text, serial, date, integer, numeric, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, date, integer, numeric, boolean, timestamp, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { z } from "zod";
 
 export const curtailmentRecords = pgTable("curtailment_records", {
   id: serial("id").primaryKey(),
@@ -14,6 +15,14 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   soFlag: boolean("so_flag"),
   cadlFlag: boolean("cadl_flag"),
   createdAt: timestamp("created_at").defaultNow()
+}, (table) => {
+  return {
+    uniqueSettlementRecord: unique().on(
+      table.settlementDate, 
+      table.settlementPeriod,
+      table.farmId
+    )
+  };
 });
 
 export const dailySummaries = pgTable("daily_summaries", {
@@ -40,7 +49,15 @@ export const ingestionProgress = pgTable("ingestion_progress", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
-// Export schemas for validation
+// Custom Zod schema for curtailment records
+const curtailmentRecordValidationSchema = z.object({
+  settlementPeriod: z.number().min(1).max(48),
+  volume: z.string().regex(/^\d+(\.\d+)?$/),  // Positive numeric string
+  payment: z.string().regex(/^-?\d+(\.\d+)?$/),  // Numeric string
+  originalPrice: z.string().regex(/^-?\d+(\.\d+)?$/),  // Numeric string
+  finalPrice: z.string().regex(/^-?\d+(\.\d+)?$/),  // Numeric string
+});
+
 export const insertCurtailmentRecordSchema = createInsertSchema(curtailmentRecords);
 export const selectCurtailmentRecordSchema = createSelectSchema(curtailmentRecords);
 export const insertDailySummarySchema = createInsertSchema(dailySummaries);
@@ -50,7 +67,6 @@ export const selectMonthlySummarySchema = createSelectSchema(monthlySummaries);
 export const insertIngestionProgressSchema = createInsertSchema(ingestionProgress);
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
 
-// Export types for TypeScript
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
 export type DailySummary = typeof dailySummaries.$inferSelect;
