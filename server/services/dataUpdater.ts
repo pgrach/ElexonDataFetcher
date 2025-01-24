@@ -1,5 +1,5 @@
 import { db } from "@db";
-import { format, subMinutes } from "date-fns";
+import { format, startOfToday, subMinutes } from "date-fns";
 import { eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { fetchBidsOffers } from "./elexon";
@@ -7,7 +7,7 @@ import { curtailmentRecords } from "@db/schema";
 import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
 
-const UPDATE_INTERVAL = 30 * 60 * 1000; // 30 minutes in milliseconds
+const UPDATE_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
 let isUpdating = false;
 
 async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
@@ -20,6 +20,38 @@ async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
   };
 }
 
+async function hasDataChanged(records: ElexonBidOffer[], date: string, period: number): Promise<boolean> {
+  const existingRecords = await db
+    .select({
+      farmId: curtailmentRecords.farmId,
+      volume: curtailmentRecords.volume,
+      payment: curtailmentRecords.payment
+    })
+    .from(curtailmentRecords)
+    .where(
+      sql`${curtailmentRecords.settlementDate} = ${date} AND 
+          ${curtailmentRecords.settlementPeriod} = ${period}`
+    );
+
+  if (existingRecords.length !== records.length) return true;
+
+  const newRecordsMap = new Map(
+    records.map(r => [
+      r.id,
+      {
+        volume: Math.abs(r.volume).toString(),
+        payment: (Math.abs(r.volume) * r.originalPrice).toString()
+      }
+    ])
+  );
+
+  return existingRecords.some(record => {
+    const newRecord = newRecordsMap.get(record.farmId);
+    if (!newRecord) return true;
+    return newRecord.volume !== record.volume || newRecord.payment !== record.payment;
+  });
+}
+
 async function updateLatestData() {
   if (isUpdating) {
     console.log("Update already in progress, skipping...");
@@ -28,28 +60,36 @@ async function updateLatestData() {
 
   isUpdating = true;
   try {
-    const { date, period } = await getCurrentPeriod();
+    const { date, period: currentPeriod } = await getCurrentPeriod();
+    console.log(`Starting data refresh for ${date} up to period ${currentPeriod}`);
 
-    // Fetch data for current and previous period to ensure no gaps
-    const previousPeriod = period === 1 ? 48 : period - 1;
-    const previousDate = period === 1 ? 
-      format(subMinutes(new Date(), 30), 'yyyy-MM-dd') : 
-      date;
+    let dataChanged = false;
 
-    console.log(`Fetching data for ${date} P${period} and ${previousDate} P${previousPeriod}`);
+    // Fetch all periods up to current for today
+    for (let period = 1; period <= currentPeriod; period++) {
+      try {
+        const records = await fetchBidsOffers(date, period);
 
-    const [currentRecords, previousRecords] = await Promise.all([
-      fetchBidsOffers(date, period),
-      fetchBidsOffers(previousDate, previousPeriod)
-    ]);
+        // Check if data has changed from what we have stored
+        const changed = await hasDataChanged(records, date, period);
+        if (changed) {
+          console.log(`Changes detected for ${date} P${period}, updating records...`);
+          dataChanged = true;
+        }
+      } catch (error) {
+        console.error(`Error fetching data for ${date} P${period}:`, error);
+        continue; // Continue with next period even if one fails
+      }
+    }
 
-    // Process both dates through the main processDailyCurtailment function
-    await Promise.all([
-      processDailyCurtailment(date),
-      previousDate !== date && processDailyCurtailment(previousDate)
-    ]);
+    // If any changes were detected, re-run the daily aggregation
+    if (dataChanged) {
+      console.log(`Re-running daily aggregation for ${date} due to data changes`);
+      await processDailyCurtailment(date);
+    } else {
+      console.log(`No changes detected for ${date}, skipping aggregation`);
+    }
 
-    console.log(`Successfully updated data for ${date} P${period}`);
   } catch (error) {
     console.error("Error updating latest data:", error);
   } finally {
