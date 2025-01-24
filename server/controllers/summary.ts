@@ -157,11 +157,12 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
 
     console.log(`Fetching hourly curtailment for date: ${date}, leadParty: ${leadParty || 'all'}`);
 
+    // Modified query to handle duplicates by using DISTINCT ON
     const farmPeriodTotals = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
         volume: sql<string>`
-          SUM(
+          SUM(DISTINCT
             CASE 
               WHEN ${curtailmentRecords.volume}::numeric > 0
               AND (${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true)

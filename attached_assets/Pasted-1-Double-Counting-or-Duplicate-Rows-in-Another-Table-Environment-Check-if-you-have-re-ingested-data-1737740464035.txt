@@ -1,0 +1,66 @@
+1. Double-Counting or Duplicate Rows in Another Table/Environment
+Check if you have re-ingested data multiple times.
+
+Sometimes the same record can appear more than once in your curtailmentRecords table if the ingestion job was run repeatedly for the same date.
+If you are running the query in one database (which shows single instances), but your code/aggregator is pointing to a different database (or schema) that includes duplicates, you’ll see different sums.
+Are you summing the same row multiple times?
+
+For example, if there is a JOIN somewhere else that multiplies the record count.
+Or if each row has soFlag = true and cadlFlag = true, but the code is inadvertently adding the volume once for each flag (less likely with your CASE, but worth confirming).
+Verify which environment your server is reading from.
+
+Make sure the “dev” vs. “prod” (or local) database is the same one you’re querying manually.
+2. “Hidden” Rows Not in Your CSV Listing
+Even though the CSV you pasted shows ~40–50 rows for each period, double-check that:
+
+You have not truncated the output (i.e. more rows exist).
+Some rows might have negative or zero volumes that you did not list if you only included positive volumes. The aggregator might do a separate logic step (though normally that reduces totals, not increases them).
+Some rows might come from other lead parties or appear with slightly different dates/times/time zones (e.g., 2024-01-24 00:00 UTC vs. 2024-01-24 local).
+3. soFlag and cadlFlag Logic
+Your code has:
+
+sql
+Copy
+SUM(
+  CASE 
+    WHEN volume::numeric > 0
+         AND (soFlag = true OR cadlFlag = true)
+    THEN volume::numeric
+    ELSE 0
+  END
+)
+If you run a plain SELECT settlement_period, volume, lead_party_name without filtering on soFlag or cadlFlag, you will see rows that may not actually be counted in the aggregator.
+
+Conversely, if your aggregator is capturing every row (maybe you changed the CASE logic?), it could include more than you expect.
+
+Check a direct query to see only rows where (soFlag = TRUE OR cadlFlag = TRUE):
+
+sql
+Copy
+SELECT settlement_period,
+       volume,
+       lead_party_name,
+       soFlag,
+       cadlFlag
+  FROM curtailment_records
+ WHERE settlement_date = '2024-01-24'
+   AND settlement_period IN (1, 2, 3, 4, 5)
+   AND volume > 0
+   AND (soFlag = TRUE OR cadlFlag = TRUE)
+ ORDER BY settlement_period, lead_party_name;
+Then compare the sum of these volumes to the aggregator logs.
+
+4. Potential Unit Conversions
+Although your rows are in single/double digits, you mentioned the code logs “1585.18 MWh” for Period 1. One explanation is:
+
+The aggregator might be multiplying the sum by some factor (e.g., 30 minutes → 0.5 hour → you’d normally multiply MW × 0.5 to get MWh, but maybe it’s reversed?).
+Or you’re combining data for 24 hours in some way.
+However, your raw data looks already to be in MWh scale (e.g., “29.325” for a half hour is a plausible MWh chunk). Usually, a mismatch goes in the other direction (kWh vs. MWh). But keep it on your debugging list in case there’s a half-hour => hour multiplier in the ingestion code.
+
+5. Aggregator Summing Across Multiple Lead Parties Correctly?
+Notice that for each settlement_period, you have many different lead_party_name entries: Moray Offshore Wind East, Seagreen Wind Energy, Corriegarth, etc. Summing them all up can push the number higher. A rough sum of all lines for Period 1 in your CSV is around ~900–1,000 total. That is still below 1,585.
+
+If your aggregator logs ~1,585 for Period 1, it could be:
+
+Summing the same data a second time from somewhere else (e.g., a second table or second run).
+Possibly including rows from more periods than 1 (or from more dates) if the WHERE filter is off.
