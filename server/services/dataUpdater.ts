@@ -3,7 +3,7 @@ import { format, subMinutes } from "date-fns";
 import { eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { fetchBidsOffers } from "./elexon";
-import { curtailmentRecords, dailySummaries } from "@db/schema";
+import { curtailmentRecords } from "@db/schema";
 import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
 
@@ -44,20 +44,12 @@ async function updateLatestData() {
     ]);
 
     // Process both dates through the main processDailyCurtailment function
-    // Ensure we update the daily summaries for both dates
     await Promise.all([
       processDailyCurtailment(date),
       previousDate !== date && processDailyCurtailment(previousDate)
     ]);
 
     console.log(`Successfully updated data for ${date} P${period}`);
-
-    // Verify daily summary was updated
-    const dailySummary = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, date)
-    });
-
-    console.log('Updated daily summary:', dailySummary);
   } catch (error) {
     console.error("Error updating latest data:", error);
   } finally {
@@ -67,8 +59,6 @@ async function updateLatestData() {
 
 export function startDataUpdateService() {
   console.log("Starting real-time data update service...");
-  // Run immediately on startup
   updateLatestData().catch(console.error);
-  // Then set up interval
   setInterval(updateLatestData, UPDATE_INTERVAL);
 }
