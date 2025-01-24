@@ -39,10 +39,6 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
   let requestCount = 0;
 
   try {
-    // Delete existing records for clean re-ingestion
-    await db.delete(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, dateStr));
-
     console.log(`Processing ${dateStr} (Attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
     trackApiRequest();
     requestCount++;

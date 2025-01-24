@@ -14,7 +14,13 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   soFlag: boolean("so_flag"),
   cadlFlag: boolean("cadl_flag"),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => ({
+  // Add unique constraint to prevent duplicate records
+  uniqueSettlement: {
+    name: "unique_settlement_record",
+    columns: [table.settlementDate, table.settlementPeriod, table.farmId]
+  }
+}));
 
 export const dailySummaries = pgTable("daily_summaries", {
   summaryDate: date("summary_date").primaryKey(),
