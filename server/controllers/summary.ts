@@ -157,11 +157,12 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
 
     console.log(`Fetching hourly curtailment for date: ${date}, leadParty: ${leadParty || 'all'}`);
 
+    // Modified query to properly handle settlement period data
     const farmPeriodTotals = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
         volume: sql<string>`
-          SUM(
+          AVG(
             CASE 
               WHEN ${curtailmentRecords.volume}::numeric > 0
               AND (${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true)
@@ -179,7 +180,8 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
             )
           : eq(curtailmentRecords.settlementDate, date)
       )
-      .groupBy(curtailmentRecords.settlementPeriod);
+      .groupBy(curtailmentRecords.settlementPeriod)
+      .orderBy(curtailmentRecords.settlementPeriod);
 
     console.log('Settlement period totals:', 
       farmPeriodTotals.map(r => ({
