@@ -155,22 +155,19 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       });
     }
 
+    console.log(`Fetching hourly curtailment for date: ${date}, leadParty: ${leadParty || 'all'}`);
+
     const farmPeriodTotals = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
-        volume: sql<string>`SUM(
-          CASE 
-            WHEN (${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true)
-            AND ${curtailmentRecords.volume}::numeric > 0
-            THEN ${curtailmentRecords.volume}::numeric 
-            ELSE 0 
-          END / 
-          CASE
-            WHEN (${curtailmentRecords.soFlag} = true AND ${curtailmentRecords.cadlFlag} = true)
-            THEN 2
-            ELSE 1
-          END
-        )`
+        volume: sql<string>`
+          SUM(
+            CASE 
+              WHEN ${curtailmentRecords.volume}::numeric > 0
+              THEN ${curtailmentRecords.volume}::numeric
+              ELSE 0 
+            END
+          )`
       })
       .from(curtailmentRecords)
       .where(
@@ -182,6 +179,13 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
           : eq(curtailmentRecords.settlementDate, date)
       )
       .groupBy(curtailmentRecords.settlementPeriod);
+
+    console.log('Settlement period totals:', 
+      farmPeriodTotals.map(r => ({
+        period: r.settlementPeriod,
+        volume: Number(r.volume).toFixed(2)
+      }))
+    );
 
     // Initialize 24-hour array with zeros
     const hourlyResults = Array.from({ length: 24 }, (_, i) => ({
@@ -196,6 +200,7 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
         const hour = Math.floor((period - 1) / 2);
         if (hour >= 0 && hour < 24) {
           hourlyResults[hour].curtailedEnergy += Number(record.volume);
+          console.log(`Hour ${hour}:00 - Added volume ${Number(record.volume).toFixed(2)} MWh from period ${period}`);
         }
       }
     });
@@ -215,6 +220,11 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
         }
       });
     }
+
+    console.log('Final hourly results:', 
+      hourlyResults.filter(r => r.curtailedEnergy > 0)
+        .map(r => `${r.hour}: ${r.curtailedEnergy.toFixed(2)} MWh`)
+    );
 
     res.json(hourlyResults);
   } catch (error) {
