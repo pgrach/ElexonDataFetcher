@@ -164,6 +164,7 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
           SUM(
             CASE 
               WHEN ${curtailmentRecords.volume}::numeric > 0
+              AND (${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true)
               THEN ${curtailmentRecords.volume}::numeric
               ELSE 0 
             END
