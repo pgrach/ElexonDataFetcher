@@ -37,23 +37,6 @@ export async function getDailySummary(req: Request, res: Response) {
       });
     }
 
-    // Base query for curtailment records
-    let query = db
-      .select({
-        totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
-        totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
-      })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date));
-
-    // Add lead party filter if specified
-    if (leadParty && leadParty !== 'all') {
-      query = query.where(eq(curtailmentRecords.leadPartyName, leadParty as string));
-    }
-
-    const recordTotals = await query;
-    console.log('Curtailment records totals:', recordTotals[0]);
-
     // Get the daily summary (aggregate only)
     const summary = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, date)
@@ -61,23 +44,49 @@ export async function getDailySummary(req: Request, res: Response) {
 
     console.log('Daily summary:', summary);
 
-    if (!summary && (!recordTotals[0] || !recordTotals[0].totalVolume)) {
-      return res.status(404).json({
-        error: "No data available for this date"
+    // If no lead party filter, return data directly from daily_summaries
+    if (!leadParty) {
+      if (!summary) {
+        return res.status(404).json({
+          error: "No data available for this date"
+        });
+      }
+
+      return res.json({
+        date,
+        totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
+        totalPayment: Math.abs(Number(summary.totalPayment)),
+        leadParty: null
       });
     }
 
-    // Return the appropriate data based on whether a lead party filter was applied
+    // For filtered requests, calculate from curtailment_records
+    const recordTotals = await db
+      .select({
+        totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
+        totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+      })
+      .from(curtailmentRecords)
+      .where(
+        and(
+          eq(curtailmentRecords.settlementDate, date),
+          eq(curtailmentRecords.leadPartyName, leadParty as string)
+        )
+      );
+
+    if (!recordTotals[0] || !recordTotals[0].totalVolume) {
+      return res.status(404).json({
+        error: "No data available for this date and lead party"
+      });
+    }
+
     res.json({
       date,
-      totalCurtailedEnergy: leadParty ?
-        Number(recordTotals[0]?.totalVolume || 0) :
-        Number(summary?.totalCurtailedEnergy || 0),
-      totalPayment: leadParty ?
-        Math.abs(Number(recordTotals[0]?.totalPayment || 0)) :
-        Math.abs(Number(summary?.totalPayment || 0)),
-      leadParty: leadParty || null
+      totalCurtailedEnergy: Number(recordTotals[0].totalVolume),
+      totalPayment: Math.abs(Number(recordTotals[0].totalPayment)),
+      leadParty
     });
+
   } catch (error) {
     console.error('Error fetching daily summary:', error);
     res.status(500).json({
