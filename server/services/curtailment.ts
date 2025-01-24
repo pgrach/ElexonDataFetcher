@@ -28,7 +28,6 @@ async function loadWindFarmIds(): Promise<Set<string>> {
           .map((bmu: any) => bmu.elexonBmUnit)
       );
 
-      // Initialize the lead party mapping
       bmuLeadPartyMap = new Map(
         bmuMapping
           .filter((bmu: any) => bmu.fuelType === "WIND")
@@ -36,8 +35,6 @@ async function loadWindFarmIds(): Promise<Set<string>> {
       );
 
       console.log(`Found ${windFarmBmuIds.size} wind farm BMUs`);
-      console.log('Sample lead party mappings:', 
-        Array.from(bmuLeadPartyMap.entries()).slice(0, 3));
     }
 
     if (!windFarmBmuIds || !bmuLeadPartyMap) {
@@ -47,31 +44,6 @@ async function loadWindFarmIds(): Promise<Set<string>> {
     return windFarmBmuIds;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
-    throw error;
-  }
-}
-
-// Function to update existing records with lead party names
-export async function updateLeadPartyNames(): Promise<void> {
-  try {
-    await loadWindFarmIds(); // Ensure mappings are loaded
-
-    if (!bmuLeadPartyMap) {
-      throw new Error('BMU lead party mapping not initialized');
-    }
-
-    // Update records in batches
-    for (const [bmuId, leadPartyName] of Array.from(bmuLeadPartyMap?.entries() ?? [])) {
-      await db.update(curtailmentRecords)
-        .set({ leadPartyName })
-        .where(eq(curtailmentRecords.farmId, bmuId));
-
-      console.log(`Updated lead party name for BMU ${bmuId} to ${leadPartyName}`);
-    }
-
-    console.log('Completed updating lead party names');
-  } catch (error) {
-    console.error('Error updating lead party names:', error);
     throw error;
   }
 }
@@ -91,6 +63,7 @@ async function updateMonthlySummary(date: string): Promise<void> {
     const totals = monthlyTotals[0];
 
     if (!totals.totalCurtailedEnergy || !totals.totalPayment) {
+      console.log(`No data found for monthly summary ${yearMonth}`);
       return;
     }
 
@@ -108,6 +81,7 @@ async function updateMonthlySummary(date: string): Promise<void> {
       }
     });
 
+    console.log(`Updated monthly summary for ${yearMonth}`);
   } catch (error) {
     console.error(`Error updating monthly summary for ${yearMonth}:`, error);
     throw error;
@@ -119,6 +93,8 @@ export async function processDailyCurtailment(date: string): Promise<void> {
   const validWindFarmIds = await loadWindFarmIds();
   let totalVolume = 0;
   let totalPayment = 0;
+
+  console.log(`Processing daily curtailment for ${date}`);
 
   for (let startPeriod = 1; startPeriod <= 48; startPeriod += BATCH_SIZE) {
     const endPeriod = Math.min(startPeriod + BATCH_SIZE - 1, 48);
@@ -134,12 +110,13 @@ export async function processDailyCurtailment(date: string): Promise<void> {
             validWindFarmIds.has(record.id)
           );
 
+          console.log(`Found ${validRecords.length} valid records for period ${period}`);
+
           const periodResults = await Promise.all(
             validRecords.map(async record => {
               const volume = Math.abs(record.volume);
               const payment = volume * record.originalPrice;
 
-              // Use insert with onConflictDoUpdate to handle duplicates
               await db.insert(curtailmentRecords).values({
                 settlementDate: date,
                 settlementPeriod: period,
@@ -172,10 +149,13 @@ export async function processDailyCurtailment(date: string): Promise<void> {
             })
           );
 
-          return periodResults.reduce((acc, curr) => ({
+          const periodTotal = periodResults.reduce((acc, curr) => ({
             volume: acc.volume + curr.volume,
             payment: acc.payment + curr.payment
           }), { volume: 0, payment: 0 });
+
+          console.log(`Period ${period} totals: ${periodTotal.volume} MWh, £${periodTotal.payment}`);
+          return periodTotal;
         } catch (error) {
           console.error(`Error processing period ${period} for date ${date}:`, error);
           return { volume: 0, payment: 0 };
@@ -189,10 +169,13 @@ export async function processDailyCurtailment(date: string): Promise<void> {
       totalPayment += result.payment;
     }
 
+    console.log(`Batch progress - Total volume: ${totalVolume} MWh, Total payment: £${totalPayment}`);
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   try {
+    console.log(`Updating daily summary for ${date}: ${totalVolume} MWh, £${totalPayment}`);
+
     await db.insert(dailySummaries).values({
       summaryDate: date,
       totalCurtailedEnergy: totalVolume.toString(),
@@ -206,9 +189,34 @@ export async function processDailyCurtailment(date: string): Promise<void> {
     });
 
     await updateMonthlySummary(date);
+    console.log(`Successfully updated summaries for ${date}`);
 
   } catch (error) {
     console.error(`Error updating daily summary for ${date}:`, error);
+    throw error;
+  }
+}
+
+export async function updateLeadPartyNames(): Promise<void> {
+  try {
+    await loadWindFarmIds(); // Ensure mappings are loaded
+
+    if (!bmuLeadPartyMap) {
+      throw new Error('BMU lead party mapping not initialized');
+    }
+
+    // Update records in batches
+    for (const [bmuId, leadPartyName] of Array.from(bmuLeadPartyMap?.entries() ?? [])) {
+      await db.update(curtailmentRecords)
+        .set({ leadPartyName })
+        .where(eq(curtailmentRecords.farmId, bmuId));
+
+      console.log(`Updated lead party name for BMU ${bmuId} to ${leadPartyName}`);
+    }
+
+    console.log('Completed updating lead party names');
+  } catch (error) {
+    console.error('Error updating lead party names:', error);
     throw error;
   }
 }
