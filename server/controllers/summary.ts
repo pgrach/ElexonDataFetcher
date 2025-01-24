@@ -157,16 +157,18 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
 
     console.log(`Fetching hourly curtailment for date: ${date}, leadParty: ${leadParty || 'all'}`);
 
-    // Simplified query to get settlement period totals
     const farmPeriodTotals = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
-        volume: sql<string>`SUM(CASE 
-          WHEN ${curtailmentRecords.volume}::numeric > 0 
-          AND (${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true)
-          THEN ${curtailmentRecords.volume}::numeric
-          ELSE 0 
-        END)`
+        volume: sql<string>`
+          SUM(
+            CASE 
+              WHEN ${curtailmentRecords.volume}::numeric > 0
+              AND (${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true)
+              THEN ${curtailmentRecords.volume}::numeric
+              ELSE 0 
+            END
+          )`
       })
       .from(curtailmentRecords)
       .where(
@@ -177,8 +179,7 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
             )
           : eq(curtailmentRecords.settlementDate, date)
       )
-      .groupBy(curtailmentRecords.settlementPeriod)
-      .orderBy(curtailmentRecords.settlementPeriod);
+      .groupBy(curtailmentRecords.settlementPeriod);
 
     console.log('Settlement period totals:', 
       farmPeriodTotals.map(r => ({
@@ -199,9 +200,8 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
         const period = Number(record.settlementPeriod);
         const hour = Math.floor((period - 1) / 2);
         if (hour >= 0 && hour < 24) {
-          const volumeValue = Number(record.volume) / 2; // Divide by 2 to split between hours properly
-          hourlyResults[hour].curtailedEnergy += volumeValue;
-          console.log(`Hour ${hour}:00 - Added volume ${volumeValue.toFixed(2)} MWh from period ${period}`);
+          hourlyResults[hour].curtailedEnergy += Number(record.volume);
+          console.log(`Hour ${hour}:00 - Added volume ${Number(record.volume).toFixed(2)} MWh from period ${period}`);
         }
       }
     });
