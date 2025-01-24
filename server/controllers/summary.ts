@@ -163,9 +163,9 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
         volume: sql<string>`
           SUM(
             CASE 
-              WHEN ${curtailmentRecords.volume}::numeric < 0  -- Changed to < 0
+              WHEN ${curtailmentRecords.volume}::numeric > 0
               AND (${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true)
-              THEN ABS(${curtailmentRecords.volume}::numeric)  -- Added ABS to make positive
+              THEN ${curtailmentRecords.volume}::numeric
               ELSE 0 
             END
           )`
@@ -179,10 +179,9 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
             )
           : eq(curtailmentRecords.settlementDate, date)
       )
-      .groupBy(curtailmentRecords.settlementPeriod)
-      .orderBy(curtailmentRecords.settlementPeriod);
+      .groupBy(curtailmentRecords.settlementPeriod);
 
-    console.log('Raw settlement period totals:', 
+    console.log('Settlement period totals:', 
       farmPeriodTotals.map(r => ({
         period: r.settlementPeriod,
         volume: Number(r.volume).toFixed(2)
