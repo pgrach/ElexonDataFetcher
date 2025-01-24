@@ -25,7 +25,10 @@ async function hasDataChanged(records: ElexonBidOffer[], date: string, period: n
     .select({
       farmId: curtailmentRecords.farmId,
       volume: curtailmentRecords.volume,
-      payment: curtailmentRecords.payment
+      payment: curtailmentRecords.payment,
+      originalPrice: curtailmentRecords.originalPrice,
+      soFlag: curtailmentRecords.soFlag,
+      cadlFlag: curtailmentRecords.cadlFlag
     })
     .from(curtailmentRecords)
     .where(
@@ -40,7 +43,10 @@ async function hasDataChanged(records: ElexonBidOffer[], date: string, period: n
       r.id,
       {
         volume: Math.abs(r.volume).toString(),
-        payment: (Math.abs(r.volume) * r.originalPrice).toString()
+        payment: (Math.abs(r.volume) * r.originalPrice).toString(),
+        originalPrice: r.originalPrice.toString(),
+        soFlag: r.soFlag,
+        cadlFlag: r.cadlFlag
       }
     ])
   );
@@ -48,8 +54,56 @@ async function hasDataChanged(records: ElexonBidOffer[], date: string, period: n
   return existingRecords.some(record => {
     const newRecord = newRecordsMap.get(record.farmId);
     if (!newRecord) return true;
-    return newRecord.volume !== record.volume || newRecord.payment !== record.payment;
+
+    return newRecord.volume !== record.volume ||
+           newRecord.payment !== record.payment ||
+           newRecord.originalPrice !== record.originalPrice ||
+           newRecord.soFlag !== record.soFlag ||
+           newRecord.cadlFlag !== record.cadlFlag;
   });
+}
+
+async function upsertRecords(records: ElexonBidOffer[], date: string, period: number): Promise<void> {
+  for (const record of records) {
+    const volume = Math.abs(record.volume);
+    const payment = volume * record.originalPrice;
+
+    console.log(`Upserting record for ${date} P${period} ${record.id}: ${volume} MWh, £${payment}`);
+
+    try {
+      await db.insert(curtailmentRecords)
+        .values({
+          settlementDate: date,
+          settlementPeriod: period,
+          farmId: record.id,
+          leadPartyName: record.leadPartyName || 'Unknown',
+          volume: volume.toString(),
+          payment: payment.toString(),
+          originalPrice: record.originalPrice.toString(),
+          finalPrice: record.finalPrice.toString(),
+          soFlag: record.soFlag,
+          cadlFlag: record.cadlFlag
+        })
+        .onConflictDoUpdate({
+          target: [
+            curtailmentRecords.settlementDate,
+            curtailmentRecords.settlementPeriod,
+            curtailmentRecords.farmId
+          ],
+          set: {
+            volume: volume.toString(),
+            payment: payment.toString(),
+            originalPrice: record.originalPrice.toString(),
+            finalPrice: record.finalPrice.toString(),
+            soFlag: record.soFlag,
+            cadlFlag: record.cadlFlag,
+            updatedAt: new Date()
+          }
+        });
+    } catch (error) {
+      console.error(`Error upserting record for ${record.id}:`, error);
+    }
+  }
 }
 
 async function updateLatestData() {
@@ -74,10 +128,13 @@ async function updateLatestData() {
         const changed = await hasDataChanged(records, date, period);
         if (changed) {
           console.log(`Changes detected for ${date} P${period}, updating records...`);
+          await upsertRecords(records, date, period);
           dataChanged = true;
+        } else {
+          console.log(`No changes detected for ${date} P${period}`);
         }
       } catch (error) {
-        console.error(`Error fetching data for ${date} P${period}:`, error);
+        console.error(`Error processing period ${period} for ${date}:`, error);
         continue; // Continue with next period even if one fails
       }
     }
