@@ -162,11 +162,12 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
         volume: sql<string>`
-          AVG(
+          SUM(
             CASE 
               WHEN ${curtailmentRecords.volume}::numeric > 0
               AND (${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true)
-              THEN ${curtailmentRecords.volume}::numeric
+              THEN ${curtailmentRecords.volume}::numeric / 
+                COUNT(DISTINCT ${curtailmentRecords.farmId}) OVER (PARTITION BY ${curtailmentRecords.settlementPeriod})
               ELSE 0 
             END
           )`
