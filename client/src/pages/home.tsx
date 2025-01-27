@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building } from "lucide-react";
@@ -54,53 +54,41 @@ export default function Home() {
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
-      try {
-        // Validate date before making the request
-        if (!isValid(date)) {
-          throw new Error('Invalid date selected');
-        }
-
-        const url = new URL(`/api/summary/daily/${formattedDate}`, window.location.origin);
-        if (selectedLeadParty && selectedLeadParty !== 'all') {
-          url.searchParams.set('leadParty', selectedLeadParty);
-        }
-        const response = await fetch(url);
-        const text = await response.text();
-
-        if (!response.ok) {
-          console.error('API Error Response:', {
-            status: response.status,
-            statusText: response.statusText,
-            body: text
-          });
-          throw new Error(`API Error: ${response.status} - ${text}`);
-        }
-
-        try {
-          return JSON.parse(text);
-        } catch (parseError) {
-          console.error('JSON Parse Error:', parseError, 'Raw response:', text);
-          throw new Error('Failed to parse API response');
-        }
-      } catch (error) {
-        console.error('Daily data fetch error:', error);
-        throw error;
+      // Validate date before making the request
+      if (!isValid(date)) {
+        throw new Error('Invalid date selected');
       }
+
+      const url = new URL(`/api/summary/daily/${formattedDate}`, window.location.origin);
+      if (selectedLeadParty && selectedLeadParty !== 'all') {
+        url.searchParams.set('leadParty', selectedLeadParty);
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      return response.json();
     },
-    enabled: !!formattedDate
+    enabled: !!formattedDate && isValid(date)
   });
 
 
   // Monthly data query remains unchanged
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
     queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
-    enabled: !!date
+    enabled: !!date && isValid(date)
   });
 
   // Fetch hourly data with improved error handling
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
+      if (!isValid(date)) {
+        throw new Error('Invalid date selected');
+      }
+
       const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
       if (selectedLeadParty) {
         url.searchParams.set('leadParty', selectedLeadParty);
@@ -111,7 +99,7 @@ export default function Home() {
       }
       return response.json();
     },
-    enabled: !!formattedDate
+    enabled: !!formattedDate && isValid(date)
   });
 
   // Function to check if a given hour is in the future
