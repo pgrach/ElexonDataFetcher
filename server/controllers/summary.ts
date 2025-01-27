@@ -329,10 +329,13 @@ export async function getYearlySummary(req: Request, res: Response) {
     // If no leadParty, calculate from monthly_summaries for better performance
     const yearTotals = await db
       .select({
-        totalCurtailedEnergy: sql<string>`COALESCE(SUM(CASE WHEN ${monthlySummaries.yearMonth} LIKE ${year + '-%'} THEN ${monthlySummaries.totalCurtailedEnergy}::numeric ELSE 0 END), 0)`,
-        totalPayment: sql<string>`COALESCE(SUM(CASE WHEN ${monthlySummaries.yearMonth} LIKE ${year + '-%'} THEN ${monthlySummaries.totalPayment}::numeric ELSE 0 END), 0)`
+        totalCurtailedEnergy: sql<string>`COALESCE(SUM(${monthlySummaries.totalCurtailedEnergy}::numeric), 0)`,
+        totalPayment: sql<string>`COALESCE(SUM(${monthlySummaries.totalPayment}::numeric), 0)`
       })
-      .from(monthlySummaries);
+      .from(monthlySummaries)
+      .where(
+        sql`date_trunc('year', (${monthlySummaries.yearMonth} || '-01')::date) = date_trunc('year', ${year || '2023'}-01-01::date)`
+      );
 
     console.log(`Year ${year} totals from monthly summaries:`, yearTotals[0]);
 
