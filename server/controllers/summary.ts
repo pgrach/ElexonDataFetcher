@@ -245,9 +245,6 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
 
         if (hour >= 0 && hour < 24) {
           const volume = Number(record.totalVolume);
-          if (hour === 0) {
-            console.log(`Period ${period}: Adding ${volume} MWh to hour 0`);
-          }
           hourlyResults[hour].curtailedEnergy += volume;
         }
       }
@@ -273,7 +270,6 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       result.curtailedEnergy = Number(result.curtailedEnergy.toFixed(2));
     });
 
-    console.log(`Hour 0 total: ${hourlyResults[0].curtailedEnergy} MWh`);
     res.json(hourlyResults);
 
   } catch (error) {
@@ -306,12 +302,10 @@ export async function getYearlySummary(req: Request, res: Response) {
         .from(curtailmentRecords)
         .where(
           and(
-            sql`date_trunc('year', ${curtailmentRecords.settlementDate}::date) = date_trunc('year', ${year}-01-01::date)`,
+            sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}::date) = ${parseInt(year)}`,
             eq(curtailmentRecords.leadPartyName, leadParty as string)
           )
         );
-
-      console.log(`Year ${year} farm totals for ${leadParty}:`, farmTotals[0]);
 
       if (!farmTotals[0] || !farmTotals[0].totalCurtailedEnergy) {
         return res.status(404).json({
@@ -333,9 +327,7 @@ export async function getYearlySummary(req: Request, res: Response) {
         totalPayment: sql<string>`COALESCE(SUM(${dailySummaries.totalPayment}::numeric), 0)`
       })
       .from(dailySummaries)
-      .where(sql`date_trunc('year', ${dailySummaries.summaryDate}::date) = date_trunc('year', ${year}-01-01::date)`);
-
-    console.log(`Year ${year} totals from daily summaries:`, yearTotals[0]);
+      .where(sql`EXTRACT(YEAR FROM ${dailySummaries.summaryDate}::date) = ${parseInt(year)}`);
 
     if (!yearTotals[0]) {
       return res.status(404).json({
