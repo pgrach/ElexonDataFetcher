@@ -155,8 +155,6 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       });
     }
 
-    console.log(`Fetching hourly curtailment for date: ${date}, leadParty: ${leadParty || 'all'}`);
-
     // Get period totals with volume sum
     const farmPeriodTotals = await db
       .select({
@@ -175,20 +173,13 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       .groupBy(curtailmentRecords.settlementPeriod)
       .orderBy(curtailmentRecords.settlementPeriod);
 
-    console.log('Raw settlement period totals:', 
-      farmPeriodTotals.map(r => ({
-        period: r.settlementPeriod,
-        volume: Number(r.volume).toFixed(2)
-      }))
-    );
-
     // Initialize 24-hour array with zeros
     const hourlyResults = Array.from({ length: 24 }, (_, i) => ({
       hour: `${i.toString().padStart(2, '0')}:00`,
       curtailedEnergy: 0
     }));
 
-    // Map periods to hours (2 periods per hour)
+    // Map settlement periods to hours (2 periods per hour)
     // Settlement periods 1-2 → Hour 0, 3-4 → Hour 1, etc.
     farmPeriodTotals.forEach(record => {
       if (record.settlementPeriod && record.volume) {
@@ -196,14 +187,9 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
         // Calculate hour: periods 1-2 go to hour 0, 3-4 to hour 1, etc.
         const hour = Math.floor((period - 1) / 2);
 
-        // Add the volume to the corresponding hour
         if (hour >= 0 && hour < 24) {
           const volume = Number(record.volume);
           hourlyResults[hour].curtailedEnergy += volume;
-
-          // Debug logging
-          console.log(`Hour ${hour}:00 - Added volume ${volume.toFixed(2)} MWh from period ${period}`);
-          console.log(`Hour ${hour}:00 - Running total: ${hourlyResults[hour].curtailedEnergy.toFixed(2)} MWh`);
         }
       }
     });
@@ -223,13 +209,6 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
         }
       });
     }
-
-    // Log final hourly totals for debugging
-    console.log('Final hourly results:', 
-      hourlyResults
-        .filter(r => r.curtailedEnergy > 0)
-        .map(r => `${r.hour}: ${r.curtailedEnergy.toFixed(2)} MWh`)
-    );
 
     res.json(hourlyResults);
   } catch (error) {
