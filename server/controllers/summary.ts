@@ -311,6 +311,8 @@ export async function getYearlySummary(req: Request, res: Response) {
           )
         );
 
+      console.log(`Year ${year} farm totals for ${leadParty}:`, farmTotals[0]);
+
       if (!farmTotals[0] || !farmTotals[0].totalCurtailedEnergy) {
         return res.status(404).json({
           error: "No data available for this year and lead party"
@@ -327,13 +329,14 @@ export async function getYearlySummary(req: Request, res: Response) {
     // If no leadParty, calculate from monthly_summaries for better performance
     const yearTotals = await db
       .select({
-        totalCurtailedEnergy: sql<string>`SUM(${monthlySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`SUM(${monthlySummaries.totalPayment}::numeric)`
+        totalCurtailedEnergy: sql<string>`COALESCE(SUM(CASE WHEN ${monthlySummaries.yearMonth} LIKE ${year + '-%'} THEN ${monthlySummaries.totalCurtailedEnergy}::numeric ELSE 0 END), 0)`,
+        totalPayment: sql<string>`COALESCE(SUM(CASE WHEN ${monthlySummaries.yearMonth} LIKE ${year + '-%'} THEN ${monthlySummaries.totalPayment}::numeric ELSE 0 END), 0)`
       })
-      .from(monthlySummaries)
-      .where(sql`substring(${monthlySummaries.yearMonth}, 1, 4) = ${year}`);
+      .from(monthlySummaries);
 
-    if (!yearTotals[0] || !yearTotals[0].totalCurtailedEnergy) {
+    console.log(`Year ${year} totals from monthly summaries:`, yearTotals[0]);
+
+    if (!yearTotals[0]) {
       return res.status(404).json({
         error: "No data available for this year"
       });
