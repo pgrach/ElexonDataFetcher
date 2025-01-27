@@ -93,6 +93,7 @@ export async function getDailySummary(req: Request, res: Response) {
 export async function getMonthlySummary(req: Request, res: Response) {
   try {
     const { yearMonth } = req.params;
+    const { leadParty } = req.query;
 
     // Validate yearMonth format (YYYY-MM)
     if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
@@ -101,7 +102,39 @@ export async function getMonthlySummary(req: Request, res: Response) {
       });
     }
 
-    // Get the monthly summary
+    // If leadParty is specified, calculate from curtailment_records
+    if (leadParty) {
+      const farmTotals = await db
+        .select({
+          totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+          totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+        })
+        .from(curtailmentRecords)
+        .where(
+          and(
+            sql`date_trunc('month', ${curtailmentRecords.settlementDate}::date) = date_trunc('month', ${yearMonth + '-01'}::date)`,
+            eq(curtailmentRecords.leadPartyName, leadParty as string)
+          )
+        );
+
+      if (!farmTotals[0] || !farmTotals[0].totalCurtailedEnergy) {
+        return res.status(404).json({
+          error: "No data available for this month and lead party"
+        });
+      }
+
+      return res.json({
+        yearMonth,
+        totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
+        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)),
+        dailyTotals: {
+          totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
+          totalPayment: Math.abs(Number(farmTotals[0].totalPayment))
+        }
+      });
+    }
+
+    // If no leadParty, get the monthly summary from monthlySummaries table
     const summary = await db.query.monthlySummaries.findFirst({
       where: eq(monthlySummaries.yearMonth, yearMonth)
     });
