@@ -6,7 +6,7 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   settlementDate: date("settlement_date").notNull(),
   settlementPeriod: integer("settlement_period").notNull(),
   farmId: text("farm_id").notNull(),
-  leadPartyName: text("lead_party_name"),  
+  leadPartyName: text("lead_party_name"),  // Making it nullable initially
   volume: numeric("volume").notNull(),
   payment: numeric("payment").notNull(),
   originalPrice: numeric("original_price").notNull(),
@@ -15,6 +15,7 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   cadlFlag: boolean("cadl_flag"),
   createdAt: timestamp("created_at").defaultNow()
 }, (table) => ({
+  // Add unique constraint to prevent duplicate records
   uniqueSettlement: {
     name: "unique_settlement_record",
     columns: [table.settlementDate, table.settlementPeriod, table.farmId]
@@ -45,22 +46,7 @@ export const ingestionProgress = pgTable("ingestion_progress", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
-export const hourlySummaries = pgTable("hourly_summaries", {
-  id: serial("id").primaryKey(),
-  summaryDate: date("summary_date").notNull(),
-  hour: integer("hour").notNull(), 
-  leadPartyName: text("lead_party_name"),
-  curtailedEnergy: numeric("curtailed_energy").notNull(),
-  payment: numeric("payment").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow()
-}, (table) => ({
-  uniqueHourly: {
-    name: "unique_hourly_summary",
-    columns: [table.summaryDate, table.hour, table.leadPartyName]
-  }
-}));
-
+// Export schemas for validation
 export const insertCurtailmentRecordSchema = createInsertSchema(curtailmentRecords);
 export const selectCurtailmentRecordSchema = createSelectSchema(curtailmentRecords);
 export const insertDailySummarySchema = createInsertSchema(dailySummaries);
@@ -69,9 +55,8 @@ export const insertMonthlySummarySchema = createInsertSchema(monthlySummaries);
 export const selectMonthlySummarySchema = createSelectSchema(monthlySummaries);
 export const insertIngestionProgressSchema = createInsertSchema(ingestionProgress);
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
-export const insertHourlySummarySchema = createInsertSchema(hourlySummaries);
-export const selectHourlySummarySchema = createSelectSchema(hourlySummaries);
 
+// Export types for TypeScript
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
 export type DailySummary = typeof dailySummaries.$inferSelect;
@@ -80,5 +65,3 @@ export type MonthlySummary = typeof monthlySummaries.$inferSelect;
 export type InsertMonthlySummary = typeof monthlySummaries.$inferInsert;
 export type IngestionProgress = typeof ingestionProgress.$inferSelect;
 export type InsertIngestionProgress = typeof ingestionProgress.$inferInsert;
-export type HourlySummary = typeof hourlySummaries.$inferSelect;
-export type InsertHourlySummary = typeof hourlySummaries.$inferInsert;
