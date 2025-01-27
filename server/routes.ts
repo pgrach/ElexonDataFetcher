@@ -1,11 +1,14 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties } from "./controllers/summary";
+import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
 
 export function registerRoutes(app: Express): Server {
   // Get lead parties endpoint
   app.get("/api/lead-parties", getLeadParties);
+
+  // Get curtailed lead parties for a specific date
+  app.get("/api/lead-parties/:date", getCurtailedLeadParties);
 
   // Daily summary endpoint - uses route parameters for date
   app.get("/api/summary/daily/:date", getDailySummary);

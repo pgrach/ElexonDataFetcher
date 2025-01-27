@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -44,12 +44,20 @@ export default function Home() {
   });
   const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
 
-  // Fetch lead parties for the dropdown
-  const { data: leadParties = [] } = useQuery<string[]>({
-    queryKey: ['/api/lead-parties'],
+  const formattedDate = format(date, 'yyyy-MM-dd');
+
+  // Fetch curtailed lead parties for the selected date
+  const { data: curtailedLeadParties = [] } = useQuery<string[]>({
+    queryKey: [`/api/lead-parties/${formattedDate}`],
+    enabled: !!formattedDate && isValid(date)
   });
 
-  const formattedDate = format(date, 'yyyy-MM-dd');
+  // Reset selected lead party if it's not in the curtailed list for the new date
+  useEffect(() => {
+    if (selectedLeadParty && !curtailedLeadParties.includes(selectedLeadParty)) {
+      setSelectedLeadParty(null);
+    }
+  }, [formattedDate, curtailedLeadParties, selectedLeadParty]);
 
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
@@ -73,7 +81,6 @@ export default function Home() {
     },
     enabled: !!formattedDate && isValid(date)
   });
-
 
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
     queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`, selectedLeadParty],
@@ -169,13 +176,18 @@ export default function Home() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Farms</SelectItem>
-                  {leadParties.map((party) => (
+                  {curtailedLeadParties.map((party) => (
                     <SelectItem key={party} value={party}>
                       {party}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {curtailedLeadParties.length === 0 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  No farms were curtailed on this date
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

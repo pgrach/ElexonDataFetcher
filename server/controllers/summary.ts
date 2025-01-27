@@ -22,6 +22,36 @@ export async function getLeadParties(req: Request, res: Response) {
   }
 }
 
+export async function getCurtailedLeadParties(req: Request, res: Response) {
+  try {
+    const { date } = req.params;
+
+    // Validate date format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({
+        error: "Invalid date format. Please use YYYY-MM-DD"
+      });
+    }
+
+    // Get unique lead parties that had curtailment on the specified date
+    const leadParties = await db
+      .select({
+        leadPartyName: curtailmentRecords.leadPartyName,
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date))
+      .groupBy(curtailmentRecords.leadPartyName)
+      .orderBy(curtailmentRecords.leadPartyName);
+
+    res.json(leadParties.map(party => party.leadPartyName));
+  } catch (error) {
+    console.error('Error fetching curtailed lead parties:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching curtailed lead parties"
+    });
+  }
+}
+
 export async function getDailySummary(req: Request, res: Response) {
   try {
     const { date } = req.params;
