@@ -1,6 +1,6 @@
 import { processDailyCurtailment } from "../services/curtailment";
 import { db } from "@db";
-import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema"; // Added curtailmentRecords import
+import { dailySummaries, ingestionProgress, curtailmentRecords } from "@db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 import { format, getDaysInMonth, startOfMonth, endOfMonth, parse } from "date-fns";
@@ -44,6 +44,25 @@ async function processDay(dateStr: string, retryCount = 0): Promise<ProcessingMe
     requestCount++;
 
     await processDailyCurtailment(dateStr);
+
+    // Verify settlement periods 1 and 2 for the day
+    const periodTotals = await db
+      .select({
+        settlementPeriod: curtailmentRecords.settlementPeriod,
+        totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+        recordCount: sql<number>`COUNT(*)`
+      })
+      .from(curtailmentRecords)
+      .where(and(
+        eq(curtailmentRecords.settlementDate, dateStr),
+        sql`${curtailmentRecords.settlementPeriod} IN (1, 2)`
+      ))
+      .groupBy(curtailmentRecords.settlementPeriod)
+      .orderBy(curtailmentRecords.settlementPeriod);
+
+    console.log(`[${dateStr}] Period totals:`, periodTotals.map(p => 
+      `Period ${p.settlementPeriod}: ${Number(p.totalVolume).toFixed(2)} MWh (${p.recordCount} records)`
+    ).join(', '));
 
     const verifyData = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, dateStr)
@@ -131,7 +150,6 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
       console.log(`\nProcessing batch ${Math.floor(i/currentBatchSize) + 1} of ${Math.ceil(daysToProcess.length/currentBatchSize)}`);
       console.log(`Dates: ${batch.join(', ')}`);
 
-      // Process batch in parallel with improved concurrency
       const results = await Promise.all(
         batch.map(dateStr => processDay(dateStr))
       );
@@ -157,20 +175,19 @@ async function ingestMonthlyData(yearMonth: string, startDay?: number, endDay?: 
       totalProcessingTime += batchDuration;
       successfulBatches += batchSuccess ? 1 : 0;
 
-      // Enhanced logging
       console.log(`Batch ${Math.floor(i/currentBatchSize) + 1} completed:`, {
         successful: `${results.filter(r => r.success).length}/${results.length}`,
         duration: `${(batchDuration/1000).toFixed(1)}s`,
         avgDuration: `${(avgDuration/1000).toFixed(1)}s per day`
       });
 
-      // Optimized delay calculation based on performance
       const optimalDelay = Math.max(MIN_API_DELAY, Math.min(avgDuration * 0.1, 3000));
       await delay(optimalDelay);
     }
 
     console.log(`\n=== ${yearMonth} (Days ${start}-${end}) Data Ingestion Complete ===`);
 
+    // Final verification of all processed days
     const monthlyData = await db.select({
       summaryDate: dailySummaries.summaryDate,
       totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
