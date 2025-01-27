@@ -137,7 +137,7 @@ export async function getMonthlySummary(req: Request, res: Response) {
       const farmTotals = await db
         .select({
           totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-          totalPayment: sql<string>`ABS(SUM(${curtailmentRecords.payment}::numeric))`
+          totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
         })
         .from(curtailmentRecords)
         .where(
@@ -156,39 +156,43 @@ export async function getMonthlySummary(req: Request, res: Response) {
       return res.json({
         yearMonth,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Number(farmTotals[0].totalPayment),
+        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)),
         dailyTotals: {
           totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-          totalPayment: Number(farmTotals[0].totalPayment)
+          totalPayment: Math.abs(Number(farmTotals[0].totalPayment))
         }
       });
     }
 
-    // Get monthly totals directly from daily_summaries
-    const monthlyTotals = await db
-      .select({
-        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`ABS(SUM(${dailySummaries.totalPayment}::numeric))`
-      })
-      .from(dailySummaries)
-      .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${yearMonth + '-01'}::date)`);
+    // If no leadParty, get the monthly summary from monthlySummaries table
+    const summary = await db.query.monthlySummaries.findFirst({
+      where: eq(monthlySummaries.yearMonth, yearMonth)
+    });
 
-    if (!monthlyTotals[0] || !monthlyTotals[0].totalCurtailedEnergy) {
+    if (!summary) {
       return res.status(404).json({
         error: "No data available for this month"
       });
     }
 
+    // Calculate totals from daily_summaries for verification
+    const dailyTotals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
+      })
+      .from(dailySummaries)
+      .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${yearMonth + '-01'}::date)`);
+
     res.json({
       yearMonth,
-      totalCurtailedEnergy: Number(monthlyTotals[0].totalCurtailedEnergy),
-      totalPayment: Number(monthlyTotals[0].totalPayment),
+      totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
+      totalPayment: Math.abs(Number(summary.totalPayment)),
       dailyTotals: {
-        totalCurtailedEnergy: Number(monthlyTotals[0].totalCurtailedEnergy),
-        totalPayment: Number(monthlyTotals[0].totalPayment)
+        totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
+        totalPayment: Math.abs(Number(dailyTotals[0]?.totalPayment || 0))
       }
     });
-
   } catch (error) {
     console.error('Error fetching monthly summary:', error);
     res.status(500).json({
@@ -295,7 +299,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       const farmTotals = await db
         .select({
           totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-          totalPayment: sql<string>`ABS(SUM(${curtailmentRecords.payment}::numeric))`
+          totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
         })
         .from(curtailmentRecords)
         .where(
@@ -316,22 +320,32 @@ export async function getYearlySummary(req: Request, res: Response) {
       return res.json({
         year,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Number(farmTotals[0].totalPayment),
+        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)),
       });
     }
 
-    // Get total from dailySummaries for the year directly
-    const yearlyTotal = await db
+    // Get daily records for the year
+    const dailyRecords = await db
       .select({
-        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`ABS(SUM(${dailySummaries.totalPayment}::numeric))`
+        summaryDate: dailySummaries.summaryDate,
+        totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
+        totalPayment: dailySummaries.totalPayment
       })
       .from(dailySummaries)
-      .where(sql`EXTRACT(YEAR FROM ${dailySummaries.summaryDate}::date) = ${parseInt(year)}`);
+      .where(sql`EXTRACT(YEAR FROM ${dailySummaries.summaryDate}::date) = ${parseInt(year)}`)
+      .orderBy(dailySummaries.summaryDate);
 
-    console.log(`Year ${year} totals from daily_summaries:`, yearlyTotal[0]);
+    console.log(`Found ${dailyRecords.length} daily records for ${year}`);
 
-    if (!yearlyTotal[0] || !yearlyTotal[0].totalCurtailedEnergy || Number(yearlyTotal[0].totalPayment) === 0) {
+    // Calculate year totals from daily records
+    const yearTotals = dailyRecords.reduce((acc, record) => ({
+      totalCurtailedEnergy: acc.totalCurtailedEnergy + Number(record.totalCurtailedEnergy),
+      totalPayment: acc.totalPayment + Number(record.totalPayment)
+    }), { totalCurtailedEnergy: 0, totalPayment: 0 });
+
+    console.log(`Year ${year} totals:`, yearTotals);
+
+    if (yearTotals.totalCurtailedEnergy === 0 && yearTotals.totalPayment === 0) {
       return res.status(404).json({
         error: "No data available for this year"
       });
@@ -339,8 +353,8 @@ export async function getYearlySummary(req: Request, res: Response) {
 
     res.json({
       year,
-      totalCurtailedEnergy: Number(yearlyTotal[0].totalCurtailedEnergy),
-      totalPayment: Number(yearlyTotal[0].totalPayment),
+      totalCurtailedEnergy: yearTotals.totalCurtailedEnergy,
+      totalPayment: Math.abs(yearTotals.totalPayment),
     });
   } catch (error) {
     console.error('Error fetching yearly summary:', error);
