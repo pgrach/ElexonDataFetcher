@@ -132,7 +132,6 @@ export default function Home() {
     enabled: !!date && isValid(date)
   });
 
-
   // Fetch hourly data with improved error handling
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
@@ -222,8 +221,8 @@ export default function Home() {
         </div>
 
         <div className="space-y-8">
+          {/* Yearly Summary Cards */}
           <div className="grid md:grid-cols-2 gap-4">
-            {/* Yearly Cards */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
@@ -283,6 +282,68 @@ export default function Home() {
             </Card>
           </div>
 
+          {/* Monthly Summary Cards */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {selectedLeadParty ? 'Farm Monthly Curtailed Energy' : 'Monthly Curtailed Energy'}
+                </CardTitle>
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isMonthlyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : monthlyError ? (
+                  <div className="text-sm text-red-500">Failed to load monthly data</div>
+                ) : monthlyData ? (
+                  <div className="text-2xl font-bold">
+                    {Number(monthlyData.totalCurtailedEnergy).toLocaleString()} MWh
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  {selectedLeadParty ? (
+                    <>Farm curtailed energy for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
+                  ) : (
+                    <>Total curtailed energy for {format(date, 'MMMM yyyy')}</>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {selectedLeadParty ? 'Farm Monthly Payment' : 'Monthly Payment'}
+                </CardTitle>
+                <Battery className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {isMonthlyLoading ? (
+                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                ) : monthlyError ? (
+                  <div className="text-sm text-red-500">Failed to load monthly data</div>
+                ) : monthlyData ? (
+                  <div className="text-2xl font-bold">
+                    £{Number(monthlyData.totalPayment).toLocaleString()}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  {selectedLeadParty ? (
+                    <>Farm payment for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
+                  ) : (
+                    <>Total payment for {format(date, 'MMMM yyyy')}</>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Daily and other cards remain unchanged */}
           <div className="grid md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
