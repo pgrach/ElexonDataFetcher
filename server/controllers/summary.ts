@@ -299,7 +299,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       const farmTotals = await db
         .select({
           totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-          totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+          totalPayment: sql<string>`ABS(SUM(${curtailmentRecords.payment}::numeric))`
         })
         .from(curtailmentRecords)
         .where(
@@ -320,32 +320,22 @@ export async function getYearlySummary(req: Request, res: Response) {
       return res.json({
         year,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)),
+        totalPayment: Number(farmTotals[0].totalPayment),
       });
     }
 
-    // Get daily records for the year
-    const dailyRecords = await db
+    // Get total from dailySummaries for the year directly
+    const yearlyTotal = await db
       .select({
-        summaryDate: dailySummaries.summaryDate,
-        totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
-        totalPayment: dailySummaries.totalPayment
+        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`ABS(SUM(${dailySummaries.totalPayment}::numeric))`
       })
       .from(dailySummaries)
-      .where(sql`EXTRACT(YEAR FROM ${dailySummaries.summaryDate}::date) = ${parseInt(year)}`)
-      .orderBy(dailySummaries.summaryDate);
+      .where(sql`EXTRACT(YEAR FROM ${dailySummaries.summaryDate}::date) = ${parseInt(year)}`);
 
-    console.log(`Found ${dailyRecords.length} daily records for ${year}`);
+    console.log(`Year ${year} totals from daily_summaries:`, yearlyTotal[0]);
 
-    // Calculate year totals from daily records
-    const yearTotals = dailyRecords.reduce((acc, record) => ({
-      totalCurtailedEnergy: acc.totalCurtailedEnergy + Number(record.totalCurtailedEnergy),
-      totalPayment: acc.totalPayment + Number(record.totalPayment)
-    }), { totalCurtailedEnergy: 0, totalPayment: 0 });
-
-    console.log(`Year ${year} totals:`, yearTotals);
-
-    if (yearTotals.totalCurtailedEnergy === 0 && yearTotals.totalPayment === 0) {
+    if (!yearlyTotal[0] || !yearlyTotal[0].totalCurtailedEnergy || Number(yearlyTotal[0].totalPayment) === 0) {
       return res.status(404).json({
         error: "No data available for this year"
       });
@@ -353,8 +343,8 @@ export async function getYearlySummary(req: Request, res: Response) {
 
     res.json({
       year,
-      totalCurtailedEnergy: yearTotals.totalCurtailedEnergy,
-      totalPayment: Math.abs(yearTotals.totalPayment),
+      totalCurtailedEnergy: Number(yearlyTotal[0].totalCurtailedEnergy),
+      totalPayment: Number(yearlyTotal[0].totalPayment),
     });
   } catch (error) {
     console.error('Error fetching yearly summary:', error);
