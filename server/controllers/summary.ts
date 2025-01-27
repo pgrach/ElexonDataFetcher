@@ -64,6 +64,17 @@ export async function getDailySummary(req: Request, res: Response) {
       });
     }
 
+    // Check if date is in the future
+    const requestDate = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (requestDate > today) {
+      return res.status(404).json({
+        error: "Data not available for future dates"
+      });
+    }
+
     // Get the daily summary (aggregate only)
     const summary = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, date)
