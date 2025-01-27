@@ -69,11 +69,31 @@ export async function getDailySummary(req: Request, res: Response) {
       where: eq(dailySummaries.summaryDate, date)
     });
 
-    // If no lead party filter, return data directly from daily_summaries
+    // If no lead party filter, try both tables
     if (!leadParty) {
+      // If no summary in dailySummaries, try calculating from curtailmentRecords
       if (!summary) {
-        return res.status(404).json({
-          error: "No data available for this date"
+        const recordTotals = await db
+          .select({
+            totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
+            totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+          })
+          .from(curtailmentRecords)
+          .where(eq(curtailmentRecords.settlementDate, date));
+
+        // Only return 404 if both tables have no data
+        if (!recordTotals[0] || !recordTotals[0].totalVolume) {
+          console.log(`No data found in either table for date: ${date}`);
+          return res.status(404).json({
+            error: "No data available for this date"
+          });
+        }
+
+        return res.json({
+          date,
+          totalCurtailedEnergy: Math.abs(Number(recordTotals[0].totalVolume)),
+          totalPayment: Math.abs(Number(recordTotals[0].totalPayment)),
+          leadParty: null
         });
       }
 
@@ -100,6 +120,7 @@ export async function getDailySummary(req: Request, res: Response) {
       );
 
     if (!recordTotals[0] || !recordTotals[0].totalVolume) {
+      console.log(`No data found for date: ${date} and lead party: ${leadParty}`);
       return res.status(404).json({
         error: "No data available for this date and lead party"
       });
