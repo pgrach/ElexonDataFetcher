@@ -75,9 +75,25 @@ export default function Home() {
   });
 
 
-  // Monthly data query remains unchanged
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
-    queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
+    queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`, selectedLeadParty],
+    queryFn: async () => {
+      if (!isValid(date)) {
+        throw new Error('Invalid date selected');
+      }
+
+      const url = new URL(`/api/summary/monthly/${format(date, 'yyyy-MM')}`, window.location.origin);
+      if (selectedLeadParty && selectedLeadParty !== 'all') {
+        url.searchParams.set('leadParty', selectedLeadParty);
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      return response.json();
+    },
     enabled: !!date && isValid(date)
   });
 
@@ -169,7 +185,7 @@ export default function Home() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Monthly Curtailed Energy
+                  {selectedLeadParty ? 'Farm Monthly Curtailed Energy' : 'Monthly Curtailed Energy'}
                 </CardTitle>
                 <CalendarIcon className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -186,7 +202,11 @@ export default function Home() {
                   <div className="text-sm text-muted-foreground">No monthly data available</div>
                 )}
                 <div className="text-xs text-muted-foreground mt-1">
-                  Total curtailed energy for {format(date, 'MMMM yyyy')}
+                  {selectedLeadParty ? (
+                    <>Farm curtailed energy for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
+                  ) : (
+                    <>Total curtailed energy for {format(date, 'MMMM yyyy')}</>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -194,7 +214,7 @@ export default function Home() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Monthly Payment
+                  {selectedLeadParty ? 'Farm Monthly Payment' : 'Monthly Payment'}
                 </CardTitle>
                 <Battery className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -211,7 +231,11 @@ export default function Home() {
                   <div className="text-sm text-muted-foreground">No monthly data available</div>
                 )}
                 <div className="text-xs text-muted-foreground mt-1">
-                  Total payment for {format(date, 'MMMM yyyy')}
+                  {selectedLeadParty ? (
+                    <>Farm payment for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
+                  ) : (
+                    <>Total payment for {format(date, 'MMMM yyyy')}</>
+                  )}
                 </div>
               </CardContent>
             </Card>
