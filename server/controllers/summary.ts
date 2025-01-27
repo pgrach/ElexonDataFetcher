@@ -306,7 +306,7 @@ export async function getYearlySummary(req: Request, res: Response) {
         .from(curtailmentRecords)
         .where(
           and(
-            sql`date_trunc('year', ${curtailmentRecords.settlementDate}::date) = date_trunc('year', ${year || '2023'}-01-01::date)`,
+            sql`date_trunc('year', ${curtailmentRecords.settlementDate}::date) = date_trunc('year', ${year}-01-01::date)`,
             eq(curtailmentRecords.leadPartyName, leadParty as string)
           )
         );
@@ -326,16 +326,16 @@ export async function getYearlySummary(req: Request, res: Response) {
       });
     }
 
-    // Calculate from monthly_summaries for better performance
+    // Calculate from daily_summaries for better accuracy
     const yearTotals = await db
       .select({
-        totalCurtailedEnergy: sql<string>`COALESCE(SUM(${monthlySummaries.totalCurtailedEnergy}::numeric), 0)`,
-        totalPayment: sql<string>`COALESCE(SUM(${monthlySummaries.totalPayment}::numeric), 0)`
+        totalCurtailedEnergy: sql<string>`COALESCE(SUM(${dailySummaries.totalCurtailedEnergy}::numeric), 0)`,
+        totalPayment: sql<string>`COALESCE(SUM(${dailySummaries.totalPayment}::numeric), 0)`
       })
-      .from(monthlySummaries)
-      .where(sql`SUBSTRING(${monthlySummaries.yearMonth}, 1, 4) = ${year}`);
+      .from(dailySummaries)
+      .where(sql`date_trunc('year', ${dailySummaries.summaryDate}::date) = date_trunc('year', ${year}-01-01::date)`);
 
-    console.log(`Year ${year} totals from monthly summaries:`, yearTotals[0]);
+    console.log(`Year ${year} totals from daily summaries:`, yearTotals[0]);
 
     if (!yearTotals[0]) {
       return res.status(404).json({
