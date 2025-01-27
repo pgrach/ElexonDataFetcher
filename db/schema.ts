@@ -6,21 +6,15 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   settlementDate: date("settlement_date").notNull(),
   settlementPeriod: integer("settlement_period").notNull(),
   farmId: text("farm_id").notNull(),
-  leadPartyName: text("lead_party_name"),  // Making it nullable initially
+  leadPartyName: text("lead_party_name"),  
   volume: numeric("volume").notNull(),
   payment: numeric("payment").notNull(),
   originalPrice: numeric("original_price").notNull(),
   finalPrice: numeric("final_price").notNull(),
   soFlag: boolean("so_flag"),
   cadlFlag: boolean("cadl_flag"),
-  createdAt: timestamp("created_at").defaultNow()
-}, (table) => ({
-  // Add unique constraint to prevent duplicate records
-  uniqueSettlement: {
-    name: "unique_settlement_record",
-    columns: [table.settlementDate, table.settlementPeriod, table.farmId]
-  }
-}));
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 export const dailySummaries = pgTable("daily_summaries", {
   summaryDate: date("summary_date").primaryKey(),
