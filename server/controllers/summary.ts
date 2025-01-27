@@ -324,12 +324,16 @@ export async function getYearlySummary(req: Request, res: Response) {
       });
     }
 
-    // If no leadParty, get the yearly summary from yearlySummaries table
-    const summary = await db.query.yearlySummaries.findFirst({
-      where: eq(yearlySummaries.year, year)
-    });
+    // If no leadParty, calculate from monthly_summaries for better performance
+    const yearTotals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(${monthlySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`SUM(${monthlySummaries.totalPayment}::numeric)`
+      })
+      .from(monthlySummaries)
+      .where(sql`substring(${monthlySummaries.yearMonth}, 1, 4) = ${year}`);
 
-    if (!summary) {
+    if (!yearTotals[0] || !yearTotals[0].totalCurtailedEnergy) {
       return res.status(404).json({
         error: "No data available for this year"
       });
@@ -337,8 +341,8 @@ export async function getYearlySummary(req: Request, res: Response) {
 
     res.json({
       year,
-      totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Math.abs(Number(summary.totalPayment)),
+      totalCurtailedEnergy: Number(yearTotals[0].totalCurtailedEnergy),
+      totalPayment: Math.abs(Number(yearTotals[0].totalPayment)),
     });
   } catch (error) {
     console.error('Error fetching yearly summary:', error);
