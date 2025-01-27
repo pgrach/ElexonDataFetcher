@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, parseISO, isValid } from "date-fns";
+import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building } from "lucide-react";
-import { ChartContainer, ChartTooltip, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import {
   Select,
   SelectContent,
@@ -90,42 +90,29 @@ export default function Home() {
     enabled: !!formattedDate
   });
 
+
   // Monthly data query remains unchanged
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
     queryKey: [`/api/summary/monthly/${format(date, 'yyyy-MM')}`],
     enabled: !!date
   });
 
-  // Hourly data query with improved error handling
+  // Fetch hourly data with improved error handling
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
-      try {
-        const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
-        if (selectedLeadParty && selectedLeadParty !== 'all') {
-          url.searchParams.set('leadParty', selectedLeadParty);
-        }
-        const response = await fetch(url);
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Hourly data error:', errorText);
-          throw new Error(`Failed to fetch hourly data: ${errorText}`);
-        }
-        return response.json();
-      } catch (error) {
-        console.error('Hourly data fetch error:', error);
-        throw error;
+      const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
+      if (selectedLeadParty) {
+        url.searchParams.set('leadParty', selectedLeadParty);
       }
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to fetch hourly data');
+      }
+      return response.json();
     },
     enabled: !!formattedDate
   });
-
-  const chartConfig = {
-    curtailedEnergy: {
-      label: "Curtailed Energy (MWh)",
-      color: "hsl(var(--primary))"
-    }
-  };
 
   // Function to check if a given hour is in the future
   const isHourInFuture = (hourStr: string) => {
@@ -133,12 +120,9 @@ export default function Home() {
     const now = new Date();
     const selectedDate = new Date(date);
 
-    // If the date is today, check the hour
     if (format(now, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')) {
       return hour > now.getHours();
     }
-
-    // If the date is in the future, all hours are in the future
     return selectedDate > now;
   };
 
@@ -309,82 +293,85 @@ export default function Home() {
             </Card>
           </div>
 
-          <div className="h-[400px] w-full">
-            {isHourlyLoading ? (
-              <div className="h-full flex items-center justify-center">
-                <div className="animate-pulse">Loading chart data...</div>
-              </div>
-            ) : hourlyData ? (
-              <ChartContainer config={chartConfig}>
-                <BarChart
-                  data={hourlyData}
-                  margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="hour"
-                    interval={2}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <YAxis
-                    label={{
-                      value: 'Curtailed Energy (MWh)',
-                      angle: -90,
-                      position: 'insideLeft',
-                      offset: -40,
-                      style: { fontSize: 12 }
-                    }}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <ChartTooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const data = payload[0];
-                      const hour = data.payload.hour;
-                      const value = Number(data.value);
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                Hourly Curtailment
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[400px] w-full">
+                {isHourlyLoading ? (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="animate-pulse">Loading chart data...</div>
+                  </div>
+                ) : hourlyData ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={hourlyData}
+                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="hour"
+                        interval={2}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        label={{
+                          value: 'Curtailed Energy (MWh)',
+                          angle: -90,
+                          position: 'insideLeft',
+                          offset: -40,
+                          style: { fontSize: 12 }
+                        }}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <ChartTooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const data = payload[0];
+                          const hour = data.payload.hour;
+                          const value = Number(data.value);
 
-                      let message = "";
-                      if (isHourInFuture(hour)) {
-                        message = "Data not available yet";
-                      } else if (value === 0) {
-                        message = "No curtailment detected";
-                      } else {
-                        message = `${value.toFixed(2)} MWh`;
-                      }
+                          let message = "";
+                          if (isHourInFuture(hour)) {
+                            message = "Data not available yet";
+                          } else if (value === 0) {
+                            message = "No curtailment detected";
+                          } else {
+                            message = `${value.toFixed(2)} MWh`;
+                          }
 
-                      return (
-                        <div className="rounded-lg border bg-background p-2 shadow-md">
-                          <div className="grid gap-2">
-                            <div className="flex items-center gap-2">
-                              <div className="h-2 w-2 rounded-full bg-primary" />
-                              <span className="font-medium">{hour}</span>
+                          return (
+                            <div className="rounded-lg border bg-background p-2 shadow-md">
+                              <div className="grid gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 w-2 rounded-full bg-primary" />
+                                  <span className="font-medium">{hour}</span>
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {message}
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-sm text-muted-foreground">
-                              {message}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar
-                    dataKey="curtailedEnergy"
-                    name="Curtailed Energy"
-                    fill="hsl(var(--primary))"
-                  />
-                  <ChartLegend
-                    content={({ payload }) => (
-                      <ChartLegendContent payload={payload} />
-                    )}
-                  />
-                </BarChart>
-              </ChartContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground">
-                No hourly data available
+                          );
+                        }}
+                      />
+                      <Bar
+                        dataKey="curtailedEnergy"
+                        fill="hsl(var(--primary))"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    No hourly data available
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
