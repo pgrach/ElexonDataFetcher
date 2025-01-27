@@ -64,62 +64,16 @@ export async function getDailySummary(req: Request, res: Response) {
       });
     }
 
-    // Parse and validate the date
-    const requestDate = new Date(date);
-    if (isNaN(requestDate.getTime())) {
-      return res.status(400).json({
-        error: "Invalid date provided"
-      });
-    }
-
-    // Check if date is in the future
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (requestDate > today) {
-      return res.status(404).json({
-        error: "Data not available - requested date is in the future"
-      });
-    }
-
-    // Check minimum date (assuming data starts from 2023-01-01)
-    const minDate = new Date('2023-01-01');
-    if (requestDate < minDate) {
-      return res.status(404).json({
-        error: "Data not available - requested date is before the earliest available date (2023-01-01)"
-      });
-    }
-
-    // Get the daily summary from dailySummaries table
+    // Get the daily summary (aggregate only)
     const summary = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, date)
     });
 
-    // If no lead party filter, try both tables
+    // If no lead party filter, return data directly from daily_summaries
     if (!leadParty) {
-      // If no summary in dailySummaries, try calculating from curtailmentRecords
       if (!summary) {
-        const recordTotals = await db
-          .select({
-            totalVolume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
-            totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
-          })
-          .from(curtailmentRecords)
-          .where(eq(curtailmentRecords.settlementDate, date));
-
-        // Only return 404 if both tables have no data
-        if (!recordTotals[0] || !recordTotals[0].totalVolume) {
-          console.log(`No data found in either table for date: ${date}`);
-          return res.status(404).json({
-            error: "No curtailment data available for this date"
-          });
-        }
-
-        return res.json({
-          date,
-          totalCurtailedEnergy: Math.abs(Number(recordTotals[0].totalVolume)),
-          totalPayment: Math.abs(Number(recordTotals[0].totalPayment)),
-          leadParty: null
+        return res.status(404).json({
+          error: "No data available for this date"
         });
       }
 
@@ -146,9 +100,8 @@ export async function getDailySummary(req: Request, res: Response) {
       );
 
     if (!recordTotals[0] || !recordTotals[0].totalVolume) {
-      console.log(`No data found for date: ${date} and lead party: ${leadParty}`);
       return res.status(404).json({
-        error: "No curtailment data available for this date and lead party"
+        error: "No data available for this date and lead party"
       });
     }
 
