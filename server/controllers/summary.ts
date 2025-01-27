@@ -157,11 +157,11 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
 
     console.log(`Fetching hourly curtailment for date: ${date}, leadParty: ${leadParty || 'all'}`);
 
-    // Get period totals with volume sum
-    const farmPeriodTotals = await db
+    // Calculate hourly totals directly in the query
+    const hourlyTotals = await db
       .select({
-        settlementPeriod: curtailmentRecords.settlementPeriod,
-        volume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`
+        hour: sql<number>`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`,
+        curtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`
       })
       .from(curtailmentRecords)
       .where(
@@ -172,13 +172,13 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
             )
           : eq(curtailmentRecords.settlementDate, date)
       )
-      .groupBy(curtailmentRecords.settlementPeriod)
-      .orderBy(curtailmentRecords.settlementPeriod);
+      .groupBy(sql`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`)
+      .orderBy(sql`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`);
 
-    console.log('Raw settlement period totals:', 
-      farmPeriodTotals.map(r => ({
-        period: r.settlementPeriod,
-        volume: Number(r.volume).toFixed(2)
+    console.log('Raw hourly totals:', 
+      hourlyTotals.map(r => ({
+        hour: r.hour,
+        volume: Number(r.curtailedEnergy).toFixed(2)
       }))
     );
 
@@ -188,22 +188,12 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       curtailedEnergy: 0
     }));
 
-    // Map periods to hours (2 periods per hour)
-    // Settlement periods 1-2 → Hour 0, 3-4 → Hour 1, etc.
-    farmPeriodTotals.forEach(record => {
-      if (record.settlementPeriod && record.volume) {
-        const period = Number(record.settlementPeriod);
-        // Calculate hour: periods 1-2 go to hour 0, 3-4 to hour 1, etc.
-        const hour = Math.floor((period - 1) / 2);
-
-        // Add the volume to the corresponding hour
+    // Map the calculated totals to our hourly results
+    hourlyTotals.forEach(record => {
+      if (record.hour !== null && record.curtailedEnergy) {
+        const hour = Number(record.hour);
         if (hour >= 0 && hour < 24) {
-          const volume = Number(record.volume);
-          hourlyResults[hour].curtailedEnergy += volume;
-
-          // Debug logging
-          console.log(`Hour ${hour}:00 - Added volume ${volume.toFixed(2)} MWh from period ${period}`);
-          console.log(`Hour ${hour}:00 - Running total: ${hourlyResults[hour].curtailedEnergy.toFixed(2)} MWh`);
+          hourlyResults[hour].curtailedEnergy = Number(record.curtailedEnergy);
         }
       }
     });
