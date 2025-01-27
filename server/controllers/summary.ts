@@ -157,19 +157,13 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
 
     console.log(`Fetching hourly curtailment for date: ${date}, leadParty: ${leadParty || 'all'}`);
 
-    // Modified query to handle duplicates by using DISTINCT ON
+    // Modified query to handle both positive and negative volumes correctly
     const farmPeriodTotals = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
         volume: sql<string>`
-          SUM(DISTINCT
-            CASE 
-              WHEN ${curtailmentRecords.volume}::numeric > 0
-              AND (${curtailmentRecords.soFlag} = true OR ${curtailmentRecords.cadlFlag} = true)
-              THEN ${curtailmentRecords.volume}::numeric
-              ELSE 0 
-            END
-          )`
+          SUM(${curtailmentRecords.volume}::numeric)
+        `
       })
       .from(curtailmentRecords)
       .where(
@@ -180,7 +174,8 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
             )
           : eq(curtailmentRecords.settlementDate, date)
       )
-      .groupBy(curtailmentRecords.settlementPeriod);
+      .groupBy(curtailmentRecords.settlementPeriod)
+      .orderBy(curtailmentRecords.settlementPeriod);
 
     console.log('Settlement period totals:', 
       farmPeriodTotals.map(r => ({
@@ -201,8 +196,8 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
         const period = Number(record.settlementPeriod);
         const hour = Math.floor((period - 1) / 2);
         if (hour >= 0 && hour < 24) {
-          hourlyResults[hour].curtailedEnergy += Number(record.volume);
-          console.log(`Hour ${hour}:00 - Added volume ${Number(record.volume).toFixed(2)} MWh from period ${period}`);
+          hourlyResults[hour].curtailedEnergy += Math.abs(Number(record.volume));
+          console.log(`Hour ${hour}:00 - Added volume ${Math.abs(Number(record.volume)).toFixed(2)} MWh from period ${period}`);
         }
       }
     });
