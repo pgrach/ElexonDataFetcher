@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, isValid } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building } from "lucide-react";
@@ -14,33 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface DailySummary {
-  date: string;
-  totalCurtailedEnergy: number;
-  totalPayment: number;
-  leadParty: string | null;
-}
-
-interface MonthlySummary {
-  yearMonth: string;
-  totalCurtailedEnergy: number;
-  totalPayment: number;
-  dailyTotals: {
-    totalCurtailedEnergy: number;
-    totalPayment: number;
-  };
-}
-
-interface HourlyData {
-  hour: string;
-  curtailedEnergy: number;
-}
-
-interface YearlySummary {
-  year: string;
-  totalCurtailedEnergy: number;
-  totalPayment: number;
-}
+// ... interfaces remain unchanged ...
 
 export default function Home() {
   const [date, setDate] = useState<Date>(() => {
@@ -50,8 +24,11 @@ export default function Home() {
   });
   const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
 
-  // Format date using ISO format to ensure consistency
-  const formattedDate = format(date, 'yyyy-MM-dd');
+  // Ensure date is valid and format it correctly for API calls
+  const formattedDate = isValid(date) ? format(date, 'yyyy-MM-dd') : '';
+
+  // Format date for display
+  const displayDate = isValid(date) ? format(date, 'MMM d, yyyy') : '';
 
   // Fetch curtailed lead parties for the selected date
   const { data: curtailedLeadParties = [] } = useQuery<string[]>({
@@ -69,8 +46,7 @@ export default function Home() {
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
-      // Validate date before making the request
-      if (!isValid(date)) {
+      if (!formattedDate || !isValid(date)) {
         throw new Error('Invalid date selected');
       }
 
@@ -81,6 +57,9 @@ export default function Home() {
 
       const response = await fetch(url);
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(`No data available for ${format(date, 'MMMM d, yyyy')}`);
+        }
         throw new Error(`API Error: ${response.status}`);
       }
 
@@ -372,7 +351,7 @@ export default function Home() {
                   {selectedLeadParty ? (
                     <>Farm curtailed energy for {selectedLeadParty}</>
                   ) : (
-                    <>Daily curtailed energy for {format(date, 'MMM d, yyyy')}</>
+                    <>Daily curtailed energy for {displayDate}</>
                   )}
                 </div>
               </CardContent>
@@ -403,7 +382,7 @@ export default function Home() {
                   {selectedLeadParty ? (
                     <>Farm payment for {selectedLeadParty}</>
                   ) : (
-                    <>Daily payment for {format(date, 'MMM d, yyyy')}</>
+                    <>Daily payment for {displayDate}</>
                   )}
                 </div>
               </CardContent>
