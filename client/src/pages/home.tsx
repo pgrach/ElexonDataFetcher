@@ -36,6 +36,12 @@ interface HourlyData {
   curtailedEnergy: number;
 }
 
+interface YearlySummary {
+  year: string;
+  totalCurtailedEnergy: number;
+  totalPayment: number;
+}
+
 export default function Home() {
   const [date, setDate] = useState<Date>(() => {
     const today = new Date();
@@ -103,6 +109,29 @@ export default function Home() {
     },
     enabled: !!date && isValid(date)
   });
+
+  const { data: yearlyData, isLoading: isYearlyLoading, error: yearlyError } = useQuery<YearlySummary>({
+    queryKey: [`/api/summary/yearly/${format(date, 'yyyy')}`, selectedLeadParty],
+    queryFn: async () => {
+      if (!isValid(date)) {
+        throw new Error('Invalid date selected');
+      }
+
+      const url = new URL(`/api/summary/yearly/${format(date, 'yyyy')}`, window.location.origin);
+      if (selectedLeadParty && selectedLeadParty !== 'all') {
+        url.searchParams.set('leadParty', selectedLeadParty);
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      return response.json();
+    },
+    enabled: !!date && isValid(date)
+  });
+
 
   // Fetch hourly data with improved error handling
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
@@ -194,30 +223,31 @@ export default function Home() {
 
         <div className="space-y-8">
           <div className="grid md:grid-cols-2 gap-4">
+            {/* Yearly Cards */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  {selectedLeadParty ? 'Farm Monthly Curtailed Energy' : 'Monthly Curtailed Energy'}
+                  {selectedLeadParty ? 'Farm Yearly Curtailed Energy' : 'Yearly Curtailed Energy'}
                 </CardTitle>
                 <CalendarIcon className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {isMonthlyLoading ? (
+                {isYearlyLoading ? (
                   <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                ) : monthlyError ? (
-                  <div className="text-sm text-red-500">Failed to load monthly data</div>
-                ) : monthlyData ? (
+                ) : yearlyError ? (
+                  <div className="text-sm text-red-500">Failed to load yearly data</div>
+                ) : yearlyData ? (
                   <div className="text-2xl font-bold">
-                    {Number(monthlyData.totalCurtailedEnergy).toLocaleString()} MWh
+                    {Number(yearlyData.totalCurtailedEnergy).toLocaleString()} MWh
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                  <div className="text-sm text-muted-foreground">No yearly data available</div>
                 )}
                 <div className="text-xs text-muted-foreground mt-1">
                   {selectedLeadParty ? (
-                    <>Farm curtailed energy for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
+                    <>Farm curtailed energy for {selectedLeadParty} in {format(date, 'yyyy')}</>
                   ) : (
-                    <>Total curtailed energy for {format(date, 'MMMM yyyy')}</>
+                    <>Total curtailed energy for {format(date, 'yyyy')}</>
                   )}
                 </div>
               </CardContent>
@@ -226,27 +256,27 @@ export default function Home() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  {selectedLeadParty ? 'Farm Monthly Payment' : 'Monthly Payment'}
+                  {selectedLeadParty ? 'Farm Yearly Payment' : 'Yearly Payment'}
                 </CardTitle>
                 <Battery className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {isMonthlyLoading ? (
+                {isYearlyLoading ? (
                   <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                ) : monthlyError ? (
-                  <div className="text-sm text-red-500">Failed to load monthly data</div>
-                ) : monthlyData ? (
+                ) : yearlyError ? (
+                  <div className="text-sm text-red-500">Failed to load yearly data</div>
+                ) : yearlyData ? (
                   <div className="text-2xl font-bold">
-                    £{Number(monthlyData.totalPayment).toLocaleString()}
+                    £{Number(yearlyData.totalPayment).toLocaleString()}
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">No monthly data available</div>
+                  <div className="text-sm text-muted-foreground">No yearly data available</div>
                 )}
                 <div className="text-xs text-muted-foreground mt-1">
                   {selectedLeadParty ? (
-                    <>Farm payment for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
+                    <>Farm payment for {selectedLeadParty} in {format(date, 'yyyy')}</>
                   ) : (
-                    <>Total payment for {format(date, 'MMMM yyyy')}</>
+                    <>Total payment for {format(date, 'yyyy')}</>
                   )}
                 </div>
               </CardContent>

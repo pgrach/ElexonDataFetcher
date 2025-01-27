@@ -1,5 +1,5 @@
 import { db } from "@db";
-import { curtailmentRecords, dailySummaries, monthlySummaries } from "@db/schema";
+import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "@db/schema";
 import { fetchBidsOffers } from "./elexon";
 import { eq, sql } from "drizzle-orm";
 import fs from "fs/promises";
@@ -164,6 +164,32 @@ export async function processDailyCurtailment(date: string): Promise<void> {
         set: {
           totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
           totalPayment: monthlyTotals[0].totalPayment,
+          updatedAt: new Date()
+        }
+      });
+    }
+
+    // Update yearly summary
+    const year = date.substring(0, 4);
+    const yearlyTotals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
+      })
+      .from(dailySummaries)
+      .where(sql`date_trunc('year', ${dailySummaries.summaryDate}::date) = date_trunc('year', ${date}::date)`);
+
+    if (yearlyTotals[0].totalCurtailedEnergy && yearlyTotals[0].totalPayment) {
+      await db.insert(yearlySummaries).values({
+        year,
+        totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
+        totalPayment: yearlyTotals[0].totalPayment,
+        updatedAt: new Date()
+      }).onConflictDoUpdate({
+        target: [yearlySummaries.year],
+        set: {
+          totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
+          totalPayment: yearlyTotals[0].totalPayment,
           updatedAt: new Date()
         }
       });

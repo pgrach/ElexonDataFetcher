@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "@db";
-import { dailySummaries, curtailmentRecords, monthlySummaries } from "@db/schema";
+import { dailySummaries, curtailmentRecords, monthlySummaries, yearlySummaries } from "@db/schema";
 import { eq, sql, and, desc } from "drizzle-orm";
 
 export async function getLeadParties(req: Request, res: Response) {
@@ -280,6 +280,70 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
     console.error('Error fetching hourly curtailment:', error);
     res.status(500).json({
       error: "Internal server error while fetching hourly data"
+    });
+  }
+}
+
+export async function getYearlySummary(req: Request, res: Response) {
+  try {
+    const { year } = req.params;
+    const { leadParty } = req.query;
+
+    // Validate year format (YYYY)
+    if (!/^\d{4}$/.test(year)) {
+      return res.status(400).json({
+        error: "Invalid format. Please use YYYY"
+      });
+    }
+
+    // If leadParty is specified, calculate from curtailment_records
+    if (leadParty) {
+      const farmTotals = await db
+        .select({
+          totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+          totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+        })
+        .from(curtailmentRecords)
+        .where(
+          and(
+            sql`date_trunc('year', ${curtailmentRecords.settlementDate}::date) = date_trunc('year', ${year + '-01-01'}::date)`,
+            eq(curtailmentRecords.leadPartyName, leadParty as string)
+          )
+        );
+
+      if (!farmTotals[0] || !farmTotals[0].totalCurtailedEnergy) {
+        return res.status(404).json({
+          error: "No data available for this year and lead party"
+        });
+      }
+
+      return res.json({
+        year,
+        totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
+        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)),
+      });
+    }
+
+    // If no leadParty, get the yearly summary from yearlySummaries table
+    const summary = await db.query.yearlySummaries.findFirst({
+      where: eq(yearlySummaries.year, year)
+    });
+
+    if (!summary) {
+      return res.status(404).json({
+        error: "No data available for this year"
+      });
+    }
+
+    res.json({
+      year,
+      totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
+      totalPayment: Math.abs(Number(summary.totalPayment)),
+    });
+  } catch (error) {
+    console.error('Error fetching yearly summary:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching summary"
     });
   }
 }

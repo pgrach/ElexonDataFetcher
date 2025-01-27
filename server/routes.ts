@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties } from "./controllers/summary";
+import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties, getYearlySummary } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
 
 export function registerRoutes(app: Express): Server {
@@ -15,6 +15,9 @@ export function registerRoutes(app: Express): Server {
 
   // Monthly summary endpoint
   app.get("/api/summary/monthly/:yearMonth", getMonthlySummary);
+
+  // Yearly summary endpoint
+  app.get("/api/summary/yearly/:year", getYearlySummary);
 
   // Hourly curtailment data endpoint
   app.get("/api/curtailment/hourly/:date", getHourlyCurtailment);
