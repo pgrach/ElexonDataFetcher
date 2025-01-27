@@ -163,11 +163,11 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       curtailedEnergy: 0
     }));
 
-    // First get the total volume for each settlement period
-    const periodTotals = await db
+    // Get all records for the date with their volumes
+    const records = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
-        totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`
+        volume: curtailmentRecords.volume
       })
       .from(curtailmentRecords)
       .where(
@@ -178,17 +178,17 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
             )
           : eq(curtailmentRecords.settlementDate, date)
       )
-      .groupBy(curtailmentRecords.settlementPeriod)
       .orderBy(curtailmentRecords.settlementPeriod);
 
-    // Map settlement periods to hours (2 periods per hour)
-    periodTotals.forEach(record => {
-      if (record.settlementPeriod && record.totalVolume) {
+    // Process each record individually to match the ingestion script's calculation
+    records.forEach(record => {
+      if (record.settlementPeriod && record.volume) {
         const period = Number(record.settlementPeriod);
         const hour = Math.floor((period - 1) / 2);
 
         if (hour >= 0 && hour < 24) {
-          const volume = Number(record.totalVolume);
+          // Convert to positive number and add to the appropriate hour
+          const volume = Math.abs(Number(record.volume));
           console.log(`Hour ${hour}: Adding volume ${volume} from period ${period}`);
           hourlyResults[hour].curtailedEnergy += volume;
         }
