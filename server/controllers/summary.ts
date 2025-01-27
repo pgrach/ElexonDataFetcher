@@ -156,11 +156,11 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       curtailedEnergy: 0
     }));
 
-    // Get raw records for the date to calculate hourly totals
-    const rawRecords = await db
+    // Get total volume per settlement period
+    const periodTotals = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
-        volume: curtailmentRecords.volume,
+        totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`
       })
       .from(curtailmentRecords)
       .where(
@@ -171,27 +171,26 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
             )
           : eq(curtailmentRecords.settlementDate, date)
       )
+      .groupBy(curtailmentRecords.settlementPeriod)
       .orderBy(curtailmentRecords.settlementPeriod);
 
-    // Process each record and sum up the volumes per hour
-    for (const record of rawRecords) {
-      if (record.settlementPeriod && record.volume) {
+    // Map settlement periods to hours
+    for (const record of periodTotals) {
+      if (record.settlementPeriod && record.totalVolume) {
         const period = Number(record.settlementPeriod);
         const hour = Math.floor((period - 1) / 2);  // Periods 1-2 -> hour 0, 3-4 -> hour 1, etc.
 
         if (hour >= 0 && hour < 24) {
-          // Convert the volume to positive number (curtailment is stored as negative)
-          const volume = Math.abs(Number(record.volume));
-          hourlyResults[hour].curtailedEnergy += volume;
-
+          const volume = Number(record.totalVolume);
           if (hour === 0) {
-            console.log(`Period ${period}: Adding ${volume} MWh`);
+            console.log(`Period ${period}: Adding ${volume} MWh to hour 0`);
           }
+          hourlyResults[hour].curtailedEnergy += volume;
         }
       }
     }
 
-    // For current day, zero out future hours
+    // Zero out future hours for current day
     const currentDate = new Date();
     const requestDate = new Date(date);
 

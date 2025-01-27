@@ -50,6 +50,12 @@ export async function processDailyCurtailment(date: string): Promise<void> {
   let totalVolume = 0;
   let totalPayment = 0;
 
+  console.log(`Processing curtailment for ${date}`);
+
+  // Clear existing records for the date to prevent partial updates
+  await db.delete(curtailmentRecords)
+    .where(eq(curtailmentRecords.settlementDate, date));
+
   for (let startPeriod = 1; startPeriod <= 48; startPeriod += BATCH_SIZE) {
     const endPeriod = Math.min(startPeriod + BATCH_SIZE - 1, 48);
     const periodPromises = [];
@@ -64,12 +70,14 @@ export async function processDailyCurtailment(date: string): Promise<void> {
             validWindFarmIds.has(record.id)
           );
 
+          if (validRecords.length > 0) {
+            console.log(`[${date} P${period}] Processing ${validRecords.length} records`);
+          }
+
           const periodResults = await Promise.all(
             validRecords.map(async record => {
               const volume = Math.abs(record.volume);
               const payment = volume * record.originalPrice;
-
-              console.log(`[${date} P${period}] Processing record for ${record.id}: ${volume} MWh, £${payment}`);
 
               try {
                 await db.insert(curtailmentRecords).values({
@@ -77,23 +85,18 @@ export async function processDailyCurtailment(date: string): Promise<void> {
                   settlementPeriod: period,
                   farmId: record.id,
                   leadPartyName: bmuLeadPartyMap?.get(record.id) || 'Unknown',
-                  volume: volume.toString(),
+                  volume: record.volume.toString(), // Keep the original negative value
                   payment: payment.toString(),
                   originalPrice: record.originalPrice.toString(),
                   finalPrice: record.finalPrice.toString(),
                   soFlag: record.soFlag,
                   cadlFlag: record.cadlFlag
-                }).onConflictDoNothing({
-                  target: [
-                    curtailmentRecords.settlementDate,
-                    curtailmentRecords.settlementPeriod,
-                    curtailmentRecords.farmId
-                  ]
                 });
 
+                console.log(`[${date} P${period}] Added record for ${record.id}: ${volume} MWh, £${payment}`);
                 return { volume, payment };
               } catch (error) {
-                console.error(`Error inserting record for ${record.id}:`, error);
+                console.error(`[${date} P${period}] Error inserting record for ${record.id}:`, error);
                 return { volume: 0, payment: 0 };
               }
             })
@@ -107,7 +110,9 @@ export async function processDailyCurtailment(date: string): Promise<void> {
             { volume: 0, payment: 0 }
           );
 
-          console.log(`[${date} P${period}] Records: ${validRecords.length} (${periodTotal.volume.toFixed(2)} MWh, £${periodTotal.payment.toFixed(2)})`);
+          if (periodTotal.volume > 0) {
+            console.log(`[${date} P${period}] Total: ${periodTotal.volume.toFixed(2)} MWh, £${periodTotal.payment.toFixed(2)}`);
+          }
 
           return periodTotal;
         } catch (error) {
@@ -125,6 +130,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
   }
 
   try {
+    // Update daily summary
     await db.insert(dailySummaries).values({
       summaryDate: date,
       totalCurtailedEnergy: totalVolume.toString(),
@@ -163,7 +169,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
       });
     }
 
-    console.log(`Successfully updated data for ${date}`);
+    console.log(`Successfully processed data for ${date}`);
   } catch (error) {
     console.error(`Error updating summaries for ${date}:`, error);
     throw error;
