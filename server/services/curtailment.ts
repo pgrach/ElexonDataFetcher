@@ -1,5 +1,5 @@
 import { db } from "@db";
-import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "@db/schema";
+import { curtailmentRecords, dailySummaries } from "@db/schema";
 import { fetchBidsOffers } from "./elexon";
 import { eq, sql } from "drizzle-orm";
 import fs from "fs/promises";
@@ -77,7 +77,8 @@ export async function processDailyCurtailment(date: string): Promise<void> {
           const periodResults = await Promise.all(
             validRecords.map(async record => {
               const volume = Math.abs(record.volume);
-              const payment = volume * record.originalPrice;
+              // Calculate payment based on original price (always negative since volume is negative)
+              const payment = record.volume * record.originalPrice;
 
               try {
                 await db.insert(curtailmentRecords).values({
@@ -85,15 +86,15 @@ export async function processDailyCurtailment(date: string): Promise<void> {
                   settlementPeriod: period,
                   farmId: record.id,
                   leadPartyName: bmuLeadPartyMap?.get(record.id) || 'Unknown',
-                  volume: record.volume.toString(), // Keep the original negative value
-                  payment: payment.toString(),
+                  volume: record.volume.toString(), // Keep negative value
+                  payment: payment.toString(), // Keep negative value
                   originalPrice: record.originalPrice.toString(),
                   finalPrice: record.finalPrice.toString(),
                   soFlag: record.soFlag,
                   cadlFlag: record.cadlFlag
                 });
 
-                console.log(`[${date} P${period}] Added record for ${record.id}: ${volume} MWh, £${payment}`);
+                console.log(`[${date} P${period}] Added record for ${record.id}: ${volume} MWh, £${Math.abs(payment)}`);
                 return { volume, payment };
               } catch (error) {
                 console.error(`[${date} P${period}] Error inserting record for ${record.id}:`, error);
@@ -111,7 +112,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
           );
 
           if (periodTotal.volume > 0) {
-            console.log(`[${date} P${period}] Total: ${periodTotal.volume.toFixed(2)} MWh, £${periodTotal.payment.toFixed(2)}`);
+            console.log(`[${date} P${period}] Total: ${periodTotal.volume.toFixed(2)} MWh, £${Math.abs(periodTotal.payment).toFixed(2)}`);
           }
 
           return periodTotal;
@@ -130,72 +131,20 @@ export async function processDailyCurtailment(date: string): Promise<void> {
   }
 
   try {
-    // Update daily summary
+    // Store the absolute value of total payment in daily_summaries
     await db.insert(dailySummaries).values({
       summaryDate: date,
       totalCurtailedEnergy: totalVolume.toString(),
-      totalPayment: totalPayment.toString()
+      totalPayment: Math.abs(totalPayment).toString() // Store the absolute value once
     }).onConflictDoUpdate({
       target: [dailySummaries.summaryDate],
       set: {
         totalCurtailedEnergy: totalVolume.toString(),
-        totalPayment: totalPayment.toString()
+        totalPayment: Math.abs(totalPayment).toString() // Store the absolute value once
       }
     });
 
-    // Update monthly summary
-    const yearMonth = date.substring(0, 7);
-    const monthlyTotals = await db
-      .select({
-        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
-      })
-      .from(dailySummaries)
-      .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${date}::date)`);
-
-    if (monthlyTotals[0].totalCurtailedEnergy && monthlyTotals[0].totalPayment) {
-      await db.insert(monthlySummaries).values({
-        yearMonth,
-        totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
-        totalPayment: monthlyTotals[0].totalPayment,
-        updatedAt: new Date()
-      }).onConflictDoUpdate({
-        target: [monthlySummaries.yearMonth],
-        set: {
-          totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
-          totalPayment: monthlyTotals[0].totalPayment,
-          updatedAt: new Date()
-        }
-      });
-    }
-
-    // Update yearly summary
-    const year = date.substring(0, 4);
-    const yearlyTotals = await db
-      .select({
-        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
-      })
-      .from(dailySummaries)
-      .where(sql`date_trunc('year', ${dailySummaries.summaryDate}::date) = date_trunc('year', ${date}::date)`);
-
-    if (yearlyTotals[0].totalCurtailedEnergy && yearlyTotals[0].totalPayment) {
-      await db.insert(yearlySummaries).values({
-        year,
-        totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
-        totalPayment: yearlyTotals[0].totalPayment,
-        updatedAt: new Date()
-      }).onConflictDoUpdate({
-        target: [yearlySummaries.year],
-        set: {
-          totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
-          totalPayment: yearlyTotals[0].totalPayment,
-          updatedAt: new Date()
-        }
-      });
-    }
-
-    console.log(`Successfully processed data for ${date}`);
+    console.log(`Successfully processed data for ${date}: ${totalVolume.toFixed(2)} MWh, £${Math.abs(totalPayment).toFixed(2)}`);
   } catch (error) {
     console.error(`Error updating summaries for ${date}:`, error);
     throw error;
