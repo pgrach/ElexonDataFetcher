@@ -64,18 +64,33 @@ export async function getDailySummary(req: Request, res: Response) {
       });
     }
 
-    // Check if date is in the future
+    // Parse and validate the date
     const requestDate = new Date(date);
+    if (isNaN(requestDate.getTime())) {
+      return res.status(400).json({
+        error: "Invalid date provided"
+      });
+    }
+
+    // Check if date is in the future
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     if (requestDate > today) {
       return res.status(404).json({
-        error: "Data not available for future dates"
+        error: "Data not available - requested date is in the future"
       });
     }
 
-    // Get the daily summary (aggregate only)
+    // Check minimum date (assuming data starts from 2023-01-01)
+    const minDate = new Date('2023-01-01');
+    if (requestDate < minDate) {
+      return res.status(404).json({
+        error: "Data not available - requested date is before the earliest available date (2023-01-01)"
+      });
+    }
+
+    // Get the daily summary from dailySummaries table
     const summary = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, date)
     });
@@ -96,7 +111,7 @@ export async function getDailySummary(req: Request, res: Response) {
         if (!recordTotals[0] || !recordTotals[0].totalVolume) {
           console.log(`No data found in either table for date: ${date}`);
           return res.status(404).json({
-            error: "No data available for this date"
+            error: "No curtailment data available for this date"
           });
         }
 
@@ -133,7 +148,7 @@ export async function getDailySummary(req: Request, res: Response) {
     if (!recordTotals[0] || !recordTotals[0].totalVolume) {
       console.log(`No data found for date: ${date} and lead party: ${leadParty}`);
       return res.status(404).json({
-        error: "No data available for this date and lead party"
+        error: "No curtailment data available for this date and lead party"
       });
     }
 
