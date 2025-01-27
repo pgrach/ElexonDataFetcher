@@ -155,7 +155,7 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       });
     }
 
-    // Get period totals with volume sum
+    // Get period totals with volume sum - Updated to use ABS for correct volume calculation
     const farmPeriodTotals = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
