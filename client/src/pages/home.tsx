@@ -50,6 +50,7 @@ export default function Home() {
   });
   const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
 
+  // Format date using ISO format to ensure consistency
   const formattedDate = format(date, 'yyyy-MM-dd');
 
   // Fetch curtailed lead parties for the selected date
@@ -186,6 +187,7 @@ export default function Home() {
                   const currentDate = new Date();
                   return date < startDate || date > currentDate;
                 }}
+                initialFocus
               />
             </CardContent>
           </Card>
