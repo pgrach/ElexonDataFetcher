@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, isValid } from "date-fns";
 import { FilterBar } from "@/components/ui/filter-bar";
