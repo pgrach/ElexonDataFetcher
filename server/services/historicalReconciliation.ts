@@ -1,5 +1,5 @@
 import { db } from "@db";
-import { curtailmentRecords, dailySummaries } from "@db/schema";
+import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "@db/schema";
 import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays, subMonths } from "date-fns";
 import { processDailyCurtailment } from "./curtailment";
 import { fetchBidsOffers } from "./elexon";
@@ -69,13 +69,6 @@ async function needsReprocessing(date: string): Promise<boolean> {
       totalDbVolume += dbTotal.volume;
       totalDbPayment += dbTotal.payment;
 
-      console.log(`[${date} P${period}] Comparison:`, {
-        'API Volume': `${apiTotal.volume.toFixed(2)} MWh`,
-        'DB Volume': `${dbTotal.volume.toFixed(2)} MWh`,
-        'API Payment': `£${apiTotal.payment.toFixed(2)}`,
-        'DB Payment': `£${dbTotal.payment.toFixed(2)}`
-      });
-
       // Compare totals with a small tolerance for floating point differences
       const volumeDiff = Math.abs(apiTotal.volume - dbTotal.volume);
       const paymentDiff = Math.abs(apiTotal.payment - dbTotal.payment);
@@ -93,13 +86,6 @@ async function needsReprocessing(date: string): Promise<boolean> {
     const avgVolumeDiff = Math.abs((totalApiVolume / SAMPLE_PERIODS.length) - Number(summary?.totalCurtailedEnergy || 0));
     const avgPaymentDiff = Math.abs((totalApiPayment / SAMPLE_PERIODS.length) - Number(summary?.totalPayment || 0));
 
-    console.log('Daily totals comparison:', {
-      'Avg API Volume': `${(totalApiVolume / SAMPLE_PERIODS.length).toFixed(2)} MWh`,
-      'DB Volume': `${Number(summary?.totalCurtailedEnergy || 0).toFixed(2)} MWh`,
-      'Avg API Payment': `£${(totalApiPayment / SAMPLE_PERIODS.length).toFixed(2)}`,
-      'DB Payment': `£${Number(summary?.totalPayment || 0).toFixed(2)}`
-    });
-
     if (avgVolumeDiff > 1 || avgPaymentDiff > 10) {
       console.log('Significant daily total differences detected:', {
         volumeDiff: avgVolumeDiff.toFixed(2),
@@ -115,9 +101,6 @@ async function needsReprocessing(date: string): Promise<boolean> {
   }
 }
 
-/**
- * Process reconciliation for a specific day
- */
 export async function reconcileDay(date: string): Promise<void> {
   try {
     if (await needsReprocessing(date)) {
@@ -142,9 +125,6 @@ export async function reconcileDay(date: string): Promise<void> {
   }
 }
 
-/**
- * Check and update data for recent days (last 7 days)
- */
 export async function reconcileRecentData(): Promise<void> {
   try {
     const now = new Date();
@@ -173,9 +153,6 @@ export async function reconcileRecentData(): Promise<void> {
   }
 }
 
-/**
- * Check and update data for the previous month
- */
 export async function reconcilePreviousMonth(): Promise<void> {
   try {
     const now = new Date();
@@ -207,18 +184,53 @@ export async function reconcilePreviousMonth(): Promise<void> {
   }
 }
 
-/**
- * Check if reconciliation should run based on current hour
- */
 export function shouldRunReconciliation(): boolean {
   const currentHour = new Date().getHours();
   return currentHour === RECONCILIATION_HOUR;
 }
 
-/**
- * Check if monthly reconciliation should run based on current hour
- */
 export function shouldRunMonthlyReconciliation(): boolean {
   const currentHour = new Date().getHours();
   return currentHour === MONTHLY_RECONCILIATION_HOUR;
+}
+
+export async function reconcileYearlyData(): Promise<void> {
+  try {
+    const currentYear = new Date().getFullYear();
+    console.log(`Starting yearly data reconciliation for ${currentYear}`);
+
+    // Calculate totals from monthly summaries
+    const monthlyTotals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(${monthlySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`SUM(ABS(${monthlySummaries.totalPayment}::numeric))`
+      })
+      .from(monthlySummaries)
+      .where(sql`TO_DATE(${monthlySummaries.yearMonth} || '-01', 'YYYY-MM-DD')::date >= DATE_TRUNC('year', NOW())::date
+            AND TO_DATE(${monthlySummaries.yearMonth} || '-01', 'YYYY-MM-DD')::date < DATE_TRUNC('year', NOW())::date + INTERVAL '1 year'`);
+
+    if (monthlyTotals[0]?.totalCurtailedEnergy) {
+      // Update yearly summary
+      await db.insert(yearlySummaries).values({
+        year: currentYear.toString(),
+        totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
+        totalPayment: monthlyTotals[0].totalPayment,
+        updatedAt: new Date()
+      }).onConflictDoUpdate({
+        target: [yearlySummaries.year],
+        set: {
+          totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
+          totalPayment: monthlyTotals[0].totalPayment,
+          updatedAt: new Date()
+        }
+      });
+
+      console.log(`Updated yearly summary for ${currentYear}:`, {
+        energy: Number(monthlyTotals[0].totalCurtailedEnergy).toFixed(2),
+        payment: Number(monthlyTotals[0].totalPayment).toFixed(2)
+      });
+    }
+  } catch (error) {
+    console.error('Error during yearly reconciliation:', error);
+  }
 }

@@ -9,6 +9,7 @@ import type { ElexonBidOffer } from "../types/elexon";
 import { 
   reconcileRecentData, 
   reconcilePreviousMonth,
+  reconcileYearlyData,
   shouldRunReconciliation, 
   shouldRunMonthlyReconciliation 
 } from "./historicalReconciliation";
@@ -174,8 +175,9 @@ async function updateLatestData() {
     if (shouldRunMonthlyReconciliation() && lastMonthlyReconciliationDate !== today) {
       console.log('Starting previous month reconciliation...');
       await reconcilePreviousMonth();
+      await reconcileYearlyData();
       lastMonthlyReconciliationDate = today;
-      console.log('Previous month reconciliation completed');
+      console.log('Previous month and yearly reconciliation completed');
     }
 
   } catch (error) {
