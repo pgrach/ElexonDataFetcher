@@ -1,16 +1,13 @@
 import { processDailyCurtailment } from "../services/curtailment";
+import { reconcileDay } from "../services/historicalReconciliation";
 import { format } from "date-fns";
-
-// This script is kept alongside ingestMonthlyData.ts to provide flexibility in data processing:
-// - Use this script for quick single-day reprocessing
-// - Use ingestMonthlyData.ts for processing multiple days or entire months
-// This is particularly useful when dealing with historical data (e.g., 2022) or fixing specific days
 
 async function reprocessDay(dateStr: string) {
   try {
     console.log(`\n=== Starting Data Re-processing for ${dateStr} ===`);
 
-    await processDailyCurtailment(dateStr);
+    // Use the reconciliation process to check and update if needed
+    await reconcileDay(dateStr);
 
     console.log(`\n=== Data Re-processing Complete for ${dateStr} ===\n`);
   } catch (error) {

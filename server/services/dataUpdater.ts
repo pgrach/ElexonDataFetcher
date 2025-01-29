@@ -9,8 +9,10 @@ import type { ElexonBidOffer } from "../types/elexon";
 import { reconcileCurrentMonth, shouldRunReconciliation } from "./historicalReconciliation";
 
 const UPDATE_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
+const RECONCILIATION_CHECK_INTERVAL = 60 * 60 * 1000; // Check every hour
 let isUpdating = false;
 let lastReconciliationDate: string | null = null;
+let lastReconciliationCheck = 0;
 
 async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
   const now = new Date();
@@ -38,7 +40,10 @@ async function hasDataChanged(records: ElexonBidOffer[], date: string, period: n
           ${curtailmentRecords.settlementPeriod} = ${period}`
     );
 
-  if (existingRecords.length !== records.length) return true;
+  if (existingRecords.length !== records.length) {
+    console.log(`[${date} P${period}] Record count changed: API=${records.length}, DB=${existingRecords.length}`);
+    return true;
+  }
 
   const newRecordsMap = new Map(
     records.map(r => [
@@ -53,7 +58,7 @@ async function hasDataChanged(records: ElexonBidOffer[], date: string, period: n
     ])
   );
 
-  return existingRecords.some(record => {
+  const hasChanges = existingRecords.some(record => {
     const newRecord = newRecordsMap.get(record.farmId);
     if (!newRecord) return true;
 
@@ -63,14 +68,18 @@ async function hasDataChanged(records: ElexonBidOffer[], date: string, period: n
            newRecord.soFlag !== record.soFlag ||
            newRecord.cadlFlag !== record.cadlFlag;
   });
+
+  if (hasChanges) {
+    console.log(`[${date} P${period}] Data values have changed`);
+  }
+
+  return hasChanges;
 }
 
 async function upsertRecords(records: ElexonBidOffer[], date: string, period: number): Promise<void> {
   for (const record of records) {
     const volume = Math.abs(record.volume);
     const payment = volume * record.originalPrice;
-
-    console.log(`Upserting record for ${date} P${period} ${record.id}: ${volume} MWh, £${payment}`);
 
     try {
       await db.insert(curtailmentRecords)
@@ -124,19 +133,16 @@ async function updateLatestData() {
     for (let period = 1; period <= currentPeriod; period++) {
       try {
         const records = await fetchBidsOffers(date, period);
-
-        // Check if data has changed from what we have stored
         const changed = await hasDataChanged(records, date, period);
+
         if (changed) {
           console.log(`Changes detected for ${date} P${period}, updating records...`);
           await upsertRecords(records, date, period);
           dataChanged = true;
-        } else {
-          console.log(`No changes detected for ${date} P${period}`);
         }
       } catch (error) {
         console.error(`Error processing period ${period} for ${date}:`, error);
-        continue; // Continue with next period even if one fails
+        continue;
       }
     }
 
@@ -144,17 +150,18 @@ async function updateLatestData() {
     if (dataChanged) {
       console.log(`Re-running daily aggregation for ${date} due to data changes`);
       await processDailyCurtailment(date);
-    } else {
-      console.log(`No changes detected for ${date}, skipping aggregation`);
     }
 
     // Check if we should run historical reconciliation
-    const today = format(new Date(), 'yyyy-MM-dd');
-    if (shouldRunReconciliation() && lastReconciliationDate !== today) {
-      console.log('Starting historical data reconciliation...');
-      await reconcileCurrentMonth();
-      lastReconciliationDate = today;
-      console.log('Historical reconciliation completed');
+    const now = Date.now();
+    if (now - lastReconciliationCheck >= RECONCILIATION_CHECK_INTERVAL) {
+      if (shouldRunReconciliation() && lastReconciliationDate !== format(new Date(), 'yyyy-MM-dd')) {
+        console.log('Starting historical data reconciliation...');
+        await reconcileCurrentMonth();
+        lastReconciliationDate = format(new Date(), 'yyyy-MM-dd');
+        console.log('Historical reconciliation completed');
+      }
+      lastReconciliationCheck = now;
     }
 
   } catch (error) {

@@ -6,26 +6,50 @@ import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
 
 const MAX_CONCURRENT_DAYS = 5;
-const RECONCILIATION_HOUR = 1; // Run at 1 AM
+const RECONCILIATION_HOUR = 3; // Run at 3 AM to ensure all updates are captured
+const SAMPLE_PERIODS = [1, 12, 24, 36, 48]; // Check more periods throughout the day
 
 /**
  * Check if a specific day's data needs to be reprocessed by comparing
- * a sample of periods with the Elexon API
+ * sample periods with the Elexon API
  */
 async function needsReprocessing(date: string): Promise<boolean> {
   try {
-    // Check periods 1 and 24 as sample periods
-    const samplePeriods = [1, 24];
+    console.log(`Checking if ${date} needs reprocessing...`);
 
-    for (const period of samplePeriods) {
+    // Get daily summary for comparison
+    const summary = await db.query.dailySummaries.findFirst({
+      where: eq(dailySummaries.summaryDate, date)
+    });
+
+    console.log(`Current daily summary for ${date}:`, {
+      energy: summary?.totalCurtailedEnergy ? `${Number(summary.totalCurtailedEnergy).toFixed(2)} MWh` : 'No data',
+      payment: summary?.totalPayment ? `£${Number(summary.totalPayment).toFixed(2)}` : 'No data'
+    });
+
+    let totalApiVolume = 0;
+    let totalApiPayment = 0;
+    let totalDbVolume = 0;
+    let totalDbPayment = 0;
+
+    for (const period of SAMPLE_PERIODS) {
       const apiRecords = await fetchBidsOffers(date, period);
+      console.log(`[${date} P${period}] API records: ${apiRecords.length}`);
+
+      // Calculate API totals for this period
+      const apiTotal = apiRecords.reduce((acc, record) => ({
+        volume: acc.volume + Math.abs(record.volume),
+        payment: acc.payment + (Math.abs(record.volume) * record.originalPrice)
+      }), { volume: 0, payment: 0 });
+
+      totalApiVolume += apiTotal.volume;
+      totalApiPayment += apiTotal.payment;
 
       // Get existing records for this period
-      const existingRecords = await db
+      const dbRecords = await db
         .select({
-          farmId: curtailmentRecords.farmId,
-          volume: curtailmentRecords.volume,
-          payment: curtailmentRecords.payment
+          totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+          totalPayment: sql<string>`SUM(ABS(${curtailmentRecords.payment}::numeric))`
         })
         .from(curtailmentRecords)
         .where(
@@ -35,37 +59,51 @@ async function needsReprocessing(date: string): Promise<boolean> {
           )
         );
 
-      // Create maps for comparison
-      const apiMap = new Map(
-        apiRecords.map(r => [
-          r.id,
-          {
-            volume: Math.abs(r.volume).toString(),
-            payment: (Math.abs(r.volume) * r.originalPrice).toString()
-          }
-        ])
-      );
+      const dbTotal = {
+        volume: Number(dbRecords[0]?.totalVolume || 0),
+        payment: Number(dbRecords[0]?.totalPayment || 0)
+      };
 
-      // Compare record counts
-      if (apiMap.size !== existingRecords.length) {
-        console.log(`[${date} P${period}] Different number of records (API: ${apiMap.size}, DB: ${existingRecords.length})`);
+      totalDbVolume += dbTotal.volume;
+      totalDbPayment += dbTotal.payment;
+
+      console.log(`[${date} P${period}] Comparison:`, {
+        'API Volume': `${apiTotal.volume.toFixed(2)} MWh`,
+        'DB Volume': `${dbTotal.volume.toFixed(2)} MWh`,
+        'API Payment': `£${apiTotal.payment.toFixed(2)}`,
+        'DB Payment': `£${dbTotal.payment.toFixed(2)}`
+      });
+
+      // Compare totals with a small tolerance for floating point differences
+      const volumeDiff = Math.abs(apiTotal.volume - dbTotal.volume);
+      const paymentDiff = Math.abs(apiTotal.payment - dbTotal.payment);
+
+      if (volumeDiff > 0.01 || paymentDiff > 0.01) {
+        console.log(`[${date} P${period}] Differences detected:`, {
+          volumeDiff: volumeDiff.toFixed(3),
+          paymentDiff: paymentDiff.toFixed(3)
+        });
         return true;
       }
+    }
 
-      // Compare individual records
-      for (const record of existingRecords) {
-        const apiValues = apiMap.get(record.farmId);
+    // Compare total daily values
+    const avgVolumeDiff = Math.abs((totalApiVolume / SAMPLE_PERIODS.length) - Number(summary?.totalCurtailedEnergy || 0));
+    const avgPaymentDiff = Math.abs((totalApiPayment / SAMPLE_PERIODS.length) - Number(summary?.totalPayment || 0));
 
-        if (!apiValues) {
-          console.log(`[${date} P${period}] Record missing from API for ${record.farmId}`);
-          return true;
-        }
+    console.log('Daily totals comparison:', {
+      'Avg API Volume': `${(totalApiVolume / SAMPLE_PERIODS.length).toFixed(2)} MWh`,
+      'DB Volume': `${Number(summary?.totalCurtailedEnergy || 0).toFixed(2)} MWh`,
+      'Avg API Payment': `£${(totalApiPayment / SAMPLE_PERIODS.length).toFixed(2)}`,
+      'DB Payment': `£${Number(summary?.totalPayment || 0).toFixed(2)}`
+    });
 
-        if (apiValues.volume !== record.volume || apiValues.payment !== record.payment) {
-          console.log(`[${date} P${period}] Data mismatch for ${record.farmId}`);
-          return true;
-        }
-      }
+    if (avgVolumeDiff > 1 || avgPaymentDiff > 10) {
+      console.log('Significant daily total differences detected:', {
+        volumeDiff: avgVolumeDiff.toFixed(2),
+        paymentDiff: avgPaymentDiff.toFixed(2)
+      });
+      return true;
     }
 
     return false;
@@ -78,14 +116,23 @@ async function needsReprocessing(date: string): Promise<boolean> {
 /**
  * Process reconciliation for a specific day
  */
-async function reconcileDay(date: string): Promise<void> {
+export async function reconcileDay(date: string): Promise<void> {
   try {
     if (await needsReprocessing(date)) {
       console.log(`[${date}] Data differences detected, reprocessing...`);
       await processDailyCurtailment(date);
-      console.log(`[${date}] Successfully reprocessed data`);
+
+      // Verify the update
+      const summary = await db.query.dailySummaries.findFirst({
+        where: eq(dailySummaries.summaryDate, date)
+      });
+
+      console.log(`[${date}] Reprocessing complete:`, {
+        energy: `${Number(summary?.totalCurtailedEnergy || 0).toFixed(2)} MWh`,
+        payment: `£${Number(summary?.totalPayment || 0).toFixed(2)}`
+      });
     } else {
-      console.log(`[${date}] No updates needed`);
+      console.log(`[${date}] Data is up to date`);
     }
   } catch (error) {
     console.error(`Error reconciling data for ${date}:`, error);
