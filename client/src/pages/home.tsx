@@ -1,10 +1,9 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building } from "lucide-react";
-import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import {
   Select,
@@ -49,7 +48,7 @@ interface YearlySummary {
   totalPayment: number;
 }
 
-export default function Home() {
+function Home() {
   const [date, setDate] = useState<Date>(() => {
     const today = new Date();
     const startDate = new Date("2023-01-01");
@@ -423,3 +422,5 @@ export default function Home() {
     </div>
   );
 }
+
+export default Home;
