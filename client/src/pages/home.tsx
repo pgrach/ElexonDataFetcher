@@ -4,7 +4,15 @@ import { format, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip
+} from "recharts";
 import {
   Select,
   SelectContent,
@@ -164,6 +172,36 @@ function Home() {
       return hour > now.getHours();
     }
     return selectedDate > now;
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const data = payload[0];
+    const hour = data.payload.hour;
+    const value = Number(data.value);
+
+    let message = "";
+    if (isHourInFuture(hour)) {
+      message = "Data not available yet";
+    } else if (value === 0) {
+      message = "No curtailment detected";
+    } else {
+      message = `${value.toFixed(2)} MWh`;
+    }
+
+    return (
+      <div className="rounded-lg border bg-background p-2 shadow-md">
+        <div className="grid gap-2">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-primary" />
+            <span className="font-medium">{hour}</span>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {message}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -373,37 +411,7 @@ function Home() {
                       }}
                       tick={{ fontSize: 12 }}
                     />
-                    <ChartTooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null;
-                        const data = payload[0];
-                        const hour = data.payload.hour;
-                        const value = Number(data.value);
-
-                        let message = "";
-                        if (isHourInFuture(hour)) {
-                          message = "Data not available yet";
-                        } else if (value === 0) {
-                          message = "No curtailment detected";
-                        } else {
-                          message = `${value.toFixed(2)} MWh`;
-                        }
-
-                        return (
-                          <div className="rounded-lg border bg-background p-2 shadow-md">
-                            <div className="grid gap-2">
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 rounded-full bg-primary" />
-                                <span className="font-medium">{hour}</span>
-                              </div>
-                              <div className="text-sm text-muted-foreground">
-                                {message}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }}
-                    />
+                    <Tooltip content={<CustomTooltip />} />
                     <Bar
                       dataKey="curtailedEnergy"
                       fill="hsl(var(--primary))"
