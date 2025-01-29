@@ -6,12 +6,18 @@ import { fetchBidsOffers } from "./elexon";
 import { curtailmentRecords } from "@db/schema";
 import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
-import { reconcileRecentData, shouldRunReconciliation } from "./historicalReconciliation";
+import { 
+  reconcileRecentData, 
+  reconcilePreviousMonth,
+  shouldRunReconciliation, 
+  shouldRunMonthlyReconciliation 
+} from "./historicalReconciliation";
 
 const UPDATE_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
 const RECONCILIATION_CHECK_INTERVAL = 30 * 60 * 1000; // Check every 30 minutes
 let isUpdating = false;
 let lastReconciliationDate: string | null = null;
+let lastMonthlyReconciliationDate: string | null = null;
 let lastReconciliationCheck = 0;
 
 async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
@@ -49,7 +55,7 @@ async function hasDataChanged(records: ElexonBidOffer[], date: string, period: n
     records.map(r => [
       r.id,
       {
-        volume: Math.abs(r.volume).toString(),
+        volume: r.volume.toString(),
         payment: (Math.abs(r.volume) * r.originalPrice).toString(),
         originalPrice: r.originalPrice.toString(),
         soFlag: r.soFlag,
@@ -152,14 +158,24 @@ async function updateLatestData() {
       await processDailyCurtailment(date);
     }
 
-    // Check if we should run historical reconciliation
     const now = Date.now();
+    const today = format(new Date(), 'yyyy-MM-dd');
+
+    // Check if we should run historical reconciliation
     if (now - lastReconciliationCheck >= RECONCILIATION_CHECK_INTERVAL) {
       console.log('Starting reconciliation of recent data...');
       await reconcileRecentData();
       lastReconciliationCheck = now;
-      lastReconciliationDate = format(new Date(), 'yyyy-MM-dd');
+      lastReconciliationDate = today;
       console.log('Recent data reconciliation completed');
+    }
+
+    // Check if we should run monthly reconciliation (once per day)
+    if (shouldRunMonthlyReconciliation() && lastMonthlyReconciliationDate !== today) {
+      console.log('Starting previous month reconciliation...');
+      await reconcilePreviousMonth();
+      lastMonthlyReconciliationDate = today;
+      console.log('Previous month reconciliation completed');
     }
 
   } catch (error) {

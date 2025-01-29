@@ -1,6 +1,6 @@
 import { db } from "@db";
 import { curtailmentRecords, dailySummaries } from "@db/schema";
-import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays } from "date-fns";
+import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays, subMonths } from "date-fns";
 import { processDailyCurtailment } from "./curtailment";
 import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
@@ -9,6 +9,7 @@ const MAX_CONCURRENT_DAYS = 5;
 const RECONCILIATION_HOUR = 3; // Run at 3 AM to ensure all updates are captured
 const SAMPLE_PERIODS = [1, 12, 24, 36, 48]; // Check more periods throughout the day
 const LOOK_BACK_DAYS = 7; // Look back up to a week for potential updates
+const MONTHLY_RECONCILIATION_HOUR = 2; // Run monthly reconciliation at 2 AM, before daily reconciliation
 
 /**
  * Check if a specific day's data needs to be reprocessing by comparing
@@ -142,7 +143,7 @@ export async function reconcileDay(date: string): Promise<void> {
 }
 
 /**
- * Check and update data for recent days and current month
+ * Check and update data for recent days (last 7 days)
  */
 export async function reconcileRecentData(): Promise<void> {
   try {
@@ -173,22 +174,20 @@ export async function reconcileRecentData(): Promise<void> {
 }
 
 /**
- * Check and update data for the current month
+ * Check and update data for the previous month
  */
-export async function reconcileCurrentMonth(): Promise<void> {
+export async function reconcilePreviousMonth(): Promise<void> {
   try {
     const now = new Date();
-    const currentMonth = startOfMonth(now);
-    const monthEnd = endOfMonth(now);
+    const previousMonth = subMonths(now, 1);
+    const startDate = startOfMonth(previousMonth);
+    const endDate = endOfMonth(previousMonth);
 
-    // Don't process future dates
-    const endDate = isBefore(now, monthEnd) ? now : monthEnd;
+    console.log(`Starting reconciliation for previous month: ${format(previousMonth, 'yyyy-MM')}`);
 
-    console.log(`Starting reconciliation for ${format(currentMonth, 'yyyy-MM')}`);
-
-    // Get all dates in the month up to today
+    // Get all dates in the previous month
     const dates: string[] = [];
-    let currentDate = currentMonth;
+    let currentDate = startDate;
 
     while (isBefore(currentDate, endDate)) {
       dates.push(format(currentDate, 'yyyy-MM-dd'));
@@ -201,9 +200,9 @@ export async function reconcileCurrentMonth(): Promise<void> {
       await Promise.all(batch.map(date => reconcileDay(date)));
     }
 
-    console.log(`Completed reconciliation for ${format(currentMonth, 'yyyy-MM')}`);
+    console.log(`Completed reconciliation for ${format(previousMonth, 'yyyy-MM')}`);
   } catch (error) {
-    console.error('Error during monthly reconciliation:', error);
+    console.error('Error during previous month reconciliation:', error);
     throw error;
   }
 }
@@ -214,4 +213,12 @@ export async function reconcileCurrentMonth(): Promise<void> {
 export function shouldRunReconciliation(): boolean {
   const currentHour = new Date().getHours();
   return currentHour === RECONCILIATION_HOUR;
+}
+
+/**
+ * Check if monthly reconciliation should run based on current hour
+ */
+export function shouldRunMonthlyReconciliation(): boolean {
+  const currentHour = new Date().getHours();
+  return currentHour === MONTHLY_RECONCILIATION_HOUR;
 }
