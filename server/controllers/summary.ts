@@ -332,7 +332,8 @@ export async function getYearlySummary(req: Request, res: Response) {
         totalPayment: sql<string>`ABS(${monthlySummaries.totalPayment}::numeric)`
       })
       .from(monthlySummaries)
-      .where(sql`EXTRACT(YEAR FROM ${monthlySummaries.yearMonth}::date) = ${parseInt(year)}`)
+      .where(sql`TO_DATE(${monthlySummaries.yearMonth} || '-01', 'YYYY-MM-DD')::date >= DATE_TRUNC('year', TO_DATE(${year}, 'YYYY'))::date
+            AND TO_DATE(${monthlySummaries.yearMonth} || '-01', 'YYYY-MM-DD')::date < DATE_TRUNC('year', TO_DATE(${year}, 'YYYY'))::date + INTERVAL '1 year'`)
       .orderBy(monthlySummaries.yearMonth);
 
     console.log(`Found ${monthlyTotals.length} monthly records for ${year}`);
