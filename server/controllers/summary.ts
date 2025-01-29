@@ -299,7 +299,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       const farmTotals = await db
         .select({
           totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-          totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+          totalPayment: sql<string>`SUM(ABS(${curtailmentRecords.payment}::numeric))`
         })
         .from(curtailmentRecords)
         .where(
@@ -320,7 +320,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       return res.json({
         year,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)),
+        totalPayment: Number(farmTotals[0].totalPayment)
       });
     }
 
@@ -329,7 +329,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       .select({
         summaryDate: dailySummaries.summaryDate,
         totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
-        totalPayment: dailySummaries.totalPayment
+        totalPayment: sql<string>`ABS(${dailySummaries.totalPayment}::numeric)`
       })
       .from(dailySummaries)
       .where(sql`EXTRACT(YEAR FROM ${dailySummaries.summaryDate}::date) = ${parseInt(year)}`)
@@ -354,7 +354,7 @@ export async function getYearlySummary(req: Request, res: Response) {
     res.json({
       year,
       totalCurtailedEnergy: yearTotals.totalCurtailedEnergy,
-      totalPayment: Math.abs(yearTotals.totalPayment),
+      totalPayment: yearTotals.totalPayment
     });
   } catch (error) {
     console.error('Error fetching yearly summary:', error);
