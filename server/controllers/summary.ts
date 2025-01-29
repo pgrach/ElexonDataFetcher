@@ -324,26 +324,41 @@ export async function getYearlySummary(req: Request, res: Response) {
       });
     }
 
-    // Get daily records for the year
-    const dailyRecords = await db
+    // Get monthly records for the year
+    const monthlyTotals = await db
       .select({
-        summaryDate: dailySummaries.summaryDate,
-        totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
-        totalPayment: sql<string>`ABS(${dailySummaries.totalPayment}::numeric)`
+        yearMonth: monthlySummaries.yearMonth,
+        totalCurtailedEnergy: monthlySummaries.totalCurtailedEnergy,
+        totalPayment: sql<string>`ABS(${monthlySummaries.totalPayment}::numeric)`
       })
-      .from(dailySummaries)
-      .where(sql`EXTRACT(YEAR FROM ${dailySummaries.summaryDate}::date) = ${parseInt(year)}`)
-      .orderBy(dailySummaries.summaryDate);
+      .from(monthlySummaries)
+      .where(sql`EXTRACT(YEAR FROM ${monthlySummaries.yearMonth}::date) = ${parseInt(year)}`)
+      .orderBy(monthlySummaries.yearMonth);
 
-    console.log(`Found ${dailyRecords.length} daily records for ${year}`);
+    console.log(`Found ${monthlyTotals.length} monthly records for ${year}`);
 
-    // Calculate year totals from daily records
-    const yearTotals = dailyRecords.reduce((acc, record) => ({
+    // Calculate year totals from monthly records
+    const yearTotals = monthlyTotals.reduce((acc, record) => ({
       totalCurtailedEnergy: acc.totalCurtailedEnergy + Number(record.totalCurtailedEnergy),
       totalPayment: acc.totalPayment + Number(record.totalPayment)
     }), { totalCurtailedEnergy: 0, totalPayment: 0 });
 
-    console.log(`Year ${year} totals:`, yearTotals);
+    // Verify against daily_summaries as a cross-check
+    const dailyTotals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`SUM(ABS(${dailySummaries.totalPayment}::numeric))`
+      })
+      .from(dailySummaries)
+      .where(sql`EXTRACT(YEAR FROM ${dailySummaries.summaryDate}::date) = ${parseInt(year)}`);
+
+    console.log('Year totals comparison:', {
+      'Monthly aggregation': yearTotals,
+      'Daily aggregation': {
+        totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
+        totalPayment: Number(dailyTotals[0]?.totalPayment || 0)
+      }
+    });
 
     if (yearTotals.totalCurtailedEnergy === 0 && yearTotals.totalPayment === 0) {
       return res.status(404).json({
