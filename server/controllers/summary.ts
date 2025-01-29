@@ -339,11 +339,21 @@ export async function getYearlySummary(req: Request, res: Response) {
 
     // Calculate year totals from daily records
     const yearTotals = dailyRecords.reduce((acc, record) => ({
-      totalCurtailedEnergy: acc.totalCurtailedEnergy + Number(record.totalCurtailedEnergy),
-      totalPayment: acc.totalPayment + Number(record.totalPayment)
+      totalCurtailedEnergy: acc.totalCurtailedEnergy + Number(record.totalCurtailedEnergy || 0),
+      totalPayment: acc.totalPayment + Number(record.totalPayment || 0)
     }), { totalCurtailedEnergy: 0, totalPayment: 0 });
 
-    console.log(`Year ${year} totals:`, yearTotals);
+    // Double check against monthly sums
+    const monthlyTotals = await db
+      .select({
+        totalPayment: sql<string>`SUM(ABS(${dailySummaries.totalPayment}::numeric))`,
+        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`
+      })
+      .from(dailySummaries)
+      .where(sql`EXTRACT(YEAR FROM ${dailySummaries.summaryDate}::date) = ${parseInt(year)}`);
+
+    console.log('Year totals from daily records:', yearTotals);
+    console.log('Year totals from monthly sum:', monthlyTotals[0]);
 
     if (yearTotals.totalCurtailedEnergy === 0 && yearTotals.totalPayment === 0) {
       return res.status(404).json({
