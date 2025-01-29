@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 
-export const queryClient = new QueryClient({
+const defaultQueryClientConfig = {
   defaultOptions: {
     queries: {
       queryFn: async ({ queryKey }) => {
@@ -12,7 +12,6 @@ export const queryClient = new QueryClient({
           if (res.status >= 500) {
             throw new Error(`${res.status}: ${res.statusText}`);
           }
-
           throw new Error(`${res.status}: ${await res.text()}`);
         }
 
@@ -27,4 +26,6 @@ export const queryClient = new QueryClient({
       retry: false,
     }
   },
-});
+};
+
+export const queryClient = new QueryClient(defaultQueryClientConfig);
