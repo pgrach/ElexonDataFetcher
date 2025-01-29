@@ -6,9 +6,11 @@ import { fetchBidsOffers } from "./elexon";
 import { curtailmentRecords } from "@db/schema";
 import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
+import { reconcileCurrentMonth, shouldRunReconciliation } from "./historicalReconciliation";
 
 const UPDATE_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
 let isUpdating = false;
+let lastReconciliationDate: string | null = null;
 
 async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
   const now = new Date();
@@ -145,6 +147,15 @@ async function updateLatestData() {
       await processDailyCurtailment(date);
     } else {
       console.log(`No changes detected for ${date}, skipping aggregation`);
+    }
+
+    // Check if we should run historical reconciliation
+    const today = format(new Date(), 'yyyy-MM-dd');
+    if (shouldRunReconciliation() && lastReconciliationDate !== today) {
+      console.log('Starting historical data reconciliation...');
+      await reconcileCurrentMonth();
+      lastReconciliationDate = today;
+      console.log('Historical reconciliation completed');
     }
 
   } catch (error) {
