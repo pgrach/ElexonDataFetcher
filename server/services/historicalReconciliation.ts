@@ -16,10 +16,10 @@ async function needsReprocessing(date: string): Promise<boolean> {
   try {
     // Check periods 1 and 24 as sample periods
     const samplePeriods = [1, 24];
-    
+
     for (const period of samplePeriods) {
       const apiRecords = await fetchBidsOffers(date, period);
-      
+
       // Get existing records for this period
       const existingRecords = await db
         .select({
@@ -46,33 +46,23 @@ async function needsReprocessing(date: string): Promise<boolean> {
         ])
       );
 
-      const dbMap = new Map(
-        existingRecords.map(r => [
-          r.farmId,
-          {
-            volume: r.volume,
-            payment: r.payment
-          }
-        ])
-      );
-
       // Compare record counts
-      if (apiMap.size !== dbMap.size) {
-        console.log(`[${date} P${period}] Different number of records (API: ${apiMap.size}, DB: ${dbMap.size})`);
+      if (apiMap.size !== existingRecords.length) {
+        console.log(`[${date} P${period}] Different number of records (API: ${apiMap.size}, DB: ${existingRecords.length})`);
         return true;
       }
 
       // Compare individual records
-      for (const [farmId, apiValues] of apiMap) {
-        const dbValues = dbMap.get(farmId);
-        
-        if (!dbValues) {
-          console.log(`[${date} P${period}] New record found for ${farmId}`);
+      for (const record of existingRecords) {
+        const apiValues = apiMap.get(record.farmId);
+
+        if (!apiValues) {
+          console.log(`[${date} P${period}] Record missing from API for ${record.farmId}`);
           return true;
         }
 
-        if (apiValues.volume !== dbValues.volume || apiValues.payment !== dbValues.payment) {
-          console.log(`[${date} P${period}] Data mismatch for ${farmId}`);
+        if (apiValues.volume !== record.volume || apiValues.payment !== record.payment) {
+          console.log(`[${date} P${period}] Data mismatch for ${record.farmId}`);
           return true;
         }
       }
@@ -111,16 +101,16 @@ export async function reconcileCurrentMonth(): Promise<void> {
     const now = new Date();
     const currentMonth = startOfMonth(now);
     const monthEnd = endOfMonth(now);
-    
+
     // Don't process future dates
     const endDate = isBefore(now, monthEnd) ? now : monthEnd;
-    
+
     console.log(`Starting reconciliation for ${format(currentMonth, 'yyyy-MM')}`);
 
     // Get all dates in the month up to today
     const dates: string[] = [];
     let currentDate = currentMonth;
-    
+
     while (isBefore(currentDate, endDate)) {
       dates.push(format(currentDate, 'yyyy-MM-dd'));
       currentDate = new Date(currentDate.setDate(currentDate.getDate() + 1));

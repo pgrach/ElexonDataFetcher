@@ -8,6 +8,7 @@ export interface ElexonBidOffer {
   cadlFlag: boolean | null;
   originalPrice: number;
   finalPrice: number;
+  leadPartyName?: string;
 }
 
 export interface ElexonResponse {

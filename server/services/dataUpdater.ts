@@ -98,8 +98,7 @@ async function upsertRecords(records: ElexonBidOffer[], date: string, period: nu
             originalPrice: record.originalPrice.toString(),
             finalPrice: record.finalPrice.toString(),
             soFlag: record.soFlag,
-            cadlFlag: record.cadlFlag,
-            updatedAt: new Date()
+            cadlFlag: record.cadlFlag
           }
         });
     } catch (error) {
