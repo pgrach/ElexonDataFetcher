@@ -6,10 +6,10 @@ import { fetchBidsOffers } from "./elexon";
 import { curtailmentRecords } from "@db/schema";
 import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
-import { reconcileCurrentMonth, shouldRunReconciliation } from "./historicalReconciliation";
+import { reconcileRecentData, shouldRunReconciliation } from "./historicalReconciliation";
 
 const UPDATE_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
-const RECONCILIATION_CHECK_INTERVAL = 60 * 60 * 1000; // Check every hour
+const RECONCILIATION_CHECK_INTERVAL = 30 * 60 * 1000; // Check every 30 minutes
 let isUpdating = false;
 let lastReconciliationDate: string | null = null;
 let lastReconciliationCheck = 0;
@@ -88,7 +88,7 @@ async function upsertRecords(records: ElexonBidOffer[], date: string, period: nu
           settlementPeriod: period,
           farmId: record.id,
           leadPartyName: record.leadPartyName || 'Unknown',
-          volume: volume.toString(),
+          volume: record.volume.toString(),
           payment: payment.toString(),
           originalPrice: record.originalPrice.toString(),
           finalPrice: record.finalPrice.toString(),
@@ -102,7 +102,7 @@ async function upsertRecords(records: ElexonBidOffer[], date: string, period: nu
             curtailmentRecords.farmId
           ],
           set: {
-            volume: volume.toString(),
+            volume: record.volume.toString(),
             payment: payment.toString(),
             originalPrice: record.originalPrice.toString(),
             finalPrice: record.finalPrice.toString(),
@@ -155,13 +155,11 @@ async function updateLatestData() {
     // Check if we should run historical reconciliation
     const now = Date.now();
     if (now - lastReconciliationCheck >= RECONCILIATION_CHECK_INTERVAL) {
-      if (shouldRunReconciliation() && lastReconciliationDate !== format(new Date(), 'yyyy-MM-dd')) {
-        console.log('Starting historical data reconciliation...');
-        await reconcileCurrentMonth();
-        lastReconciliationDate = format(new Date(), 'yyyy-MM-dd');
-        console.log('Historical reconciliation completed');
-      }
+      console.log('Starting reconciliation of recent data...');
+      await reconcileRecentData();
       lastReconciliationCheck = now;
+      lastReconciliationDate = format(new Date(), 'yyyy-MM-dd');
+      console.log('Recent data reconciliation completed');
     }
 
   } catch (error) {

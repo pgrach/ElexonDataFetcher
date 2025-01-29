@@ -1,6 +1,6 @@
 import { db } from "@db";
 import { curtailmentRecords, dailySummaries } from "@db/schema";
-import { format, startOfMonth, endOfMonth, parseISO, isBefore } from "date-fns";
+import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays } from "date-fns";
 import { processDailyCurtailment } from "./curtailment";
 import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
@@ -8,9 +8,10 @@ import { eq, and, sql } from "drizzle-orm";
 const MAX_CONCURRENT_DAYS = 5;
 const RECONCILIATION_HOUR = 3; // Run at 3 AM to ensure all updates are captured
 const SAMPLE_PERIODS = [1, 12, 24, 36, 48]; // Check more periods throughout the day
+const LOOK_BACK_DAYS = 7; // Look back up to a week for potential updates
 
 /**
- * Check if a specific day's data needs to be reprocessed by comparing
+ * Check if a specific day's data needs to be reprocessing by comparing
  * sample periods with the Elexon API
  */
 async function needsReprocessing(date: string): Promise<boolean> {
@@ -136,6 +137,37 @@ export async function reconcileDay(date: string): Promise<void> {
     }
   } catch (error) {
     console.error(`Error reconciling data for ${date}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Check and update data for recent days and current month
+ */
+export async function reconcileRecentData(): Promise<void> {
+  try {
+    const now = new Date();
+    const startDate = subDays(now, LOOK_BACK_DAYS);
+    const dates: string[] = [];
+
+    // Add recent days
+    let currentDate = startDate;
+    while (isBefore(currentDate, now)) {
+      dates.push(format(currentDate, 'yyyy-MM-dd'));
+      currentDate = new Date(currentDate.setDate(currentDate.getDate() + 1));
+    }
+
+    console.log(`Starting reconciliation for recent days (${format(startDate, 'yyyy-MM-dd')} to ${format(now, 'yyyy-MM-dd')})`);
+
+    // Process dates in batches
+    for (let i = 0; i < dates.length; i += MAX_CONCURRENT_DAYS) {
+      const batch = dates.slice(i, i + MAX_CONCURRENT_DAYS);
+      await Promise.all(batch.map(date => reconcileDay(date)));
+    }
+
+    console.log('Completed reconciliation of recent data');
+  } catch (error) {
+    console.error('Error during recent data reconciliation:', error);
     throw error;
   }
 }
