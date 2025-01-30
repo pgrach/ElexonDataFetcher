@@ -499,6 +499,27 @@ export default function Home() {
                       Potential mining with {selectedMinerModel.replace('_', ' ')} miners
                     </p>
                   </div>
+
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Value if Bitcoin was mined</div>
+                    {isDailyLoading ? (
+                      <div className="text-3xl font-bold animate-pulse">Loading...</div>
+                    ) : dailyError ? (
+                      <div className="text-sm text-red-500">
+                        {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
+                      </div>
+                    ) : dailyData ? (
+                      <div className="text-3xl font-bold text-[#F7931A]">
+                        £{bitcoinPotential?.valueAtCurrentPrice.toLocaleString('en-GB', { maximumFractionDigits: 2 }) || '0.00'}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No daily data available</div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Estimated value at current BTC price
+                    </p>
+                  </div>
+
                 </div>
               </div>
 
