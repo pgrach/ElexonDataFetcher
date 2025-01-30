@@ -518,7 +518,7 @@ export default function Home() {
                 ) : hourlyData ? (
                   <DualAxisChart
                     data={hourlyData.map((hour) => ({
-                      hour: hour.hour.split(':')[0].padStart(2, '0'),
+                      hour: `${hour.hour.split(':')[0].padStart(2, '0')}:00`,
                       curtailedEnergy: isHourInFuture(hour.hour) ? 0 : hour.curtailedEnergy,
                       bitcoinMined: isHourInFuture(hour.hour) ? 0 :
                         (hour.curtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / (dailyData?.totalCurtailedEnergy || 1)
