@@ -1,0 +1,124 @@
+import {
+  ComposedChart,
+  Line,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
+import { formatNumber } from '@/lib/utils';
+import type { AggregatedData } from '../../../server/types';
+
+interface EnergyChartProps {
+  data: AggregatedData[];
+}
+
+export function EnergyChart({ data }: EnergyChartProps) {
+  return (
+    <ResponsiveContainer width="100%" height={400}>
+      <ComposedChart
+        data={data}
+        margin={{
+          top: 20,
+          right: 40,
+          left: 20,
+          bottom: 20,
+        }}
+      >
+        <CartesianGrid 
+          strokeDasharray="3 3" 
+          className="stroke-gray-200 dark:stroke-gray-700" 
+          vertical={false}
+        />
+        <XAxis 
+          dataKey="hour"
+          tickFormatter={(hour) => `${hour}:00`}
+          label={{ 
+            value: 'Hours', 
+            position: 'insideBottom',
+            offset: -10,
+            style: { 
+              textAnchor: 'middle',
+              fill: 'var(--gray-600)',
+              fontSize: 12 
+            }
+          }}
+          className="text-xs text-gray-600 dark:text-gray-300"
+          tick={{ fontSize: 11 }}
+        />
+        <YAxis 
+          yAxisId="left" 
+          orientation="left" 
+          stroke="#ef4444"
+          label={{ 
+            value: 'Curtailed Energy (MWh)', 
+            angle: -90, 
+            position: 'insideLeft',
+            offset: 0,
+            style: { 
+              textAnchor: 'middle',
+              fill: '#ef4444',
+              fontSize: 12
+            }
+          }}
+          className="text-xs"
+          tick={{ fontSize: 11 }}
+        />
+        <YAxis 
+          yAxisId="right" 
+          orientation="right" 
+          stroke="#f59e0b"
+          label={{ 
+            value: 'Potential BTC', 
+            angle: 90, 
+            position: 'insideRight',
+            offset: 0,
+            style: { 
+              textAnchor: 'middle',
+              fill: '#f59e0b',
+              fontSize: 12
+            }
+          }}
+          className="text-xs"
+          tick={{ fontSize: 11 }}
+        />
+        <Tooltip
+          formatter={(value: number, name: string) => {
+            if (name === 'Curtailed Energy') {
+              return [`${formatNumber(value)} MWh`, name];
+            }
+            return [`${formatNumber(value, 8)} BTC`, name];
+          }}
+        />
+        <Legend 
+          wrapperStyle={{
+            paddingTop: '20px',
+            fontSize: '12px'
+          }}
+        />
+        <Line
+          yAxisId="left"
+          type="monotone"
+          dataKey="curtailedEnergy"
+          name="Curtailed Energy"
+          stroke="#ef4444"
+          strokeWidth={2.5}
+          dot={false}
+          activeDot={{ r: 4, strokeWidth: 1 }}
+        />
+        <Bar
+          yAxisId="right"
+          dataKey="potentialBtc"
+          name="Potential BTC"
+          fill="#f59e0b"
+          opacity={0.85}
+          radius={[4, 4, 0, 0]}
+          barSize={20}
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
