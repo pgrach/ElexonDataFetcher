@@ -5,7 +5,7 @@ import { curtailmentRecords } from "@db/schema";
 import { and, eq } from "drizzle-orm";
 
 const BLOCK_REWARD = 6.25; // Current Bitcoin block reward
-const BLOCKS_PER_HOUR = 6; // Average blocks per hour
+const BLOCKS_PER_HOUR = 6; // Average blocks per hour (1 block/10 minutes)
 const BLOCKS_PER_PERIOD = BLOCKS_PER_HOUR / 2; // Blocks per 30-minute period
 
 interface BitcoinCalculation {
@@ -49,7 +49,7 @@ function calculateBitcoinForPeriod(
   const curtailedKwh = Number((curtailedMwh * 1000).toFixed(10));
   console.log('Curtailed kWh:', curtailedKwh);
 
-  // Calculate miner consumption in kWh
+  // Calculate miner consumption in kWh for 30-min period
   const minerConsumptionKwh = Number((miner.power / 1000 / 2).toFixed(10)); // Divide by 2 for 30-min period
   console.log('Miner consumption kWh per period:', minerConsumptionKwh);
 
@@ -77,7 +77,8 @@ function calculateBitcoinForPeriod(
   const ourNetworkShare = Number((totalHashPower / networkHashRateTH).toFixed(10));
   console.log('Network share:', ourNetworkShare);
 
-  // Calculate expected BTC mined per period (30 minutes)
+  // Calculate expected BTC mined per 30-minute period
+  // We use BLOCKS_PER_PERIOD (3 blocks per 30 minutes) * full block reward * our network share
   const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_PERIOD).toFixed(8));
   console.log('Bitcoin mined in period:', bitcoinMined);
 
@@ -160,8 +161,3 @@ export async function fetchFromMinerstat(): Promise<{ difficulty: number; price:
     throw new Error('Failed to fetch data from minerstat');
   }
 }
-
-// Current block reward and blocks per hour constants are now defined in the edited section.
-
-
-//The original calculateBitcoinMining function is completely replaced.
