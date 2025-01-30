@@ -1,0 +1,81 @@
+import { fetchBitcoinDifficulty } from "@/lib/services/bitcoinDifficulty";
+
+// Miner model interface and constants
+interface MinerModel {
+  name: string;
+  hashrate: number; // TH/s
+  power: number;    // Watts
+}
+
+export const MINER_MODELS = {
+  S9: {
+    name: "Antminer S9",
+    hashrate: 13.5,
+    power: 1323
+  },
+  S19J_PRO: {
+    name: "Antminer S19j Pro",
+    hashrate: 100,
+    power: 3050
+  },
+  M20S: {
+    name: "Whatsminer M20S",
+    hashrate: 68,
+    power: 3360
+  }
+} as const;
+
+// Current block reward and blocks per hour constants
+const BLOCK_REWARD = 3.125; // Current block reward
+const BLOCKS_PER_HOUR = 6; // ~6 blocks per hour
+
+/**
+ * Calculate potential BTC mined from curtailed energy using dynamic network difficulty
+ * @param curtailedMwh - Curtailed energy in MWh
+ * @param date - Optional date for historical calculations
+ * @param minerModel - Miner model to use for calculations (defaults to S19J_PRO)
+ * @returns Potential BTC that could be mined
+ */
+export async function calculatePotentialBtc(
+  curtailedMwh: number,
+  date?: Date,
+  minerModel: keyof typeof MINER_MODELS = 'S19J_PRO'
+): Promise<number> {
+  const miner = MINER_MODELS[minerModel];
+
+  // Convert MWh to kWh
+  const curtailedKwh = curtailedMwh * 1000;
+
+  // Each miner consumes power in kWh per hour
+  const minerConsumptionKwh = miner.power / 1000;
+
+  // How many miners can be powered for one hour with the given curtailed energy?
+  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
+
+  // Fetch current network difficulty
+  const networkDifficulty = await fetchBitcoinDifficulty(date);
+
+  // Calculate expected hashes to find a block from difficulty
+  // Difficulty represents how many hashes on average needed to find a block
+  // compared to the base difficulty of 1 which requires 2^32 hashes
+  const hashesPerBlock = networkDifficulty * Math.pow(2, 32);
+
+  // Calculate network hashrate in hashes per second
+  // Average block time is 600 seconds (10 minutes)
+  const networkHashRate = hashesPerBlock / 600;
+
+  // Convert to TH/s for consistency with miner hashrate
+  const networkHashRateTH = networkHashRate / 1e12;
+
+  // Total hash power from our miners in TH/s
+  const totalHashPower = potentialMiners * miner.hashrate;
+
+  // Calculate probability of finding a block
+  const ourNetworkShare = totalHashPower / networkHashRateTH;
+
+  // Estimate BTC mined per hour
+  // We expect to find (ourNetworkShare * 6) blocks per hour
+  const btcPerHour = ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_HOUR;
+
+  return btcPerHour;
+}
