@@ -1,3 +1,4 @@
+import * as React from "react"
 import {
   Select,
   SelectContent,
@@ -46,35 +47,39 @@ interface MinerSelectProps {
   onValueChange: (value: string) => void
 }
 
-export function MinerSelect({ value, onValueChange }: MinerSelectProps) {
-  return (
-    <div className="flex items-center gap-2">
-      <SiAntdesign className="h-4 w-4 text-muted-foreground" />
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Select value={value} onValueChange={onValueChange}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select Miner Model" />
-              </SelectTrigger>
-              <SelectContent>
-                {minerModels.map((model) => (
-                  <SelectItem key={model.id} value={model.id}>
-                    {model.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>
-              {minerModels.find((m) => m.id === value)?.name}:{" "}
-              {minerModels.find((m) => m.id === value)?.hashrate} TH/s @{" "}
-              {minerModels.find((m) => m.id === value)?.efficiency} J/TH
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
-  )
-}
+export const MinerSelect = React.forwardRef<HTMLButtonElement, MinerSelectProps>(
+  ({ value, onValueChange }, ref) => {
+    return (
+      <div className="flex items-center gap-2">
+        <SiAntdesign className="h-4 w-4 text-muted-foreground" />
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Select value={value} onValueChange={onValueChange}>
+                <SelectTrigger ref={ref} className="w-[180px]">
+                  <SelectValue placeholder="Select Miner Model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {minerModels.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {model.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>
+                {minerModels.find((m) => m.id === value)?.name}:{" "}
+                {minerModels.find((m) => m.id === value)?.hashrate} TH/s @{" "}
+                {minerModels.find((m) => m.id === value)?.efficiency} J/TH
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    )
+  }
+)
+
+MinerSelect.displayName = "MinerSelect"
