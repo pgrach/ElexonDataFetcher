@@ -18,8 +18,8 @@ export async function fetchFromMinerstat(): Promise<{ difficulty: number; price:
 }
 
 // Current block reward and blocks per hour constants
-const BLOCK_REWARD = 3.125; // Current block reward
-const BLOCKS_PER_HOUR = 6; // ~6 blocks per hour
+const BLOCK_REWARD = 3.125; // Current block reward as of 2024 (6.25/2)
+const BLOCKS_PER_HOUR = 6; // Average blocks per hour (1 block/10 minutes)
 
 export function calculateBitcoinMining(
   curtailedMwh: number,
@@ -27,45 +27,61 @@ export function calculateBitcoinMining(
   difficulty: number,
   currentPrice: number
 ): BitcoinCalculation {
+  console.log('Input parameters:', {
+    curtailedMwh,
+    minerModel,
+    difficulty,
+    currentPrice
+  });
+
   const miner = minerModels[minerModel];
   if (!miner) {
     throw new Error(`Invalid miner model: ${minerModel}`);
   }
 
-  // Convert MWh to kWh
-  const curtailedKwh = curtailedMwh * 1000;
+  // Convert MWh to kWh with precise arithmetic
+  const curtailedKwh = Number((curtailedMwh * 1000).toFixed(10));
+  console.log('Curtailed kWh:', curtailedKwh);
 
-  // Each miner consumes power in kWh per hour
-  const minerConsumptionKwh = miner.power / 1000;
+  // Calculate miner consumption in kWh
+  const minerConsumptionKwh = Number((miner.power / 1000).toFixed(10));
+  console.log('Miner consumption kWh:', minerConsumptionKwh);
 
-  // How many miners can be powered for one hour with the given curtailed energy?
+  // Calculate potential miners with floor to ensure we don't overestimate
   const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
+  console.log('Potential miners:', potentialMiners);
 
-  // Calculate expected hashes to find a block from difficulty
-  // Difficulty represents how many hashes on average needed to find a block
-  // compared to the base difficulty of 1 which requires 2^32 hashes
-  const hashesPerBlock = difficulty * Math.pow(2, 32);
+  // Calculate hashes needed per block with precise arithmetic
+  const hashesPerBlock = Number((difficulty * Math.pow(2, 32)).toFixed(10));
+  console.log('Hashes per block:', hashesPerBlock);
 
-  // Calculate network hashrate in hashes per second
-  // Average block time is 600 seconds (10 minutes)
-  const networkHashRate = hashesPerBlock / 600;
+  // Network hashrate in H/s (600 seconds per block on average)
+  const networkHashRate = Number((hashesPerBlock / 600).toFixed(10));
+  console.log('Network hashrate (H/s):', networkHashRate);
 
-  // Convert to TH/s for consistency with miner hashrate
-  const networkHashRateTH = networkHashRate / 1e12;
+  // Convert to TH/s for consistency
+  const networkHashRateTH = Number((networkHashRate / 1e12).toFixed(10));
+  console.log('Network hashrate (TH/s):', networkHashRateTH);
 
-  // Total hash power from our miners in TH/s
-  const totalHashPower = potentialMiners * miner.hashrate;
+  // Calculate our total hashpower
+  const totalHashPower = Number((potentialMiners * miner.hashrate).toFixed(10));
+  console.log('Total hash power (TH/s):', totalHashPower);
 
-  // Calculate probability of finding a block
-  const ourNetworkShare = totalHashPower / networkHashRateTH;
+  // Calculate our network share
+  const ourNetworkShare = Number((totalHashPower / networkHashRateTH).toFixed(10));
+  console.log('Network share:', ourNetworkShare);
 
-  // Estimate BTC mined per hour
-  // We expect to find (ourNetworkShare * 6) blocks per hour
-  const bitcoinMined = ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_HOUR;
+  // Calculate expected BTC mined per hour
+  const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_HOUR).toFixed(8));
+  console.log('Bitcoin mined:', bitcoinMined);
+
+  // Calculate value in current price
+  const valueAtCurrentPrice = Number((bitcoinMined * currentPrice).toFixed(2));
+  console.log('Value at current price:', valueAtCurrentPrice);
 
   return {
     bitcoinMined,
-    valueAtCurrentPrice: bitcoinMined * currentPrice,
+    valueAtCurrentPrice,
     difficulty,
     price: currentPrice
   };
