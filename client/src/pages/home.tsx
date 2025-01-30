@@ -1,13 +1,38 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, isValid } from "date-fns";
+import { format, isValid, isToday } from "date-fns";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building, Bitcoin } from "lucide-react";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
-// ... (keep all existing interfaces)
+interface BitcoinCalculation {
+  bitcoinMined: number;
+  valueAtCurrentPrice: number;
+  difficulty: number;
+  price: number;
+}
+
+interface DailySummary {
+  totalCurtailedEnergy: number;
+  totalPayment: number;
+}
+
+interface MonthlySummary {
+  totalCurtailedEnergy: number;
+  totalPayment: number;
+}
+
+interface YearlySummary {
+  totalCurtailedEnergy: number;
+  totalPayment: number;
+}
+
+interface HourlyData {
+  hour: string;
+  curtailedEnergy: number;
+}
 
 export default function Home() {
   const [date, setDate] = useState<Date>(() => {
@@ -54,6 +79,33 @@ export default function Home() {
       return response.json();
     },
     enabled: !!formattedDate && isValid(date)
+  });
+
+  const { data: bitcoinPotential } = useQuery<BitcoinCalculation>({
+    queryKey: [`/api/curtailment/mining-potential`, selectedMinerModel, dailyData?.totalCurtailedEnergy],
+    queryFn: async () => {
+      if (!isValid(date) || !isToday(date) || !dailyData?.totalCurtailedEnergy) {
+        return {
+          bitcoinMined: 0,
+          valueAtCurrentPrice: 0,
+          difficulty: 0,
+          price: 0
+        };
+      }
+
+      const url = new URL('/api/curtailment/mining-potential', window.location.origin);
+      url.searchParams.set('date', formattedDate);
+      url.searchParams.set('minerModel', selectedMinerModel);
+      url.searchParams.set('energy', dailyData.totalCurtailedEnergy.toString());
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to fetch mining potential');
+      }
+
+      return response.json();
+    },
+    enabled: !!formattedDate && isValid(date) && isToday(date) && !!dailyData?.totalCurtailedEnergy
   });
 
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
@@ -422,11 +474,14 @@ export default function Home() {
                       </div>
                     ) : dailyData ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
-                        ₿0.00
+                        ₿{bitcoinPotential?.bitcoinMined.toFixed(8) || '0.00'}
                       </div>
                     ) : (
                       <div className="text-sm text-muted-foreground">No daily data available</div>
                     )}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Potential mining with {selectedMinerModel.replace('_', ' ')} miners
+                    </p>
                   </div>
                 </div>
               </div>
