@@ -5,7 +5,7 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building, Bitcoin } from "lucide-react";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { DualAxisChart } from "@/components/ui/dual-axis-chart";
 
 interface BitcoinCalculation {
   bitcoinMined: number;
@@ -33,54 +33,6 @@ interface HourlyData {
   hour: string;
   curtailedEnergy: number;
 }
-
-// Assuming DualAxisChart component exists and is imported correctly.  This is crucial for the code to work.
-//  You will need to define this component.  A simple example is provided below
-// import {DualAxisChart} from './DualAxisChart';
-
-const DualAxisChart = ({ data, chartConfig }) => (
-  <ResponsiveContainer width="100%" height="100%">
-    <BarChart data={data} margin={{ top: 20, right: 30, left: 60, bottom: 20 }}>
-      <CartesianGrid strokeDasharray="3 3" />
-      <XAxis dataKey="name" interval={2} tick={{ fontSize: 12 }} />
-      <YAxis 
-        yAxisId="left"
-        label={{
-          value: chartConfig.leftAxis.label,
-          angle: -90,
-          position: 'insideLeft',
-          offset: -40,
-          style: { fontSize: 12 }
-        }}
-        tick={{ fontSize: 12 }}
-        domain={[0, 'auto']}
-      />
-      <YAxis 
-        yAxisId="right"
-        orientation="right"
-        label={{
-          value: chartConfig.rightAxis.label,
-          angle: 90,
-          position: 'insideRight',
-          offset: 40,
-          style: { fontSize: 12 }
-        }}
-        tick={{ fontSize: 12 }}
-        domain={[0, 'auto']}
-      />
-      <Bar 
-        yAxisId="left"
-        dataKey={chartConfig.leftAxis.dataKey} 
-        fill={chartConfig.leftAxis.color} 
-      />
-      <Bar 
-        yAxisId="right"
-        dataKey={chartConfig.rightAxis.dataKey} 
-        fill={chartConfig.rightAxis.color} 
-      />
-    </BarChart>
-  </ResponsiveContainer>
-);
 
 
 export default function Home() {
