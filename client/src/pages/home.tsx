@@ -148,32 +148,56 @@ export default function Home() {
       <div className="container mx-auto py-8">
         <h1 className="text-4xl font-bold mb-8">Wind Farm Curtailment Data</h1>
 
-        <div className="grid md:grid-cols-3 gap-4 mb-8">
+        <div className="grid md:grid-cols-2 gap-4 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                {selectedLeadParty ? 'Farm Yearly Curtailed Energy' : 'Yearly Curtailed Energy'}
+                {selectedLeadParty ? 'Farm Curtailed Energy' : 'Curtailed MWh'}
               </CardTitle>
-              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+              <Wind className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {isYearlyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : yearlyError ? (
-                <div className="text-sm text-red-500">Failed to load yearly data</div>
-              ) : yearlyData ? (
-                <div className="text-2xl font-bold">
-                  {Number(yearlyData.totalCurtailedEnergy).toLocaleString()} MWh
+              <div className="space-y-3">
+                {/* Energy Section */}
+                <div>
+                  {isYearlyLoading ? (
+                    <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                  ) : yearlyError ? (
+                    <div className="text-sm text-red-500">Failed to load yearly data</div>
+                  ) : yearlyData ? (
+                    <div className="text-2xl font-bold">
+                      {Number(yearlyData.totalCurtailedEnergy).toLocaleString()} MWh
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No yearly data available</div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedLeadParty ? (
+                      <>Farm curtailed energy for {selectedLeadParty} in {format(date, 'yyyy')}</>
+                    ) : (
+                      <>Total curtailed energy for {format(date, 'yyyy')}</>
+                    )}
+                  </p>
                 </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">No yearly data available</div>
-              )}
-              <div className="text-xs text-muted-foreground mt-1">
-                {selectedLeadParty ? (
-                  <>Farm curtailed energy for {selectedLeadParty} in {format(date, 'yyyy')}</>
-                ) : (
-                  <>Total curtailed energy for {format(date, 'yyyy')}</>
-                )}
+
+                {/* Bitcoin Mining Potential */}
+                <div>
+                  <div className="text-sm font-medium">Bitcoin could be mined</div>
+                  {isYearlyLoading ? (
+                    <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                  ) : yearlyError ? (
+                    <div className="text-sm text-red-500">Failed to load yearly data</div>
+                  ) : yearlyData ? (
+                    <div className="text-2xl font-bold text-[#F7931A]">
+                      ₿0.00
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No yearly data available</div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    With {selectedMinerModel.replace('_', ' ')} miners
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -181,53 +205,53 @@ export default function Home() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                {selectedLeadParty ? 'Farm Yearly Payment' : 'Yearly Payment'}
+                {selectedLeadParty ? 'Farm Payment & Value' : 'Yearly Payment & Value'}
               </CardTitle>
               <Battery className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {isYearlyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : yearlyError ? (
-                <div className="text-sm text-red-500">Failed to load yearly data</div>
-              ) : yearlyData ? (
-                <div className="text-2xl font-bold">
-                  £{Number(yearlyData.totalPayment).toLocaleString()}
+              <div className="space-y-3">
+                {/* Payment Section */}
+                <div>
+                  <div className="text-sm font-medium">Paid for Curtailment</div>
+                  {isYearlyLoading ? (
+                    <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                  ) : yearlyError ? (
+                    <div className="text-sm text-red-500">Failed to load yearly data</div>
+                  ) : yearlyData ? (
+                    <div className="text-2xl font-bold">
+                      £{Number(yearlyData.totalPayment).toLocaleString()}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No yearly data available</div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedLeadParty ? (
+                      <>Payment for {selectedLeadParty} in {format(date, 'yyyy')}</>
+                    ) : (
+                      <>Total payment for {format(date, 'yyyy')}</>
+                    )}
+                  </p>
                 </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">No yearly data available</div>
-              )}
-              <div className="text-xs text-muted-foreground mt-1">
-                {selectedLeadParty ? (
-                  <>Farm payment for {selectedLeadParty} in {format(date, 'yyyy')}</>
-                ) : (
-                  <>Total payment for {format(date, 'yyyy')}</>
-                )}
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {selectedLeadParty ? 'Farm Yearly BTC Equivalent' : 'Yearly BTC Equivalent'}
-              </CardTitle>
-              <Bitcoin className="h-4 w-4 text-[#F7931A]" />
-            </CardHeader>
-            <CardContent>
-              {isYearlyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : yearlyError ? (
-                <div className="text-sm text-red-500">Failed to load yearly data</div>
-              ) : yearlyData ? (
-                <div className="text-2xl font-bold text-[#F7931A]">
-                  ₿0.00
+                {/* Bitcoin Value Section */}
+                <div>
+                  <div className="text-sm font-medium">Value if Bitcoin was mined</div>
+                  {isYearlyLoading ? (
+                    <div className="text-2xl font-bold animate-pulse">Loading...</div>
+                  ) : yearlyError ? (
+                    <div className="text-sm text-red-500">Failed to load yearly data</div>
+                  ) : yearlyData ? (
+                    <div className="text-2xl font-bold text-[#F7931A]">
+                      £0.00
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No yearly data available</div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Estimated value at current BTC price
+                  </p>
                 </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">No yearly data available</div>
-              )}
-              <div className="text-xs text-muted-foreground mt-1">
-                Estimated mining potential with {selectedMinerModel.replace('_', ' ')}
               </div>
             </CardContent>
           </Card>
