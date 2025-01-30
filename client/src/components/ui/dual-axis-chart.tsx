@@ -92,15 +92,40 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
             const { cx, cy, fill } = props;
             const value = props.payload[chartConfig.rightAxis.dataKey];
             if (value === 0) return null;
+
             return (
-              <circle 
-                cx={cx} 
-                cy={cy} 
-                r={6} 
-                fill={fill} 
-                stroke={fill}
-                strokeWidth={2}
-              />
+              <g transform={`translate(${cx - 8}, ${cy - 8})`}>
+                {/* Outer circle (coin) */}
+                <circle 
+                  cx="8" 
+                  cy="8" 
+                  r="8" 
+                  fill={fill} 
+                  stroke={fill}
+                  strokeWidth={1}
+                />
+                {/* Inner circle for the metallic effect */}
+                <circle 
+                  cx="8" 
+                  cy="8" 
+                  r="7" 
+                  fill={fill} 
+                  stroke="#ffffff"
+                  strokeWidth={0.5}
+                  opacity={0.3}
+                />
+                {/* Bitcoin symbol */}
+                <text
+                  x="8"
+                  y="11"
+                  textAnchor="middle"
+                  fill="#ffffff"
+                  fontSize="10px"
+                  fontWeight="bold"
+                >
+                  ₿
+                </text>
+              </g>
             );
           }}
         />
