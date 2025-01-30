@@ -4,9 +4,8 @@ import { db } from "@db";
 import { curtailmentRecords } from "@db/schema";
 import { and, eq } from "drizzle-orm";
 
-const BLOCK_REWARD = 6.25; // Current Bitcoin block reward
-const BLOCKS_PER_HOUR = 6; // Average blocks per hour (1 block/10 minutes)
-const BLOCKS_PER_PERIOD = BLOCKS_PER_HOUR / 2; // Blocks per 30-minute period
+const BLOCK_REWARD = 3.125; // Block reward for 30-minute period (6.25/2)
+const BLOCKS_PER_PERIOD = 3; // Average blocks per 30-minute period
 
 interface BitcoinCalculation {
   bitcoinMined: number;
@@ -78,7 +77,7 @@ function calculateBitcoinForPeriod(
   console.log('Network share:', ourNetworkShare);
 
   // Calculate expected BTC mined per 30-minute period
-  // We use BLOCKS_PER_PERIOD (3 blocks per 30 minutes) * full block reward * our network share
+  // Using direct calculation for 30-minute period with BLOCK_REWARD already adjusted
   const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_PERIOD).toFixed(8));
   console.log('Bitcoin mined in period:', bitcoinMined);
 
