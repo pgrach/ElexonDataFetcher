@@ -534,10 +534,10 @@ export default function Home() {
                       <ChartTooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
-                          const data = payload[0];
-                          const hour = data.payload.hour;
-                          const energy = Number(data.payload.curtailedEnergy);
-                          const bitcoin = data.payload.bitcoinMined;
+                          const data = payload[0].payload;
+                          const hour = data.hour;
+                          const energy = Number(data.curtailedEnergy || 0);
+                          const bitcoin = typeof data.bitcoinMined === 'number' ? data.bitcoinMined : 0;
 
                           let message = "";
                           if (isHourInFuture(hour)) {
@@ -545,7 +545,9 @@ export default function Home() {
                           } else if (energy === 0) {
                             message = "No curtailment detected";
                           } else {
-                            message = `${energy.toFixed(2)} MWh\n₿${bitcoin.toFixed(8)}`;
+                            const energyLine = `Energy: ${energy.toFixed(2)} MWh`;
+                            const bitcoinLine = bitcoin > 0 ? `\nBitcoin: ₿${bitcoin.toFixed(8)}` : '';
+                            message = energyLine + bitcoinLine;
                           }
 
                           return (
