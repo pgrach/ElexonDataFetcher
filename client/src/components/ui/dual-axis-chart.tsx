@@ -44,22 +44,29 @@ export const DualAxisChart = () => {
 
   return (
     <ChartContainer config={chartConfig} className="h-[400px]">
-      <LineChart data={exampleData}>
+      <LineChart
+        data={exampleData}
+        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+      >
         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
         <XAxis
           dataKey="name"
           className="text-sm [&_.recharts-cartesian-axis-line]:stroke-border [&_.recharts-cartesian-axis-tick-line]:stroke-border"
         />
-        {/* Primary Y-Axis (Left) */}
+        {/* Primary Y-Axis (Left) - Temperature */}
         <YAxis
           yAxisId="temperature"
           orientation="left"
+          domain={['auto', 'auto']}
+          label={{ value: "Temperature (°C)", angle: -90, position: 'insideLeft' }}
           className="text-sm [&_.recharts-cartesian-axis-line]:stroke-border [&_.recharts-cartesian-axis-tick-line]:stroke-border"
         />
-        {/* Secondary Y-Axis (Right) */}
+        {/* Secondary Y-Axis (Right) - Humidity */}
         <YAxis
           yAxisId="humidity"
           orientation="right"
+          domain={[0, 100]}
+          label={{ value: "Humidity (%)", angle: 90, position: 'insideRight' }}
           className="text-sm [&_.recharts-cartesian-axis-line]:stroke-border [&_.recharts-cartesian-axis-tick-line]:stroke-border"
         />
         <ChartTooltip
