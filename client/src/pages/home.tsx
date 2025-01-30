@@ -84,7 +84,19 @@ export default function Home() {
   const { data: bitcoinPotential } = useQuery<BitcoinCalculation>({
     queryKey: [`/api/curtailment/mining-potential`, selectedMinerModel, dailyData?.totalCurtailedEnergy],
     queryFn: async () => {
+      console.log('Bitcoin calculation parameters:', {
+        date: formattedDate,
+        isToday: isToday(date),
+        minerModel: selectedMinerModel,
+        curtailedEnergy: dailyData?.totalCurtailedEnergy
+      });
+
       if (!isValid(date) || !isToday(date) || !dailyData?.totalCurtailedEnergy) {
+        console.log('Skipping Bitcoin calculation:', {
+          isValidDate: isValid(date),
+          isToday: isToday(date),
+          hasCurtailedEnergy: !!dailyData?.totalCurtailedEnergy
+        });
         return {
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
@@ -98,12 +110,16 @@ export default function Home() {
       url.searchParams.set('minerModel', selectedMinerModel);
       url.searchParams.set('energy', dailyData.totalCurtailedEnergy.toString());
 
+      console.log('Fetching from URL:', url.toString());
+
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error('Failed to fetch mining potential');
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log('Bitcoin calculation result:', result);
+      return result;
     },
     enabled: !!formattedDate && isValid(date) && isToday(date) && !!dailyData?.totalCurtailedEnergy
   });

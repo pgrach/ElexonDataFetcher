@@ -12,8 +12,16 @@ router.get('/mining-potential', async (req, res) => {
     const minerModel = req.query.minerModel as string || 'S19J_PRO';
     const curtailedEnergy = Number(req.query.energy || 0);
 
+    console.log('Mining potential request:', {
+      date: requestDate,
+      minerModel,
+      curtailedEnergy,
+      isToday: isToday(requestDate)
+    });
+
     // Only calculate for today's date
     if (!isToday(requestDate)) {
+      console.log('Not today, returning zero values');
       return res.json({
         bitcoinMined: 0,
         valueAtCurrentPrice: 0,
@@ -23,7 +31,8 @@ router.get('/mining-potential', async (req, res) => {
     }
 
     const { difficulty, price } = await fetchFromMinerstat();
-    
+    console.log('Minerstat data:', { difficulty, price });
+
     const calculation = calculateBitcoinMining(
       curtailedEnergy,
       minerModel,
@@ -31,6 +40,7 @@ router.get('/mining-potential', async (req, res) => {
       price
     );
 
+    console.log('Calculation result:', calculation);
     res.json(calculation);
   } catch (error) {
     console.error('Error in mining-potential endpoint:', error);
