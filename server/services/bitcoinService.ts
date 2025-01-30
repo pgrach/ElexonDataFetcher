@@ -9,6 +9,13 @@ const BLOCK_REWARD = 3.125; // Current block reward
 const SETTLEMENT_PERIOD_MINUTES = 30; // Each settlement period is 30 minutes
 const BLOCKS_PER_SETTLEMENT_PERIOD = 3; // 3 blocks per 30 minutes (1 block every 10 minutes)
 
+interface BMUCalculation {
+  farmId: string;
+  bitcoinMined: number;
+  valueAtCurrentPrice: number;
+  curtailedMwh: number;
+}
+
 /**
  * Calculate potential BTC mined from curtailed energy using dynamic network difficulty
  * @param curtailedMwh - Curtailed energy in MWh for a 30-minute settlement period
@@ -17,13 +24,13 @@ const BLOCKS_PER_SETTLEMENT_PERIOD = 3; // 3 blocks per 30 minutes (1 block ever
  * @param currentPrice - Current Bitcoin price in USD
  * @returns Potential BTC that could be mined in the 30-minute settlement period
  */
-function calculateBitcoinForPeriod(
+function calculateBitcoinForBMU(
   curtailedMwh: number,
   minerModel: string,
   difficulty: number,
   currentPrice: number
 ): BitcoinCalculation {
-  console.log('Calculating for period:', {
+  console.log('Calculating for BMU:', {
     curtailedMwh,
     minerModel,
     difficulty,
@@ -68,7 +75,6 @@ function calculateBitcoinForPeriod(
   console.log('Our network share:', ourNetworkShare);
 
   // Estimate BTC mined per settlement period
-  // We expect to find (ourNetworkShare * BLOCKS_PER_SETTLEMENT_PERIOD) blocks per period
   const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
   console.log('Bitcoin mined in settlement period:', bitcoinMined);
 
@@ -87,45 +93,82 @@ export async function calculateBitcoinMining(
   date: string,
   minerModel: string,
   difficulty: number,
-  currentPrice: number
+  currentPrice: number,
+  leadParty?: string
 ): Promise<{
   totalBitcoin: number;
   totalValue: number;
-  periodCalculations: PeriodCalculation[];
+  periodCalculations: any[];
 }> {
-  // Fetch all periods for the given date
-  const periodRecords = await db
+  // Fetch all periods for the given date, filtered by leadParty if provided
+  const query = db
     .select({
       settlementPeriod: curtailmentRecords.settlementPeriod,
-      volume: curtailmentRecords.volume
+      volume: curtailmentRecords.volume,
+      farmId: curtailmentRecords.farmId,
+      leadPartyName: curtailmentRecords.leadPartyName
     })
     .from(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlementDate, date))
-    .orderBy(curtailmentRecords.settlementPeriod);
+    .where(eq(curtailmentRecords.settlementDate, date));
 
-  // Calculate mining potential for each period
-  const periodCalculations: PeriodCalculation[] = [];
+  if (leadParty) {
+    query.where(and(
+      eq(curtailmentRecords.settlementDate, date),
+      eq(curtailmentRecords.leadPartyName, leadParty)
+    ));
+  }
+
+  const periodRecords = await query.orderBy(curtailmentRecords.settlementPeriod);
+
+  // Group records by period and calculate for each BMU
+  const periodCalculations: any[] = [];
   let totalBitcoin = 0;
   let totalValue = 0;
 
-  for (const record of periodRecords) {
-    const curtailedMwh = Math.abs(Number(record.volume));
-    const calculation = calculateBitcoinForPeriod(
-      curtailedMwh,
-      minerModel,
-      difficulty,
-      currentPrice
-    );
+  // Group records by settlement period
+  const periodGroups = periodRecords.reduce((groups, record) => {
+    const period = Number(record.settlementPeriod);
+    if (!groups[period]) {
+      groups[period] = [];
+    }
+    groups[period].push(record);
+    return groups;
+  }, {} as Record<number, typeof periodRecords>);
 
-    const periodResult: PeriodCalculation = {
-      ...calculation,
-      period: Number(record.settlementPeriod),
-      curtailedMwh
-    };
+  // Calculate for each period
+  for (const [period, records] of Object.entries(periodGroups)) {
+    const bmuCalculations: BMUCalculation[] = [];
 
-    periodCalculations.push(periodResult);
-    totalBitcoin += calculation.bitcoinMined;
-    totalValue += calculation.valueAtCurrentPrice;
+    // Calculate for each BMU in the period
+    for (const record of records) {
+      const curtailedMwh = Math.abs(Number(record.volume));
+      const calculation = calculateBitcoinForBMU(
+        curtailedMwh,
+        minerModel,
+        difficulty,
+        currentPrice
+      );
+
+      bmuCalculations.push({
+        farmId: record.farmId,
+        bitcoinMined: calculation.bitcoinMined,
+        valueAtCurrentPrice: calculation.valueAtCurrentPrice,
+        curtailedMwh
+      });
+
+      totalBitcoin += calculation.bitcoinMined;
+      totalValue += calculation.valueAtCurrentPrice;
+    }
+
+    periodCalculations.push({
+      period: Number(period),
+      bmuCalculations,
+      periodTotal: {
+        bitcoinMined: bmuCalculations.reduce((sum, calc) => sum + calc.bitcoinMined, 0),
+        valueAtCurrentPrice: bmuCalculations.reduce((sum, calc) => sum + calc.valueAtCurrentPrice, 0),
+        curtailedMwh: bmuCalculations.reduce((sum, calc) => sum + calc.curtailedMwh, 0)
+      }
+    });
   }
 
   return {
