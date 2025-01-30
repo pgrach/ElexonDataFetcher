@@ -47,8 +47,8 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
             value: chartConfig.leftAxis.label, 
             angle: -90, 
             position: 'insideLeft',
-            dy: 60,
-            dx: -20,
+            dy: 40,
+            dx: -10,
             className: "text-sm font-medium fill-current"
           }}
           tick={{ fill: 'currentColor' }}
@@ -60,8 +60,8 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
             value: chartConfig.rightAxis.label, 
             angle: 90, 
             position: 'insideRight',
-            dy: 60,
-            dx: 20,
+            dy: 40,
+            dx: 10,
             className: "text-sm font-medium",
             fill: chartConfig.rightAxis.color
           }}
