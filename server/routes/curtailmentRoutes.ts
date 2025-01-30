@@ -11,11 +11,13 @@ router.get('/mining-potential', async (req, res) => {
     const requestDate = req.query.date ? parseISO(req.query.date as string) : new Date();
     const minerModel = req.query.minerModel as string || 'S19J_PRO';
     const leadParty = req.query.leadParty as string;
+    const farmId = req.query.farmId as string;
 
     console.log('Mining potential request:', {
       date: format(requestDate, 'yyyy-MM-dd'),
       minerModel,
       leadParty,
+      farmId,
       isToday: isToday(requestDate)
     });
 
@@ -39,7 +41,8 @@ router.get('/mining-potential', async (req, res) => {
       minerModel,
       difficulty,
       price,
-      leadParty
+      leadParty,
+      farmId
     );
 
     console.log('Calculation result:', {

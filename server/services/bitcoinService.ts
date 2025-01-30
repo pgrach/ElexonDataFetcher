@@ -94,14 +94,24 @@ export async function calculateBitcoinMining(
   minerModel: string,
   difficulty: number,
   currentPrice: number,
-  leadParty?: string
+  leadParty?: string,
+  farmId?: string
 ): Promise<{
   totalBitcoin: number;
   totalValue: number;
   periodCalculations: any[];
 }> {
-  // Fetch all periods for the given date, filtered by leadParty if provided
-  const query = db
+  // Build the where clause based on filters
+  const whereClause = [eq(curtailmentRecords.settlementDate, date)];
+
+  if (farmId) {
+    whereClause.push(eq(curtailmentRecords.farmId, farmId));
+  } else if (leadParty) {
+    whereClause.push(eq(curtailmentRecords.leadPartyName, leadParty));
+  }
+
+  // Fetch records with filters
+  const periodRecords = await db
     .select({
       settlementPeriod: curtailmentRecords.settlementPeriod,
       volume: curtailmentRecords.volume,
@@ -109,23 +119,10 @@ export async function calculateBitcoinMining(
       leadPartyName: curtailmentRecords.leadPartyName
     })
     .from(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlementDate, date));
+    .where(and(...whereClause))
+    .orderBy(curtailmentRecords.settlementPeriod);
 
-  if (leadParty) {
-    query.where(and(
-      eq(curtailmentRecords.settlementDate, date),
-      eq(curtailmentRecords.leadPartyName, leadParty)
-    ));
-  }
-
-  const periodRecords = await query.orderBy(curtailmentRecords.settlementPeriod);
-
-  // Group records by period and calculate for each BMU
-  const periodCalculations: any[] = [];
-  let totalBitcoin = 0;
-  let totalValue = 0;
-
-  // Group records by settlement period
+  // Group records by period
   const periodGroups = periodRecords.reduce((groups, record) => {
     const period = Number(record.settlementPeriod);
     if (!groups[period]) {
@@ -136,6 +133,10 @@ export async function calculateBitcoinMining(
   }, {} as Record<number, typeof periodRecords>);
 
   // Calculate for each period
+  const periodCalculations: any[] = [];
+  let totalBitcoin = 0;
+  let totalValue = 0;
+
   for (const [period, records] of Object.entries(periodGroups)) {
     const bmuCalculations: BMUCalculation[] = [];
 
@@ -149,24 +150,35 @@ export async function calculateBitcoinMining(
         currentPrice
       );
 
-      bmuCalculations.push({
+      const bmuResult = {
         farmId: record.farmId,
         bitcoinMined: calculation.bitcoinMined,
         valueAtCurrentPrice: calculation.valueAtCurrentPrice,
         curtailedMwh
-      });
+      };
 
-      totalBitcoin += calculation.bitcoinMined;
-      totalValue += calculation.valueAtCurrentPrice;
+      bmuCalculations.push(bmuResult);
+
+      // Only add to totals if it matches our filter criteria
+      if ((!farmId || record.farmId === farmId) && 
+          (!leadParty || record.leadPartyName === leadParty)) {
+        totalBitcoin += calculation.bitcoinMined;
+        totalValue += calculation.valueAtCurrentPrice;
+      }
     }
+
+    // Calculate period totals only for matching records
+    const matchingBMUs = bmuCalculations.filter(calc => 
+      (!farmId || calc.farmId === farmId)
+    );
 
     periodCalculations.push({
       period: Number(period),
-      bmuCalculations,
+      bmuCalculations: matchingBMUs,
       periodTotal: {
-        bitcoinMined: bmuCalculations.reduce((sum, calc) => sum + calc.bitcoinMined, 0),
-        valueAtCurrentPrice: bmuCalculations.reduce((sum, calc) => sum + calc.valueAtCurrentPrice, 0),
-        curtailedMwh: bmuCalculations.reduce((sum, calc) => sum + calc.curtailedMwh, 0)
+        bitcoinMined: matchingBMUs.reduce((sum, calc) => sum + calc.bitcoinMined, 0),
+        valueAtCurrentPrice: matchingBMUs.reduce((sum, calc) => sum + calc.valueAtCurrentPrice, 0),
+        curtailedMwh: matchingBMUs.reduce((sum, calc) => sum + calc.curtailedMwh, 0)
       }
     });
   }
