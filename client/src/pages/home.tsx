@@ -3,37 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { format, isValid } from "date-fns";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Battery, Calendar as CalendarIcon, Building } from "lucide-react";
+import { Wind, Battery, Calendar as CalendarIcon, Building, Bitcoin } from "lucide-react";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
-interface DailySummary {
-  date: string;
-  totalCurtailedEnergy: number;
-  totalPayment: number;
-  leadParty: string | null;
-}
-
-interface MonthlySummary {
-  yearMonth: string;
-  totalCurtailedEnergy: number;
-  totalPayment: number;
-  dailyTotals: {
-    totalCurtailedEnergy: number;
-    totalPayment: number;
-  };
-}
-
-interface HourlyData {
-  hour: string;
-  curtailedEnergy: number;
-}
-
-interface YearlySummary {
-  year: string;
-  totalCurtailedEnergy: number;
-  totalPayment: number;
-}
+// ... (keep all existing interfaces)
 
 export default function Home() {
   const [date, setDate] = useState<Date>(() => {
@@ -42,6 +16,7 @@ export default function Home() {
     return today < startDate ? startDate : today;
   });
   const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
+  const [selectedMinerModel, setSelectedMinerModel] = useState("S19J_PRO");
 
   const formattedDate = format(date, 'yyyy-MM-dd');
 
@@ -166,12 +141,14 @@ export default function Home() {
         selectedLeadParty={selectedLeadParty}
         onLeadPartyChange={(value) => setSelectedLeadParty(value || null)}
         curtailedLeadParties={curtailedLeadParties}
+        selectedMinerModel={selectedMinerModel}
+        onMinerModelChange={setSelectedMinerModel}
       />
 
       <div className="container mx-auto py-8">
         <h1 className="text-4xl font-bold mb-8">Wind Farm Curtailment Data</h1>
 
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -229,131 +206,211 @@ export default function Home() {
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {selectedLeadParty ? 'Farm Yearly BTC Equivalent' : 'Yearly BTC Equivalent'}
+              </CardTitle>
+              <Bitcoin className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isYearlyLoading ? (
+                <div className="text-2xl font-bold animate-pulse">Loading...</div>
+              ) : yearlyError ? (
+                <div className="text-sm text-red-500">Failed to load yearly data</div>
+              ) : yearlyData ? (
+                <div className="text-2xl font-bold">
+                  {/* Placeholder for BTC calculation */}
+                  ₿0.00
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No yearly data available</div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                Estimated mining potential with {selectedMinerModel.replace('_', ' ')}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {selectedLeadParty ? 'Farm Monthly Curtailed Energy' : 'Monthly Curtailed Energy'}
-                </CardTitle>
-                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                {isMonthlyLoading ? (
-                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                ) : monthlyError ? (
-                  <div className="text-sm text-red-500">Failed to load monthly data</div>
-                ) : monthlyData ? (
-                  <div className="text-2xl font-bold">
-                    {Number(monthlyData.totalCurtailedEnergy).toLocaleString()} MWh
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">No monthly data available</div>
-                )}
-                <div className="text-xs text-muted-foreground mt-1">
-                  {selectedLeadParty ? (
-                    <>Farm curtailed energy for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
-                  ) : (
-                    <>Total curtailed energy for {format(date, 'MMMM yyyy')}</>
-                  )}
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {selectedLeadParty ? 'Farm Monthly Curtailed Energy' : 'Monthly Curtailed Energy'}
+              </CardTitle>
+              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isMonthlyLoading ? (
+                <div className="text-2xl font-bold animate-pulse">Loading...</div>
+              ) : monthlyError ? (
+                <div className="text-sm text-red-500">Failed to load monthly data</div>
+              ) : monthlyData ? (
+                <div className="text-2xl font-bold">
+                  {Number(monthlyData.totalCurtailedEnergy).toLocaleString()} MWh
                 </div>
-              </CardContent>
-            </Card>
+              ) : (
+                <div className="text-sm text-muted-foreground">No monthly data available</div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                {selectedLeadParty ? (
+                  <>Farm curtailed energy for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
+                ) : (
+                  <>Total curtailed energy for {format(date, 'MMMM yyyy')}</>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {selectedLeadParty ? 'Farm Monthly Payment' : 'Monthly Payment'}
-                </CardTitle>
-                <Battery className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                {isMonthlyLoading ? (
-                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                ) : monthlyError ? (
-                  <div className="text-sm text-red-500">Failed to load monthly data</div>
-                ) : monthlyData ? (
-                  <div className="text-2xl font-bold">
-                    £{Number(monthlyData.totalPayment).toLocaleString()}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">No monthly data available</div>
-                )}
-                <div className="text-xs text-muted-foreground mt-1">
-                  {selectedLeadParty ? (
-                    <>Farm payment for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
-                  ) : (
-                    <>Total payment for {format(date, 'MMMM yyyy')}</>
-                  )}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {selectedLeadParty ? 'Farm Monthly Payment' : 'Monthly Payment'}
+              </CardTitle>
+              <Battery className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isMonthlyLoading ? (
+                <div className="text-2xl font-bold animate-pulse">Loading...</div>
+              ) : monthlyError ? (
+                <div className="text-sm text-red-500">Failed to load monthly data</div>
+              ) : monthlyData ? (
+                <div className="text-2xl font-bold">
+                  £{Number(monthlyData.totalPayment).toLocaleString()}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No monthly data available</div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                {selectedLeadParty ? (
+                  <>Farm payment for {selectedLeadParty} in {format(date, 'MMMM yyyy')}</>
+                ) : (
+                  <>Total payment for {format(date, 'MMMM yyyy')}</>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-          <div className="grid md:grid-cols-2 gap-4 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {selectedLeadParty ? 'Farm Curtailed Energy' : 'Daily Curtailed Energy'}
-                </CardTitle>
-                <Wind className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                {isDailyLoading ? (
-                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                ) : dailyError ? (
-                  <div className="text-sm text-red-500">
-                    {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
-                  </div>
-                ) : dailyData ? (
-                  <div className="text-2xl font-bold">
-                    {Number(dailyData.totalCurtailedEnergy).toLocaleString()} MWh
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">No daily data available</div>
-                )}
-                <div className="text-xs text-muted-foreground mt-1">
-                  {selectedLeadParty ? (
-                    <>Farm curtailed energy for {selectedLeadParty}</>
-                  ) : (
-                    <>Daily curtailed energy for {format(date, 'MMM d, yyyy')}</>
-                  )}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {selectedLeadParty ? 'Farm Monthly BTC Equivalent' : 'Monthly BTC Equivalent'}
+              </CardTitle>
+              <Bitcoin className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isMonthlyLoading ? (
+                <div className="text-2xl font-bold animate-pulse">Loading...</div>
+              ) : monthlyError ? (
+                <div className="text-sm text-red-500">Failed to load monthly data</div>
+              ) : monthlyData ? (
+                <div className="text-2xl font-bold">
+                  {/* Placeholder for BTC calculation */}
+                  ₿0.00
                 </div>
-              </CardContent>
-            </Card>
+              ) : (
+                <div className="text-sm text-muted-foreground">No monthly data available</div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                Estimated mining potential with {selectedMinerModel.replace('_', ' ')}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {selectedLeadParty ? 'Farm Payment' : 'Daily Payment'}
-                </CardTitle>
-                <Building className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                {isDailyLoading ? (
-                  <div className="text-2xl font-bold animate-pulse">Loading...</div>
-                ) : dailyError ? (
-                  <div className="text-sm text-red-500">
-                    {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
-                  </div>
-                ) : dailyData ? (
-                  <div className="text-2xl font-bold">
-                    £{Number(dailyData.totalPayment).toLocaleString()}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">No daily data available</div>
-                )}
-                <div className="text-xs text-muted-foreground mt-1">
-                  {selectedLeadParty ? (
-                    <>Farm payment for {selectedLeadParty}</>
-                  ) : (
-                    <>Daily payment for {format(date, 'MMM d, yyyy')}</>
-                  )}
+        <div className="grid md:grid-cols-3 gap-4 mb-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {selectedLeadParty ? 'Farm Daily Curtailed Energy' : 'Daily Curtailed Energy'}
+              </CardTitle>
+              <Wind className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isDailyLoading ? (
+                <div className="text-2xl font-bold animate-pulse">Loading...</div>
+              ) : dailyError ? (
+                <div className="text-sm text-red-500">
+                  {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              ) : dailyData ? (
+                <div className="text-2xl font-bold">
+                  {Number(dailyData.totalCurtailedEnergy).toLocaleString()} MWh
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No daily data available</div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                {selectedLeadParty ? (
+                  <>Farm curtailed energy for {selectedLeadParty}</>
+                ) : (
+                  <>Daily curtailed energy for {format(date, 'MMM d, yyyy')}</>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {selectedLeadParty ? 'Farm Daily Payment' : 'Daily Payment'}
+              </CardTitle>
+              <Building className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isDailyLoading ? (
+                <div className="text-2xl font-bold animate-pulse">Loading...</div>
+              ) : dailyError ? (
+                <div className="text-sm text-red-500">
+                  {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
+                </div>
+              ) : dailyData ? (
+                <div className="text-2xl font-bold">
+                  £{Number(dailyData.totalPayment).toLocaleString()}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No daily data available</div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                {selectedLeadParty ? (
+                  <>Farm payment for {selectedLeadParty}</>
+                ) : (
+                  <>Daily payment for {format(date, 'MMM d, yyyy')}</>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {selectedLeadParty ? 'Farm Daily BTC Equivalent' : 'Daily BTC Equivalent'}
+              </CardTitle>
+              <Bitcoin className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {isDailyLoading ? (
+                <div className="text-2xl font-bold animate-pulse">Loading...</div>
+              ) : dailyError ? (
+                <div className="text-sm text-red-500">
+                  {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
+                </div>
+              ) : dailyData ? (
+                <div className="text-2xl font-bold">
+                  {/* Placeholder for BTC calculation */}
+                  ₿0.00
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No daily data available</div>
+              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                Estimated mining potential with {selectedMinerModel.replace('_', ' ')}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         <Card>
           <CardHeader>

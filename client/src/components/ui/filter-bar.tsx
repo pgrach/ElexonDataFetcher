@@ -3,6 +3,7 @@ import { format, isValid } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
+import { MinerSelect } from "@/components/ui/miner-select"
 import {
   Select,
   SelectContent,
@@ -22,6 +23,8 @@ interface FilterBarProps {
   selectedLeadParty: string | null
   onLeadPartyChange: (value: string) => void
   curtailedLeadParties: string[]
+  selectedMinerModel: string
+  onMinerModelChange: (value: string) => void
 }
 
 export function FilterBar({
@@ -30,6 +33,8 @@ export function FilterBar({
   selectedLeadParty,
   onLeadPartyChange,
   curtailedLeadParties,
+  selectedMinerModel,
+  onMinerModelChange,
 }: FilterBarProps) {
   return (
     <div className="flex flex-wrap gap-4 items-center p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -83,6 +88,10 @@ export function FilterBar({
             No farms curtailed on this date
           </span>
         )}
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <MinerSelect value={selectedMinerModel} onValueChange={onMinerModelChange} />
       </div>
     </div>
   )
