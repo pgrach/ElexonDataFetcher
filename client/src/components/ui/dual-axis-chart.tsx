@@ -7,95 +7,110 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Bar,
+  ComposedChart
 } from "recharts"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./chart"
+import { ChartContainer, ChartTooltip } from "./chart"
 
-// Example data structure for dual axis
-type DualAxisData = {
-  name: string
-  temperature: number
-  humidity: number
+type DualAxisProps = {
+  data: Array<{
+    name: string;
+    curtailedEnergy: number;
+    bitcoinMined: number;
+  }>;
+  chartConfig: {
+    curtailedEnergy: {
+      label: string;
+      theme: {
+        light: string;
+        dark: string;
+      };
+    };
+    bitcoinMined: {
+      label: string;
+      theme: {
+        light: string;
+        dark: string;
+      };
+    };
+  };
 }
 
-const exampleData: DualAxisData[] = [
-  { name: "Jan", temperature: 20, humidity: 45 },
-  { name: "Feb", temperature: 22, humidity: 48 },
-  { name: "Mar", temperature: 25, humidity: 52 },
-  { name: "Apr", temperature: 21, humidity: 55 },
-]
-
-export const DualAxisChart = () => {
-  const chartConfig = {
-    temperature: {
-      label: "Temperature (°C)",
-      theme: {
-        light: "#ef4444",
-        dark: "#dc2626",
-      },
-    },
-    humidity: {
-      label: "Humidity (%)",
-      theme: {
-        light: "#3b82f6",
-        dark: "#2563eb",
-      },
-    },
-  }
-
+export const DualAxisChart: React.FC<DualAxisProps> = ({ data, chartConfig }) => {
   return (
     <ChartContainer config={chartConfig} className="h-[400px]">
-      <LineChart
-        data={exampleData}
-        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+      <ComposedChart
+        data={data}
+        margin={{ top: 20, right: 60, left: 60, bottom: 20 }}
       >
         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
         <XAxis
           dataKey="name"
+          interval={2}
           className="text-sm [&_.recharts-cartesian-axis-line]:stroke-border [&_.recharts-cartesian-axis-tick-line]:stroke-border"
         />
-        {/* Primary Y-Axis (Left) - Temperature */}
+        {/* Primary Y-Axis (Left) - Curtailed Energy */}
         <YAxis
-          yAxisId="temperature"
+          yAxisId="left"
           orientation="left"
-          domain={['auto', 'auto']}
-          label={{ value: "Temperature (°C)", angle: -90, position: 'insideLeft' }}
+          label={{ 
+            value: chartConfig.curtailedEnergy.label,
+            angle: -90,
+            position: 'insideLeft',
+            offset: -40,
+            style: { fontSize: 12 }
+          }}
           className="text-sm [&_.recharts-cartesian-axis-line]:stroke-border [&_.recharts-cartesian-axis-tick-line]:stroke-border"
         />
-        {/* Secondary Y-Axis (Right) - Humidity */}
+        {/* Secondary Y-Axis (Right) - Bitcoin Mined */}
         <YAxis
-          yAxisId="humidity"
+          yAxisId="right"
           orientation="right"
-          domain={[0, 100]}
-          label={{ value: "Humidity (%)", angle: 90, position: 'insideRight' }}
+          label={{ 
+            value: chartConfig.bitcoinMined.label,
+            angle: 90,
+            position: 'insideRight',
+            offset: -40,
+            style: { fontSize: 12 }
+          }}
+          domain={[0, 'auto']}
           className="text-sm [&_.recharts-cartesian-axis-line]:stroke-border [&_.recharts-cartesian-axis-tick-line]:stroke-border"
         />
-        <ChartTooltip
-          content={({ active, payload }) => (
-            <ChartTooltipContent
-              active={active}
-              payload={payload}
-              nameKey="name"
-              labelKey="name"
-            />
-          )}
+        <Tooltip
+          content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            return (
+              <div className="rounded-lg border bg-background p-2 shadow-md">
+                <div className="grid gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-primary" />
+                    <span className="font-medium">{payload[0].payload.name}</span>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {chartConfig.curtailedEnergy.label}: {Number(payload[0].value).toFixed(2)} MWh
+                  </div>
+                  <div className="text-sm text-[#F7931A]">
+                    {chartConfig.bitcoinMined.label}: ₿{Number(payload[1]?.value).toFixed(8)}
+                  </div>
+                </div>
+              </div>
+            );
+          }}
+        />
+        <Bar
+          dataKey="curtailedEnergy"
+          yAxisId="left"
+          fill="var(--color-curtailedEnergy)"
         />
         <Line
           type="monotone"
-          dataKey="temperature"
-          yAxisId="temperature"
-          stroke="var(--color-temperature)"
+          dataKey="bitcoinMined"
+          yAxisId="right"
+          stroke="var(--color-bitcoinMined)"
           strokeWidth={2}
           dot={false}
         />
-        <Line
-          type="monotone"
-          dataKey="humidity"
-          yAxisId="humidity"
-          stroke="var(--color-humidity)"
-          strokeWidth={2}
-          dot={false}
-        />
-      </LineChart>
+      </ComposedChart>
     </ChartContainer>
   )
 }
