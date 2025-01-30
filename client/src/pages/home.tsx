@@ -508,7 +508,7 @@ export default function Home() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
-                        yAxisId="left"
+                        yAxisId="energy"
                         label={{
                           value: 'Curtailed Energy (MWh)',
                           angle: -90,
@@ -519,7 +519,7 @@ export default function Home() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
-                        yAxisId="right"
+                        yAxisId="bitcoin"
                         orientation="right"
                         label={{
                           value: 'Bitcoin Mining Potential (₿)',
@@ -566,27 +566,15 @@ export default function Home() {
                         }}
                       />
                       <Bar
-                        yAxisId="left"
+                        yAxisId="energy"
                         dataKey="curtailedEnergy"
                         fill="hsl(var(--primary))"
                       />
                       <Scatter
-                        yAxisId="right"
+                        yAxisId="bitcoin"
                         dataKey="bitcoinMined"
                         fill="#F7931A"
                         stroke="#F7931A"
-                        shape={(props: any) => {
-                          const { cx, cy } = props;
-                          return (
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={4}
-                              fill="#F7931A"
-                              stroke="#F7931A"
-                            />
-                          );
-                        }}
                       />
                     </BarChart>
                   </ResponsiveContainer>
