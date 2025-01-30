@@ -585,6 +585,7 @@ export default function Home() {
                           style: { fontSize: 12, fill: '#F7931A' }
                         }}
                         tick={{ fontSize: 12, fill: '#F7931A' }}
+                        domain={[0, 'auto']}
                       />
                       <ChartTooltip
                         content={({ active, payload }) => {
