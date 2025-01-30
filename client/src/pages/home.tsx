@@ -564,7 +564,8 @@ export default function Home() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
-                        yAxisId="energy"
+                        yAxisId="left"
+                        orientation="left"
                         label={{
                           value: 'Curtailed Energy (MWh)',
                           angle: -90,
@@ -575,7 +576,7 @@ export default function Home() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
-                        yAxisId="bitcoin"
+                        yAxisId="right"
                         orientation="right"
                         label={{
                           value: 'Bitcoin Mining Potential (₿)',
@@ -585,7 +586,28 @@ export default function Home() {
                           style: { fontSize: 12, fill: '#F7931A' }
                         }}
                         tick={{ fontSize: 12, fill: '#F7931A' }}
-                        domain={[0, 'auto']}
+                      />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="curtailedEnergy"
+                        fill="hsl(var(--primary))"
+                      />
+                      <Scatter
+                        yAxisId="right"
+                        dataKey="bitcoinMined"
+                        fill="#F7931A"
+                        shape={(props: any) => {
+                          const { cx, cy } = props;
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={4}
+                              fill="#F7931A"
+                              stroke="#F7931A"
+                            />
+                          );
+                        }}
                       />
                       <ChartTooltip
                         content={({ active, payload }) => {
@@ -616,28 +638,6 @@ export default function Home() {
                                 </div>
                               </div>
                             </div>
-                          );
-                        }}
-                      />
-                      <Bar
-                        yAxisId="energy"
-                        dataKey="curtailedEnergy"
-                        fill="hsl(var(--primary))"
-                      />
-                      <Scatter
-                        yAxisId="bitcoin"
-                        dataKey="bitcoinMined"
-                        fill="#F7931A"
-                        shape={(props: any) => {
-                          const { cx, cy } = props;
-                          return (
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={4}
-                              fill="#F7931A"
-                              stroke="#F7931A"
-                            />
                           );
                         }}
                       />
