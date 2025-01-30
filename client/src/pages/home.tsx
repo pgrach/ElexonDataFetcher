@@ -5,7 +5,7 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building, Bitcoin } from "lucide-react";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Scatter } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 interface BitcoinCalculation {
   bitcoinMined: number;
@@ -32,7 +32,6 @@ interface YearlySummary {
 interface HourlyData {
   hour: string;
   curtailedEnergy: number;
-  bitcoinMined: number;
 }
 
 export default function Home() {
@@ -171,17 +170,11 @@ export default function Home() {
 
   // Fetch hourly data with improved error handling
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
-    queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty, selectedMinerModel],
+    queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
       if (!isValid(date)) {
         throw new Error('Invalid date selected');
       }
-
-      console.log('Fetching hourly data with params:', {
-        date: formattedDate,
-        leadParty: selectedLeadParty,
-        minerModel: selectedMinerModel
-      });
 
       const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
       if (selectedLeadParty) {
@@ -191,22 +184,7 @@ export default function Home() {
       if (!response.ok) {
         throw new Error('Failed to fetch hourly data');
       }
-      const hourlyEnergy = await response.json();
-      console.log('Hourly energy data:', hourlyEnergy);
-
-      // Fetch Bitcoin mining potential for each hour
-      const btcUrl = new URL(`/api/curtailment/hourly-mining-potential/${formattedDate}`, window.location.origin);
-      btcUrl.searchParams.set('minerModel', selectedMinerModel);
-      btcUrl.searchParams.set('hourlyData', JSON.stringify(hourlyEnergy));
-
-      console.log('Fetching Bitcoin data from:', btcUrl.toString());
-      const btcResponse = await fetch(btcUrl);
-      if (!btcResponse.ok) {
-        throw new Error('Failed to fetch hourly bitcoin data');
-      }
-      const result = await btcResponse.json();
-      console.log('Combined hourly data with Bitcoin:', result);
-      return result;
+      return response.json();
     },
     enabled: !!formattedDate && isValid(date)
   });
@@ -555,7 +533,7 @@ export default function Home() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={hourlyData}
-                      margin={{ top: 20, right: 60, left: 60, bottom: 20 }}
+                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
@@ -564,8 +542,6 @@ export default function Home() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
-                        yAxisId="left"
-                        orientation="left"
                         label={{
                           value: 'Curtailed Energy (MWh)',
                           angle: -90,
@@ -575,55 +551,20 @@ export default function Home() {
                         }}
                         tick={{ fontSize: 12 }}
                       />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        label={{
-                          value: 'Bitcoin Mining Potential (₿)',
-                          angle: 90,
-                          position: 'insideRight',
-                          offset: -40,
-                          style: { fontSize: 12, fill: '#F7931A' }
-                        }}
-                        tick={{ fontSize: 12, fill: '#F7931A' }}
-                      />
-                      <Bar
-                        yAxisId="left"
-                        dataKey="curtailedEnergy"
-                        fill="hsl(var(--primary))"
-                      />
-                      <Scatter
-                        yAxisId="right"
-                        dataKey="bitcoinMined"
-                        fill="#F7931A"
-                        shape={(props: any) => {
-                          const { cx, cy } = props;
-                          return (
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={4}
-                              fill="#F7931A"
-                              stroke="#F7931A"
-                            />
-                          );
-                        }}
-                      />
                       <ChartTooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
-                          const data = payload[0].payload;
-                          const hour = data.hour;
-                          const energyValue = data.curtailedEnergy;
-                          const bitcoinValue = data.bitcoinMined;
+                          const data = payload[0];
+                          const hour = data.payload.hour;
+                          const value = Number(data.value);
 
                           let message = "";
                           if (isHourInFuture(hour)) {
                             message = "Data not available yet";
-                          } else if (energyValue === 0) {
+                          } else if (value === 0) {
                             message = "No curtailment detected";
                           } else {
-                            message = `${energyValue.toFixed(2)} MWh\n₿${bitcoinValue?.toFixed(8) || '0.00000000'}`;
+                            message = `${value.toFixed(2)} MWh`;
                           }
 
                           return (
@@ -633,13 +574,17 @@ export default function Home() {
                                   <div className="h-2 w-2 rounded-full bg-primary" />
                                   <span className="font-medium">{hour}</span>
                                 </div>
-                                <div className="text-sm text-muted-foreground whitespace-pre-line">
+                                <div className="text-sm text-muted-foreground">
                                   {message}
                                 </div>
                               </div>
                             </div>
                           );
                         }}
+                      />
+                      <Bar
+                        dataKey="curtailedEnergy"
+                        fill="hsl(var(--primary))"
                       />
                     </BarChart>
                   </ResponsiveContainer>

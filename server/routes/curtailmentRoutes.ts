@@ -51,47 +51,4 @@ router.get('/mining-potential', async (req, res) => {
   }
 });
 
-// Add hourly bitcoin mining potential endpoint
-router.get('/hourly-mining-potential/:date', async (req, res) => {
-  try {
-    const requestDate = parseISO(req.params.date);
-    const minerModel = req.query.minerModel as string || 'S19J_PRO';
-    const hourlyData = req.query.hourlyData ? JSON.parse(req.query.hourlyData as string) : [];
-
-    if (!isToday(requestDate)) {
-      return res.json(hourlyData.map((hour: any) => ({
-        ...hour,
-        bitcoinMined: 0,
-        valueAtCurrentPrice: 0
-      })));
-    }
-
-    const { difficulty, price } = await fetchFromMinerstat();
-    console.log('Minerstat data for hourly calculation:', { difficulty, price });
-
-    const hourlyCalculations = hourlyData.map((hour: any) => {
-      const calculation = calculateBitcoinMining(
-        hour.curtailedEnergy,
-        minerModel,
-        difficulty,
-        price
-      );
-
-      return {
-        ...hour,
-        bitcoinMined: calculation.bitcoinMined,
-        valueAtCurrentPrice: calculation.valueAtCurrentPrice
-      };
-    });
-
-    res.json(hourlyCalculations);
-  } catch (error) {
-    console.error('Error in hourly-mining-potential endpoint:', error);
-    res.status(500).json({
-      error: 'Failed to calculate hourly mining potential',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
 export default router;
