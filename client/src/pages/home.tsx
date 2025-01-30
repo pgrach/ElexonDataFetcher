@@ -6,8 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building, Bitcoin } from "lucide-react";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
-import Calendar from 'react-calendar'; //Import React Calendar
-
 
 // ... (keep all existing interfaces)
 
@@ -151,7 +149,6 @@ export default function Home() {
         <h1 className="text-4xl font-bold mb-8">Wind Farm Curtailment Data</h1>
 
         <div className="grid md:grid-cols-3 gap-4 mb-8">
-          {/* Existing cards remain unchanged */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -238,7 +235,6 @@ export default function Home() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-4 mb-8">
-          {/* Existing cards remain unchanged */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -325,7 +321,6 @@ export default function Home() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-4 mb-8">
-          {/* Existing cards remain unchanged */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
@@ -424,125 +419,75 @@ export default function Home() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Calendar Section */}
-              <div className="flex flex-col space-y-4">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={(newDate) => newDate && setDate(newDate)}
-                  modifiers={{
-                    intensity: (day) => {
-                      // Get the month's data from dailyData
-                      const monthStart = new Date(day.getFullYear(), day.getMonth(), 1);
-                      const monthEnd = new Date(day.getFullYear(), day.getMonth() + 1, 0);
+            <div className="h-[400px] w-full">
+              {isHourlyLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="animate-pulse">Loading chart data...</div>
+                </div>
+              ) : hourlyData ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={hourlyData}
+                    margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="hour"
+                      interval={2}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis
+                      label={{
+                        value: 'Curtailed Energy (MWh)',
+                        angle: -90,
+                        position: 'insideLeft',
+                        offset: -40,
+                        style: { fontSize: 12 }
+                      }}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <ChartTooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null;
+                        const data = payload[0];
+                        const hour = data.payload.hour;
+                        const value = Number(data.value);
 
-                      // Format the date to match your API format
-                      const formattedDay = format(day, 'yyyy-MM-dd');
+                        let message = "";
+                        if (isHourInFuture(hour)) {
+                          message = "Data not available yet";
+                        } else if (value === 0) {
+                          message = "No curtailment detected";
+                        } else {
+                          message = `${value.toFixed(2)} MWh`;
+                        }
 
-                      // If it's today's date or in the future, no intensity
-                      if (day > new Date()) return false;
-
-                      // If it's the selected date, add selected class
-                      if (formattedDay === format(date, 'yyyy-MM-dd')) return true;
-
-                      return true; // Show intensity for all past days
-                    }
-                  }}
-                  modifiersStyles={{
-                    intensity: (day) => {
-                      const formattedDay = format(day, 'yyyy-MM-dd');
-                      // Default alpha value for days without data
-                      let alpha = '10';
-
-                      // If we have daily data and it matches our current day
-                      if (dailyData && formattedDay === format(date, 'yyyy-MM-dd')) {
-                        // Calculate alpha based on curtailed energy (0-100)
-                        const intensity = Math.min(Math.floor((dailyData.totalCurtailedEnergy / 1000) * 100), 100);
-                        alpha = intensity.toString();
-                      }
-
-                      return {
-                        backgroundColor: `hsl(var(--primary) / ${alpha}%)`,
-                        color: alpha > '50' ? 'hsl(var(--primary-foreground))' : undefined
-                      };
-                    }
-                  }}
-                  className="border rounded-md"
-                />
-              </div>
-
-              {/* Chart Section - Keep existing chart code */}
-              <div className="h-[400px] w-full">
-                {isHourlyLoading ? (
-                  <div className="h-full flex items-center justify-center">
-                    <div className="animate-pulse">Loading chart data...</div>
-                  </div>
-                ) : hourlyData ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={hourlyData}
-                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="hour"
-                        interval={2}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis
-                        label={{
-                          value: 'Curtailed Energy (MWh)',
-                          angle: -90,
-                          position: 'insideLeft',
-                          offset: -40,
-                          style: { fontSize: 12 }
-                        }}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <ChartTooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const data = payload[0];
-                          const hour = data.payload.hour;
-                          const value = Number(data.value);
-
-                          let message = "";
-                          if (isHourInFuture(hour)) {
-                            message = "Data not available yet";
-                          } else if (value === 0) {
-                            message = "No curtailment detected";
-                          } else {
-                            message = `${value.toFixed(2)} MWh`;
-                          }
-
-                          return (
-                            <div className="rounded-lg border bg-background p-2 shadow-md">
-                              <div className="grid gap-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="h-2 w-2 rounded-full bg-primary" />
-                                  <span className="font-medium">{hour}</span>
-                                </div>
-                                <div className="text-sm text-muted-foreground">
-                                  {message}
-                                </div>
+                        return (
+                          <div className="rounded-lg border bg-background p-2 shadow-md">
+                            <div className="grid gap-2">
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-2 rounded-full bg-primary" />
+                                <span className="font-medium">{hour}</span>
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {message}
                               </div>
                             </div>
-                          );
-                        }}
-                      />
-                      <Bar
-                        dataKey="curtailedEnergy"
-                        fill="hsl(var(--primary))"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-muted-foreground">
-                    No hourly data available
-                  </div>
-                )}
-              </div>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Bar
+                      dataKey="curtailedEnergy"
+                      fill="hsl(var(--primary))"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No hourly data available
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
