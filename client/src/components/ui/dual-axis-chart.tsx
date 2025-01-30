@@ -32,11 +32,11 @@ interface DualAxisChartProps {
 export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
   return (
     <ResponsiveContainer width="100%" height={400}>
-      <ComposedChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+      <ComposedChart data={data} margin={{ top: 20, right: 60, left: 60, bottom: 20 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis 
           dataKey="hour"
-          interval={3}  // Show every 3rd hour
+          interval={3}
           tick={{ fontSize: 12, fill: 'currentColor' }}
           className="text-sm font-medium"
         />
@@ -47,6 +47,7 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
             value: chartConfig.leftAxis.label, 
             angle: -90, 
             position: 'insideLeft',
+            offset: -45,
             className: "text-sm font-medium fill-current"
           }}
           tick={{ fill: 'currentColor' }}
@@ -58,6 +59,7 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
             value: chartConfig.rightAxis.label, 
             angle: 90, 
             position: 'insideRight',
+            offset: -35,
             className: "text-sm font-medium",
             fill: chartConfig.rightAxis.color
           }}
