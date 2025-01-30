@@ -46,13 +46,11 @@ export default function Home() {
 
   const formattedDate = format(date, 'yyyy-MM-dd');
 
-  // Fetch curtailed lead parties for the selected date
   const { data: curtailedLeadParties = [] } = useQuery<string[]>({
     queryKey: [`/api/lead-parties/${formattedDate}`],
     enabled: !!formattedDate && isValid(date)
   });
 
-  // Reset selected lead party if it's not in the curtailed list for the new date
   useEffect(() => {
     if (selectedLeadParty && !curtailedLeadParties.includes(selectedLeadParty)) {
       setSelectedLeadParty(null);
@@ -62,7 +60,6 @@ export default function Home() {
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
-      // Validate date before making the request
       if (!isValid(date)) {
         throw new Error('Invalid date selected');
       }
@@ -169,7 +166,6 @@ export default function Home() {
     enabled: !!date && isValid(date)
   });
 
-  // Fetch hourly data with improved error handling
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
@@ -190,7 +186,6 @@ export default function Home() {
     enabled: !!formattedDate && isValid(date)
   });
 
-  // Function to check if a given hour is in the future
   const isHourInFuture = (hourStr: string) => {
     const [hour] = hourStr.split(':').map(Number);
     const now = new Date();
@@ -227,7 +222,6 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {/* Energy Section */}
                 <div>
                   {isYearlyLoading ? (
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
@@ -249,7 +243,6 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Bitcoin Mining Potential */}
                 <div>
                   <div className="text-sm font-medium">Bitcoin could be mined</div>
                   {isYearlyLoading ? (
@@ -280,7 +273,6 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {/* Payment Section */}
                 <div>
                   <div className="text-sm font-medium">Paid for Curtailment</div>
                   {isYearlyLoading ? (
@@ -303,7 +295,6 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Bitcoin Value Section */}
                 <div>
                   <div className="text-sm font-medium">Value if Bitcoin was mined</div>
                   {isYearlyLoading ? (
@@ -336,7 +327,6 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {/* Energy Section */}
                 <div>
                   {isMonthlyLoading ? (
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
@@ -358,7 +348,6 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Bitcoin Mining Potential */}
                 <div>
                   <div className="text-sm font-medium">Bitcoin could be mined</div>
                   {isMonthlyLoading ? (
@@ -389,7 +378,6 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {/* Payment Section */}
                 <div>
                   <div className="text-sm font-medium">Paid for Curtailment</div>
                   {isMonthlyLoading ? (
@@ -412,7 +400,6 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Bitcoin Value Section */}
                 <div>
                   <div className="text-sm font-medium">Value if Bitcoin was mined</div>
                   {isMonthlyLoading ? (
@@ -443,7 +430,6 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col lg:flex-row gap-8">
-              {/* Daily Stats Section */}
               <div className="lg:w-1/4">
                 <h3 className="text-lg font-semibold mb-4">Daily Stats</h3>
                 <div className="space-y-6">
@@ -524,7 +510,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Chart Section */}
               <div className="lg:w-3/4 h-[400px]">
                 {isHourlyLoading ? (
                   <div className="h-full flex items-center justify-center">
@@ -533,7 +518,7 @@ export default function Home() {
                 ) : hourlyData ? (
                   <DualAxisChart
                     data={hourlyData.map((hour) => ({
-                      name: hour.hour,
+                      hour: hour.hour.split(':')[0].padStart(2, '0'),
                       curtailedEnergy: isHourInFuture(hour.hour) ? 0 : hour.curtailedEnergy,
                       bitcoinMined: isHourInFuture(hour.hour) ? 0 :
                         (hour.curtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / (dailyData?.totalCurtailedEnergy || 1)
