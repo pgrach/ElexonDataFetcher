@@ -4,19 +4,8 @@ import { format, isValid, isToday } from "date-fns";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building, Bitcoin } from "lucide-react";
-import { DualAxisChart } from "@/components/ui/dual-axis-chart";
-
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ResponsiveContainer,
-  ComposedChart,
-} from "recharts";
+import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 interface BitcoinCalculation {
   bitcoinMined: number;
@@ -43,13 +32,6 @@ interface YearlySummary {
 interface HourlyData {
   hour: string;
   curtailedEnergy: number;
-  bitcoinMined: number; // Added bitcoinMined field
-}
-
-interface HourlyBitcoinData {
-  hour: string;
-  curtailedEnergy: number;
-  bitcoinMined: number;
 }
 
 export default function Home() {
@@ -63,11 +45,13 @@ export default function Home() {
 
   const formattedDate = format(date, 'yyyy-MM-dd');
 
+  // Fetch curtailed lead parties for the selected date
   const { data: curtailedLeadParties = [] } = useQuery<string[]>({
     queryKey: [`/api/lead-parties/${formattedDate}`],
     enabled: !!formattedDate && isValid(date)
   });
 
+  // Reset selected lead party if it's not in the curtailed list for the new date
   useEffect(() => {
     if (selectedLeadParty && !curtailedLeadParties.includes(selectedLeadParty)) {
       setSelectedLeadParty(null);
@@ -77,6 +61,7 @@ export default function Home() {
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
+      // Validate date before making the request
       if (!isValid(date)) {
         throw new Error('Invalid date selected');
       }
@@ -183,6 +168,7 @@ export default function Home() {
     enabled: !!date && isValid(date)
   });
 
+  // Fetch hourly data with improved error handling
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
@@ -194,22 +180,16 @@ export default function Home() {
       if (selectedLeadParty) {
         url.searchParams.set('leadParty', selectedLeadParty);
       }
-
-      console.log('Fetching hourly data from:', url.toString());
-
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error('Failed to fetch hourly data');
       }
-
-      const hourlyData = await response.json();
-      console.log('Received hourly data:', hourlyData);
-
-      return hourlyData;
+      return response.json();
     },
     enabled: !!formattedDate && isValid(date)
   });
 
+  // Function to check if a given hour is in the future
   const isHourInFuture = (hourStr: string) => {
     const [hour] = hourStr.split(':').map(Number);
     const now = new Date();
@@ -246,6 +226,7 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
+                {/* Energy Section */}
                 <div>
                   {isYearlyLoading ? (
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
@@ -267,6 +248,7 @@ export default function Home() {
                   </p>
                 </div>
 
+                {/* Bitcoin Mining Potential */}
                 <div>
                   <div className="text-sm font-medium">Bitcoin could be mined</div>
                   {isYearlyLoading ? (
@@ -297,6 +279,7 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
+                {/* Payment Section */}
                 <div>
                   <div className="text-sm font-medium">Paid for Curtailment</div>
                   {isYearlyLoading ? (
@@ -319,6 +302,7 @@ export default function Home() {
                   </p>
                 </div>
 
+                {/* Bitcoin Value Section */}
                 <div>
                   <div className="text-sm font-medium">Value if Bitcoin was mined</div>
                   {isYearlyLoading ? (
@@ -351,6 +335,7 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
+                {/* Energy Section */}
                 <div>
                   {isMonthlyLoading ? (
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
@@ -372,6 +357,7 @@ export default function Home() {
                   </p>
                 </div>
 
+                {/* Bitcoin Mining Potential */}
                 <div>
                   <div className="text-sm font-medium">Bitcoin could be mined</div>
                   {isMonthlyLoading ? (
@@ -402,6 +388,7 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
+                {/* Payment Section */}
                 <div>
                   <div className="text-sm font-medium">Paid for Curtailment</div>
                   {isMonthlyLoading ? (
@@ -424,6 +411,7 @@ export default function Home() {
                   </p>
                 </div>
 
+                {/* Bitcoin Value Section */}
                 <div>
                   <div className="text-sm font-medium">Value if Bitcoin was mined</div>
                   {isMonthlyLoading ? (
@@ -454,6 +442,7 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col lg:flex-row gap-8">
+              {/* Daily Stats Section */}
               <div className="lg:w-1/4">
                 <h3 className="text-lg font-semibold mb-4">Daily Stats</h3>
                 <div className="space-y-6">
@@ -541,29 +530,64 @@ export default function Home() {
                     <div className="animate-pulse">Loading chart data...</div>
                   </div>
                 ) : hourlyData ? (
-                  <DualAxisChart
-                    data={hourlyData.map(data => ({
-                      name: data.hour,
-                      curtailedEnergy: data.curtailedEnergy,
-                      bitcoinMined: data.bitcoinMined || 0
-                    }))}
-                    chartConfig={{
-                      curtailedEnergy: {
-                        label: "Curtailed Energy (MWh)",
-                        theme: {
-                          light: "hsl(var(--primary))",
-                          dark: "hsl(var(--primary))"
-                        }
-                      },
-                      bitcoinMined: {
-                        label: "Bitcoin Mined (₿)",
-                        theme: {
-                          light: "#F7931A",
-                          dark: "#F7931A"
-                        }
-                      }
-                    }}
-                  />
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={hourlyData}
+                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="hour"
+                        interval={2}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        label={{
+                          value: 'Curtailed Energy (MWh)',
+                          angle: -90,
+                          position: 'insideLeft',
+                          offset: -40,
+                          style: { fontSize: 12 }
+                        }}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <ChartTooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const data = payload[0];
+                          const hour = data.payload.hour;
+                          const value = Number(data.value);
+
+                          let message = "";
+                          if (isHourInFuture(hour)) {
+                            message = "Data not available yet";
+                          } else if (value === 0) {
+                            message = "No curtailment detected";
+                          } else {
+                            message = `${value.toFixed(2)} MWh`;
+                          }
+
+                          return (
+                            <div className="rounded-lg border bg-background p-2 shadow-md">
+                              <div className="grid gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 w-2 rounded-full bg-primary" />
+                                  <span className="font-medium">{hour}</span>
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {message}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar
+                        dataKey="curtailedEnergy"
+                        fill="hsl(var(--primary))"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     No hourly data available
