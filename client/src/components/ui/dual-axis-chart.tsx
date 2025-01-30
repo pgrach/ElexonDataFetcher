@@ -58,9 +58,10 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
             value: chartConfig.rightAxis.label, 
             angle: 90, 
             position: 'insideRight',
-            className: "text-sm font-medium fill-current"
+            className: "text-sm font-medium",
+            fill: chartConfig.rightAxis.color
           }}
-          tick={{ fill: 'currentColor' }}
+          tick={{ fill: chartConfig.rightAxis.color }}
         />
         <Tooltip 
           contentStyle={{ 
