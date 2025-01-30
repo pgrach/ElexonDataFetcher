@@ -35,9 +35,10 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
       <ComposedChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis 
-          dataKey="name" 
+          dataKey="hour" // Changed dataKey to "hour"
+          interval={2}
+          tick={{ fontSize: 12, fill: 'currentColor' }}
           className="text-sm font-medium"
-          tick={{ fill: 'currentColor' }}
         />
         <YAxis
           yAxisId="left"
