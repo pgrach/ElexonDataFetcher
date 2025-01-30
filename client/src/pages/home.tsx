@@ -34,6 +34,55 @@ interface HourlyData {
   curtailedEnergy: number;
 }
 
+// Assuming DualAxisChart component exists and is imported correctly.  This is crucial for the code to work.
+//  You will need to define this component.  A simple example is provided below
+// import {DualAxisChart} from './DualAxisChart';
+
+const DualAxisChart = ({ data, chartConfig }) => (
+  <ResponsiveContainer width="100%" height="100%">
+    <BarChart data={data} margin={{ top: 20, right: 30, left: 60, bottom: 20 }}>
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="name" interval={2} tick={{ fontSize: 12 }} />
+      <YAxis 
+        yAxisId="left"
+        label={{
+          value: chartConfig.leftAxis.label,
+          angle: -90,
+          position: 'insideLeft',
+          offset: -40,
+          style: { fontSize: 12 }
+        }}
+        tick={{ fontSize: 12 }}
+        domain={[0, 'auto']}
+      />
+      <YAxis 
+        yAxisId="right"
+        orientation="right"
+        label={{
+          value: chartConfig.rightAxis.label,
+          angle: 90,
+          position: 'insideRight',
+          offset: 40,
+          style: { fontSize: 12 }
+        }}
+        tick={{ fontSize: 12 }}
+        domain={[0, 'auto']}
+      />
+      <Bar 
+        yAxisId="left"
+        dataKey={chartConfig.leftAxis.dataKey} 
+        fill={chartConfig.leftAxis.color} 
+      />
+      <Bar 
+        yAxisId="right"
+        dataKey={chartConfig.rightAxis.dataKey} 
+        fill={chartConfig.rightAxis.color} 
+      />
+    </BarChart>
+  </ResponsiveContainer>
+);
+
+
 export default function Home() {
   const [date, setDate] = useState<Date>(() => {
     const today = new Date();
@@ -530,64 +579,26 @@ export default function Home() {
                     <div className="animate-pulse">Loading chart data...</div>
                   </div>
                 ) : hourlyData ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={hourlyData}
-                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="hour"
-                        interval={2}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis
-                        label={{
-                          value: 'Curtailed Energy (MWh)',
-                          angle: -90,
-                          position: 'insideLeft',
-                          offset: -40,
-                          style: { fontSize: 12 }
-                        }}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <ChartTooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const data = payload[0];
-                          const hour = data.payload.hour;
-                          const value = Number(data.value);
-
-                          let message = "";
-                          if (isHourInFuture(hour)) {
-                            message = "Data not available yet";
-                          } else if (value === 0) {
-                            message = "No curtailment detected";
-                          } else {
-                            message = `${value.toFixed(2)} MWh`;
-                          }
-
-                          return (
-                            <div className="rounded-lg border bg-background p-2 shadow-md">
-                              <div className="grid gap-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="h-2 w-2 rounded-full bg-primary" />
-                                  <span className="font-medium">{hour}</span>
-                                </div>
-                                <div className="text-sm text-muted-foreground">
-                                  {message}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Bar
-                        dataKey="curtailedEnergy"
-                        fill="hsl(var(--primary))"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <DualAxisChart
+                    data={hourlyData.map((hour) => ({
+                      name: hour.hour,
+                      curtailedEnergy: isHourInFuture(hour.hour) ? 0 : hour.curtailedEnergy,
+                      bitcoinMined: isHourInFuture(hour.hour) ? 0 :
+                        (hour.curtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / (dailyData?.totalCurtailedEnergy || 1)
+                    }))}
+                    chartConfig={{
+                      leftAxis: {
+                        label: "Curtailed Energy (MWh)",
+                        dataKey: "curtailedEnergy",
+                        color: "hsl(var(--primary))"
+                      },
+                      rightAxis: {
+                        label: "Potential Bitcoin Mined (₿)",
+                        dataKey: "bitcoinMined",
+                        color: "#F7931A"
+                      }
+                    }}
+                  />
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     No hourly data available
