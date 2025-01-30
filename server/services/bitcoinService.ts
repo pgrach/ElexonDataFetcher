@@ -4,8 +4,7 @@ import { db } from "@db";
 import { curtailmentRecords } from "@db/schema";
 import { and, eq } from "drizzle-orm";
 
-const BLOCK_REWARD = 3.125; // Block reward for 30-minute period (6.25/2)
-const BLOCKS_PER_PERIOD = 3; // Average blocks per 30-minute period
+const BLOCK_REWARD = 3.125; // Block reward per 10-minute block (after halvening in April 2024)
 
 interface BitcoinCalculation {
   bitcoinMined: number;
@@ -48,19 +47,19 @@ function calculateBitcoinForPeriod(
   const curtailedKwh = Number((curtailedMwh * 1000).toFixed(10));
   console.log('Curtailed kWh:', curtailedKwh);
 
-  // Calculate miner consumption in kWh for 30-min period
-  const minerConsumptionKwh = Number((miner.power / 1000 / 2).toFixed(10)); // Divide by 2 for 30-min period
-  console.log('Miner consumption kWh per period:', minerConsumptionKwh);
+  // Calculate miner consumption in kWh for 10-minute block
+  const minerConsumptionKwhPer10Min = Number((miner.power / 1000 / 6).toFixed(10)); // Divide by 6 for 10-min block
+  console.log('Miner consumption kWh per 10-min block:', minerConsumptionKwhPer10Min);
 
-  // Calculate potential miners
-  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
-  console.log('Potential miners:', potentialMiners);
+  // Calculate potential miners based on 10-minute power consumption
+  const potentialMiners = Math.floor((curtailedKwh / 3) / minerConsumptionKwhPer10Min); // Divide curtailedKwh by 3 for each 10-min block
+  console.log('Potential miners per 10-min block:', potentialMiners);
 
   // Calculate hashes needed per block
   const hashesPerBlock = Number((difficulty * Math.pow(2, 32)).toFixed(10));
   console.log('Hashes per block:', hashesPerBlock);
 
-  // Network hashrate in H/s (600 seconds per block on average)
+  // Network hashrate in H/s (600 seconds per block)
   const networkHashRate = Number((hashesPerBlock / 600).toFixed(10));
   console.log('Network hashrate (H/s):', networkHashRate);
 
@@ -76,10 +75,11 @@ function calculateBitcoinForPeriod(
   const ourNetworkShare = Number((totalHashPower / networkHashRateTH).toFixed(10));
   console.log('Network share:', ourNetworkShare);
 
-  // Calculate expected BTC mined per 30-minute period
-  // Using direct calculation for 30-minute period with BLOCK_REWARD already adjusted
-  const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_PERIOD).toFixed(8));
-  console.log('Bitcoin mined in period:', bitcoinMined);
+  // Calculate expected BTC mined for three consecutive 10-minute blocks
+  const bitcoinPerBlock = Number((ourNetworkShare * BLOCK_REWARD).toFixed(8));
+  const bitcoinMined = Number((bitcoinPerBlock * 3).toFixed(8)); // 3 blocks in 30 minutes
+  console.log('Bitcoin mined per block:', bitcoinPerBlock);
+  console.log('Total Bitcoin mined in period (3 blocks):', bitcoinMined);
 
   // Calculate value at current price
   const valueAtCurrentPrice = Number((bitcoinMined * currentPrice).toFixed(2));
