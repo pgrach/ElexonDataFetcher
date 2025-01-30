@@ -4,7 +4,8 @@ import { format, isValid, isToday } from "date-fns";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building, Bitcoin } from "lucide-react";
-import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import { DualAxisChart } from "@/components/ui/dual-axis-chart";
+
 import {
   LineChart,
   Line,
@@ -533,99 +534,36 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Chart Section */}
               <div className="lg:w-3/4 h-[400px]">
                 {isHourlyLoading ? (
                   <div className="h-full flex items-center justify-center">
                     <div className="animate-pulse">Loading chart data...</div>
                   </div>
                 ) : hourlyData ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart
-                      data={hourlyData}
-                      margin={{ top: 20, right: 60, left: 60, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="hour"
-                        interval={2}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis
-                        yAxisId="left"
-                        orientation="left"
-                        label={{
-                          value: 'Curtailed Energy (MWh)',
-                          angle: -90,
-                          position: 'insideLeft',
-                          offset: -40,
-                          style: { fontSize: 12 }
-                        }}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        label={{
-                          value: 'Bitcoin Mined (₿)',
-                          angle: 90,
-                          position: 'insideRight',
-                          offset: -40,
-                          style: { fontSize: 12 }
-                        }}
-                        tick={{ fontSize: 12 }}
-                        domain={[0, 'auto']}
-                      />
-                      <ChartTooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const hour = payload[0].payload.hour;
-                          const curtailedEnergy = Number(payload[0].value);
-                          const bitcoinMined = payload[1]?.value;
-
-                          let energyMessage = "";
-                          if (isHourInFuture(hour)) {
-                            energyMessage = "Data not available yet";
-                          } else if (curtailedEnergy === 0) {
-                            energyMessage = "No curtailment detected";
-                          } else {
-                            energyMessage = `${curtailedEnergy.toFixed(2)} MWh`;
-                          }
-
-                          return (
-                            <div className="rounded-lg border bg-background p-2 shadow-md">
-                              <div className="grid gap-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="h-2 w-2 rounded-full bg-primary" />
-                                  <span className="font-medium">{hour}</span>
-                                </div>
-                                <div className="text-sm text-muted-foreground">
-                                  Curtailed Energy: {energyMessage}
-                                </div>
-                                {bitcoinMined && (
-                                  <div className="text-sm text-[#F7931A]">
-                                    Bitcoin Potential: ₿{Number(bitcoinMined).toFixed(8)}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Bar
-                        dataKey="curtailedEnergy"
-                        yAxisId="left"
-                        fill="hsl(var(--primary))"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="bitcoinMined"
-                        yAxisId="right"
-                        stroke="#F7931A"
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                  <DualAxisChart
+                    data={hourlyData.map(data => ({
+                      name: data.hour,
+                      curtailedEnergy: data.curtailedEnergy,
+                      bitcoinMined: data.bitcoinMined || 0
+                    }))}
+                    chartConfig={{
+                      curtailedEnergy: {
+                        label: "Curtailed Energy (MWh)",
+                        theme: {
+                          light: "hsl(var(--primary))",
+                          dark: "hsl(var(--primary))"
+                        }
+                      },
+                      bitcoinMined: {
+                        label: "Bitcoin Mined (₿)",
+                        theme: {
+                          light: "#F7931A",
+                          dark: "#F7931A"
+                        }
+                      }
+                    }}
+                  />
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     No hourly data available
