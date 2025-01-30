@@ -5,7 +5,7 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building, Bitcoin } from "lucide-react";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Scatter } from "recharts";
 
 interface BitcoinCalculation {
   bitcoinMined: number;
@@ -32,6 +32,7 @@ interface YearlySummary {
 interface HourlyData {
   hour: string;
   curtailedEnergy: number;
+  bitcoinMined?: number;
 }
 
 export default function Home() {
@@ -200,6 +201,24 @@ export default function Home() {
     }
     return selectedDate > now;
   };
+
+  const calculateHourlyBitcoin = (hourlyData: HourlyData[] = [], bitcoinPotential?: BitcoinCalculation): HourlyData[] => {
+    if (!hourlyData.length || !bitcoinPotential || !isToday(date)) {
+      return hourlyData;
+    }
+
+    const totalEnergy = dailyData?.totalCurtailedEnergy || 0;
+    if (totalEnergy <= 0) return hourlyData;
+
+    // Calculate bitcoin per MWh ratio
+    const bitcoinPerMWh = bitcoinPotential.bitcoinMined / totalEnergy;
+
+    return hourlyData.map(hour => ({
+      ...hour,
+      bitcoinMined: hour.curtailedEnergy * bitcoinPerMWh
+    }));
+  };
+
 
   return (
     <div className="min-h-screen">
@@ -511,8 +530,8 @@ export default function Home() {
                 ) : hourlyData ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={hourlyData}
-                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
+                      data={calculateHourlyBitcoin(hourlyData, bitcoinPotential)}
+                      margin={{ top: 20, right: 60, left: 60, bottom: 20 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
@@ -521,6 +540,7 @@ export default function Home() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
+                        yAxisId="left"
                         label={{
                           value: 'Curtailed Energy (MWh)',
                           angle: -90,
@@ -530,20 +550,33 @@ export default function Home() {
                         }}
                         tick={{ fontSize: 12 }}
                       />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        label={{
+                          value: 'Bitcoin Mining Potential (₿)',
+                          angle: 90,
+                          position: 'insideRight',
+                          offset: -40,
+                          style: { fontSize: 12, fill: '#F7931A' }
+                        }}
+                        tick={{ fontSize: 12, fill: '#F7931A' }}
+                      />
                       <ChartTooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
                           const data = payload[0];
                           const hour = data.payload.hour;
-                          const value = Number(data.value);
+                          const energyValue = Number(data.payload.curtailedEnergy);
+                          const bitcoinValue = data.payload.bitcoinMined;
 
                           let message = "";
                           if (isHourInFuture(hour)) {
                             message = "Data not available yet";
-                          } else if (value === 0) {
+                          } else if (energyValue === 0) {
                             message = "No curtailment detected";
                           } else {
-                            message = `${value.toFixed(2)} MWh`;
+                            message = `${energyValue.toFixed(2)} MWh${bitcoinValue ? ` / ₿${bitcoinValue.toFixed(8)}` : ''}`;
                           }
 
                           return (
@@ -562,8 +595,25 @@ export default function Home() {
                         }}
                       />
                       <Bar
+                        yAxisId="left"
                         dataKey="curtailedEnergy"
                         fill="hsl(var(--primary))"
+                      />
+                      <Scatter
+                        yAxisId="right"
+                        dataKey="bitcoinMined"
+                        fill="#F7931A"
+                        shape={(props: any) => {
+                          const { cx, cy } = props;
+                          return (
+                            <g transform={`translate(${cx - 8},${cy - 8})`}>
+                              <circle cx="8" cy="8" r="6" fill="#F7931A" />
+                              <text x="8" y="8" textAnchor="middle" dy=".3em" fill="white" fontSize="10">
+                                ₿
+                              </text>
+                            </g>
+                          );
+                        }}
                       />
                     </BarChart>
                   </ResponsiveContainer>
