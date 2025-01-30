@@ -212,7 +212,7 @@ export default function Home() {
               <CardTitle className="text-sm font-medium">
                 {selectedLeadParty ? 'Farm Yearly BTC Equivalent' : 'Yearly BTC Equivalent'}
               </CardTitle>
-              <Bitcoin className="h-4 w-4 text-muted-foreground" />
+              <Bitcoin className="h-4 w-4 text-[#F7931A]" />
             </CardHeader>
             <CardContent>
               {isYearlyLoading ? (
@@ -220,8 +220,7 @@ export default function Home() {
               ) : yearlyError ? (
                 <div className="text-sm text-red-500">Failed to load yearly data</div>
               ) : yearlyData ? (
-                <div className="text-2xl font-bold">
-                  {/* Placeholder for BTC calculation */}
+                <div className="text-2xl font-bold text-[#F7931A]">
                   ₿0.00
                 </div>
               ) : (
@@ -298,7 +297,7 @@ export default function Home() {
               <CardTitle className="text-sm font-medium">
                 {selectedLeadParty ? 'Farm Monthly BTC Equivalent' : 'Monthly BTC Equivalent'}
               </CardTitle>
-              <Bitcoin className="h-4 w-4 text-muted-foreground" />
+              <Bitcoin className="h-4 w-4 text-[#F7931A]" />
             </CardHeader>
             <CardContent>
               {isMonthlyLoading ? (
@@ -306,104 +305,11 @@ export default function Home() {
               ) : monthlyError ? (
                 <div className="text-sm text-red-500">Failed to load monthly data</div>
               ) : monthlyData ? (
-                <div className="text-2xl font-bold">
-                  {/* Placeholder for BTC calculation */}
+                <div className="text-2xl font-bold text-[#F7931A]">
                   ₿0.00
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground">No monthly data available</div>
-              )}
-              <div className="text-xs text-muted-foreground mt-1">
-                Estimated mining potential with {selectedMinerModel.replace('_', ' ')}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-4 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {selectedLeadParty ? 'Farm Daily Curtailed Energy' : 'Daily Curtailed Energy'}
-              </CardTitle>
-              <Wind className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {isDailyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : dailyError ? (
-                <div className="text-sm text-red-500">
-                  {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
-                </div>
-              ) : dailyData ? (
-                <div className="text-2xl font-bold">
-                  {Number(dailyData.totalCurtailedEnergy).toLocaleString()} MWh
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">No daily data available</div>
-              )}
-              <div className="text-xs text-muted-foreground mt-1">
-                {selectedLeadParty ? (
-                  <>Farm curtailed energy for {selectedLeadParty}</>
-                ) : (
-                  <>Daily curtailed energy for {format(date, 'MMM d, yyyy')}</>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {selectedLeadParty ? 'Farm Daily Payment' : 'Daily Payment'}
-              </CardTitle>
-              <Building className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {isDailyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : dailyError ? (
-                <div className="text-sm text-red-500">
-                  {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
-                </div>
-              ) : dailyData ? (
-                <div className="text-2xl font-bold">
-                  £{Number(dailyData.totalPayment).toLocaleString()}
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">No daily data available</div>
-              )}
-              <div className="text-xs text-muted-foreground mt-1">
-                {selectedLeadParty ? (
-                  <>Farm payment for {selectedLeadParty}</>
-                ) : (
-                  <>Daily payment for {format(date, 'MMM d, yyyy')}</>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {selectedLeadParty ? 'Farm Daily BTC Equivalent' : 'Daily BTC Equivalent'}
-              </CardTitle>
-              <Bitcoin className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {isDailyLoading ? (
-                <div className="text-2xl font-bold animate-pulse">Loading...</div>
-              ) : dailyError ? (
-                <div className="text-sm text-red-500">
-                  {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
-                </div>
-              ) : dailyData ? (
-                <div className="text-2xl font-bold">
-                  {/* Placeholder for BTC calculation */}
-                  ₿0.00
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">No daily data available</div>
               )}
               <div className="text-xs text-muted-foreground mt-1">
                 Estimated mining potential with {selectedMinerModel.replace('_', ' ')}
@@ -419,75 +325,135 @@ export default function Home() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[400px] w-full">
-              {isHourlyLoading ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="animate-pulse">Loading chart data...</div>
+            <div className="flex flex-col lg:flex-row gap-8">
+              {/* Daily Stats Section */}
+              <div className="lg:w-1/4">
+                <h3 className="text-lg font-semibold mb-4">Daily Stats</h3>
+                <div className="space-y-6">
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Curtailed Energy</div>
+                    {isDailyLoading ? (
+                      <div className="text-3xl font-bold animate-pulse">Loading...</div>
+                    ) : dailyError ? (
+                      <div className="text-sm text-red-500">
+                        {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
+                      </div>
+                    ) : dailyData ? (
+                      <div className="text-3xl font-bold">
+                        {Number(dailyData.totalCurtailedEnergy).toLocaleString()} MWh
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No daily data available</div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Payment</div>
+                    {isDailyLoading ? (
+                      <div className="text-3xl font-bold animate-pulse">Loading...</div>
+                    ) : dailyError ? (
+                      <div className="text-sm text-red-500">
+                        {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
+                      </div>
+                    ) : dailyData ? (
+                      <div className="text-3xl font-bold">
+                        £{Number(dailyData.totalPayment).toLocaleString()}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No daily data available</div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Mining Opportunity Loss</div>
+                    {isDailyLoading ? (
+                      <div className="text-3xl font-bold animate-pulse">Loading...</div>
+                    ) : dailyError ? (
+                      <div className="text-sm text-red-500">
+                        {dailyError instanceof Error ? dailyError.message : 'Failed to load daily data'}
+                      </div>
+                    ) : dailyData ? (
+                      <div className="text-3xl font-bold text-[#F7931A]">
+                        ₿0.00
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No daily data available</div>
+                    )}
+                  </div>
                 </div>
-              ) : hourlyData ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={hourlyData}
-                    margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="hour"
-                      interval={2}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <YAxis
-                      label={{
-                        value: 'Curtailed Energy (MWh)',
-                        angle: -90,
-                        position: 'insideLeft',
-                        offset: -40,
-                        style: { fontSize: 12 }
-                      }}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <ChartTooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null;
-                        const data = payload[0];
-                        const hour = data.payload.hour;
-                        const value = Number(data.value);
+              </div>
 
-                        let message = "";
-                        if (isHourInFuture(hour)) {
-                          message = "Data not available yet";
-                        } else if (value === 0) {
-                          message = "No curtailment detected";
-                        } else {
-                          message = `${value.toFixed(2)} MWh`;
-                        }
+              {/* Chart Section */}
+              <div className="lg:w-3/4 h-[400px]">
+                {isHourlyLoading ? (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="animate-pulse">Loading chart data...</div>
+                  </div>
+                ) : hourlyData ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={hourlyData}
+                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="hour"
+                        interval={2}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        label={{
+                          value: 'Curtailed Energy (MWh)',
+                          angle: -90,
+                          position: 'insideLeft',
+                          offset: -40,
+                          style: { fontSize: 12 }
+                        }}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <ChartTooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const data = payload[0];
+                          const hour = data.payload.hour;
+                          const value = Number(data.value);
 
-                        return (
-                          <div className="rounded-lg border bg-background p-2 shadow-md">
-                            <div className="grid gap-2">
-                              <div className="flex items-center gap-2">
-                                <div className="h-2 w-2 rounded-full bg-primary" />
-                                <span className="font-medium">{hour}</span>
-                              </div>
-                              <div className="text-sm text-muted-foreground">
-                                {message}
+                          let message = "";
+                          if (isHourInFuture(hour)) {
+                            message = "Data not available yet";
+                          } else if (value === 0) {
+                            message = "No curtailment detected";
+                          } else {
+                            message = `${value.toFixed(2)} MWh`;
+                          }
+
+                          return (
+                            <div className="rounded-lg border bg-background p-2 shadow-md">
+                              <div className="grid gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 w-2 rounded-full bg-primary" />
+                                  <span className="font-medium">{hour}</span>
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {message}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Bar
-                      dataKey="curtailedEnergy"
-                      fill="hsl(var(--primary))"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  No hourly data available
-                </div>
-              )}
+                          );
+                        }}
+                      />
+                      <Bar
+                        dataKey="curtailedEnergy"
+                        fill="hsl(var(--primary))"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    No hourly data available
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
