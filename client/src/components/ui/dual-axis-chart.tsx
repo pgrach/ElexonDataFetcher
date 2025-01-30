@@ -82,7 +82,23 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
           dataKey={chartConfig.rightAxis.dataKey}
           fill={chartConfig.rightAxis.color}
           name={chartConfig.rightAxis.label}
-          line={{ stroke: chartConfig.rightAxis.color }}
+          shape={(props) => {
+            const { cx, cy, fill } = props;
+            const value = props.payload[chartConfig.rightAxis.dataKey];
+            // Don't render if value is 0
+            if (value === 0) return null;
+            // Render a larger circle for non-zero values
+            return (
+              <circle 
+                cx={cx} 
+                cy={cy} 
+                r={6} 
+                fill={fill} 
+                stroke={fill}
+                strokeWidth={2}
+              />
+            );
+          }}
         />
       </ComposedChart>
     </ResponsiveContainer>
