@@ -5,7 +5,17 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Calendar as CalendarIcon, Building, Bitcoin } from "lucide-react";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  ComposedChart,
+} from "recharts";
 
 interface BitcoinCalculation {
   bitcoinMined: number;
@@ -32,6 +42,7 @@ interface YearlySummary {
 interface HourlyData {
   hour: string;
   curtailedEnergy: number;
+  bitcoinMined: number; // Added bitcoinMined field
 }
 
 export default function Home() {
@@ -45,13 +56,11 @@ export default function Home() {
 
   const formattedDate = format(date, 'yyyy-MM-dd');
 
-  // Fetch curtailed lead parties for the selected date
   const { data: curtailedLeadParties = [] } = useQuery<string[]>({
     queryKey: [`/api/lead-parties/${formattedDate}`],
     enabled: !!formattedDate && isValid(date)
   });
 
-  // Reset selected lead party if it's not in the curtailed list for the new date
   useEffect(() => {
     if (selectedLeadParty && !curtailedLeadParties.includes(selectedLeadParty)) {
       setSelectedLeadParty(null);
@@ -61,7 +70,6 @@ export default function Home() {
   const { data: dailyData, isLoading: isDailyLoading, error: dailyError } = useQuery<DailySummary>({
     queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
-      // Validate date before making the request
       if (!isValid(date)) {
         throw new Error('Invalid date selected');
       }
@@ -168,7 +176,6 @@ export default function Home() {
     enabled: !!date && isValid(date)
   });
 
-  // Fetch hourly data with improved error handling
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
@@ -189,7 +196,6 @@ export default function Home() {
     enabled: !!formattedDate && isValid(date)
   });
 
-  // Function to check if a given hour is in the future
   const isHourInFuture = (hourStr: string) => {
     const [hour] = hourStr.split(':').map(Number);
     const now = new Date();
@@ -226,7 +232,6 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {/* Energy Section */}
                 <div>
                   {isYearlyLoading ? (
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
@@ -248,7 +253,6 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Bitcoin Mining Potential */}
                 <div>
                   <div className="text-sm font-medium">Bitcoin could be mined</div>
                   {isYearlyLoading ? (
@@ -279,7 +283,6 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {/* Payment Section */}
                 <div>
                   <div className="text-sm font-medium">Paid for Curtailment</div>
                   {isYearlyLoading ? (
@@ -302,7 +305,6 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Bitcoin Value Section */}
                 <div>
                   <div className="text-sm font-medium">Value if Bitcoin was mined</div>
                   {isYearlyLoading ? (
@@ -335,7 +337,6 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {/* Energy Section */}
                 <div>
                   {isMonthlyLoading ? (
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
@@ -357,7 +358,6 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Bitcoin Mining Potential */}
                 <div>
                   <div className="text-sm font-medium">Bitcoin could be mined</div>
                   {isMonthlyLoading ? (
@@ -388,7 +388,6 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {/* Payment Section */}
                 <div>
                   <div className="text-sm font-medium">Paid for Curtailment</div>
                   {isMonthlyLoading ? (
@@ -411,7 +410,6 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Bitcoin Value Section */}
                 <div>
                   <div className="text-sm font-medium">Value if Bitcoin was mined</div>
                   {isMonthlyLoading ? (
@@ -442,7 +440,6 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col lg:flex-row gap-8">
-              {/* Daily Stats Section */}
               <div className="lg:w-1/4">
                 <h3 className="text-lg font-semibold mb-4">Daily Stats</h3>
                 <div className="space-y-6">
@@ -523,7 +520,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Chart Section */}
               <div className="lg:w-3/4 h-[400px]">
                 {isHourlyLoading ? (
                   <div className="h-full flex items-center justify-center">
@@ -531,9 +527,9 @@ export default function Home() {
                   </div>
                 ) : hourlyData ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
+                    <ComposedChart
                       data={hourlyData}
-                      margin={{ top: 20, right: 30, left: 60, bottom: 20 }}
+                      margin={{ top: 20, right: 60, left: 60, bottom: 20 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
@@ -542,6 +538,8 @@ export default function Home() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
+                        yAxisId="curtailedEnergy"
+                        orientation="left"
                         label={{
                           value: 'Curtailed Energy (MWh)',
                           angle: -90,
@@ -551,20 +549,33 @@ export default function Home() {
                         }}
                         tick={{ fontSize: 12 }}
                       />
+                      <YAxis
+                        yAxisId="bitcoinMined"
+                        orientation="right"
+                        label={{
+                          value: 'Bitcoin Mined (₿)',
+                          angle: 90,
+                          position: 'insideRight',
+                          offset: -40,
+                          style: { fontSize: 12 }
+                        }}
+                        tick={{ fontSize: 12 }}
+                        domain={[0, 'auto']}
+                      />
                       <ChartTooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
-                          const data = payload[0];
-                          const hour = data.payload.hour;
-                          const value = Number(data.value);
+                          const hour = payload[0].payload.hour;
+                          const curtailedEnergy = Number(payload[0].value);
+                          const bitcoinMined = payload[1]?.value;
 
-                          let message = "";
+                          let energyMessage = "";
                           if (isHourInFuture(hour)) {
-                            message = "Data not available yet";
-                          } else if (value === 0) {
-                            message = "No curtailment detected";
+                            energyMessage = "Data not available yet";
+                          } else if (curtailedEnergy === 0) {
+                            energyMessage = "No curtailment detected";
                           } else {
-                            message = `${value.toFixed(2)} MWh`;
+                            energyMessage = `${curtailedEnergy.toFixed(2)} MWh`;
                           }
 
                           return (
@@ -575,8 +586,13 @@ export default function Home() {
                                   <span className="font-medium">{hour}</span>
                                 </div>
                                 <div className="text-sm text-muted-foreground">
-                                  {message}
+                                  Curtailed Energy: {energyMessage}
                                 </div>
+                                {bitcoinMined && (
+                                  <div className="text-sm text-[#F7931A]">
+                                    Bitcoin Potential: ₿{Number(bitcoinMined).toFixed(8)}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -584,9 +600,17 @@ export default function Home() {
                       />
                       <Bar
                         dataKey="curtailedEnergy"
+                        yAxisId="curtailedEnergy"
                         fill="hsl(var(--primary))"
                       />
-                    </BarChart>
+                      <Line
+                        type="monotone"
+                        dataKey="bitcoinMined"
+                        yAxisId="bitcoinMined"
+                        stroke="#F7931A"
+                        dot={false}
+                      />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
