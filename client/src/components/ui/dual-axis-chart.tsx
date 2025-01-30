@@ -47,7 +47,8 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
             value: chartConfig.leftAxis.label, 
             angle: -90, 
             position: 'insideLeft',
-            offset: -45,
+            dy: 60,
+            dx: -20,
             className: "text-sm font-medium fill-current"
           }}
           tick={{ fill: 'currentColor' }}
@@ -59,7 +60,8 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
             value: chartConfig.rightAxis.label, 
             angle: 90, 
             position: 'insideRight',
-            offset: -35,
+            dy: 60,
+            dx: 20,
             className: "text-sm font-medium",
             fill: chartConfig.rightAxis.color
           }}
@@ -86,12 +88,10 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
           dataKey={chartConfig.rightAxis.dataKey}
           fill={chartConfig.rightAxis.color}
           name={chartConfig.rightAxis.label}
-          shape={(props) => {
+          shape={(props: any) => {
             const { cx, cy, fill } = props;
             const value = props.payload[chartConfig.rightAxis.dataKey];
-            // Don't render if value is 0
             if (value === 0) return null;
-            // Render a larger circle for non-zero values
             return (
               <circle 
                 cx={cx} 
