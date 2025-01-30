@@ -551,7 +551,7 @@ export default function Home() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
-                        yAxisId="curtailedEnergy"
+                        yAxisId="left"
                         orientation="left"
                         label={{
                           value: 'Curtailed Energy (MWh)',
@@ -563,7 +563,7 @@ export default function Home() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
-                        yAxisId="bitcoinMined"
+                        yAxisId="right"
                         orientation="right"
                         label={{
                           value: 'Bitcoin Mined (₿)',
@@ -613,14 +613,15 @@ export default function Home() {
                       />
                       <Bar
                         dataKey="curtailedEnergy"
-                        yAxisId="curtailedEnergy"
+                        yAxisId="left"
                         fill="hsl(var(--primary))"
                       />
                       <Line
                         type="monotone"
                         dataKey="bitcoinMined"
-                        yAxisId="bitcoinMined"
+                        yAxisId="right"
                         stroke="#F7931A"
+                        strokeWidth={2}
                         dot={false}
                       />
                     </ComposedChart>
