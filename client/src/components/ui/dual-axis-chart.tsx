@@ -7,7 +7,8 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
+  Scatter
 } from "recharts";
 
 interface ChartConfig {
@@ -76,13 +77,12 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
           name={chartConfig.leftAxis.label}
           radius={[4, 4, 0, 0]}
         />
-        <Line
+        <Scatter
           yAxisId="right"
-          type="monotone"
           dataKey={chartConfig.rightAxis.dataKey}
-          stroke={chartConfig.rightAxis.color}
+          fill={chartConfig.rightAxis.color}
           name={chartConfig.rightAxis.label}
-          dot={false}
+          line={{ stroke: chartConfig.rightAxis.color }}
         />
       </ComposedChart>
     </ResponsiveContainer>
