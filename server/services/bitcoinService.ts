@@ -4,9 +4,10 @@ import { db } from "@db";
 import { curtailmentRecords } from "@db/schema";
 import { and, eq } from "drizzle-orm";
 
-const BLOCK_REWARD = 3.125; // Block reward per 10-minute block (after halvening in April 2024)
-const SETTLEMENT_PERIOD_MINUTES = 30; // Length of each settlement period
-const BLOCKS_PER_SETTLEMENT_PERIOD = 3; // Bitcoin produces ~3 blocks in 30 minutes
+// Bitcoin network constants
+const BLOCK_REWARD = 3.125; // Block reward per block after April 2024 halvening
+const SETTLEMENT_PERIOD_MINUTES = 30; // Each settlement period is 30 minutes
+const BLOCKS_PER_SETTLEMENT_PERIOD = 3; // 3 blocks per 30 minutes (1 block every 10 minutes)
 
 interface BitcoinCalculation {
   bitcoinMined: number;
@@ -20,6 +21,14 @@ interface PeriodCalculation extends BitcoinCalculation {
   curtailedMwh: number;
 }
 
+/**
+ * Calculate Bitcoin mining potential for a settlement period
+ * @param curtailedMwh - Curtailed energy in MWh for the settlement period
+ * @param minerModel - The mining hardware model to use
+ * @param difficulty - Current Bitcoin network difficulty
+ * @param currentPrice - Current Bitcoin price in USD
+ * @returns Calculated Bitcoin mining potential and value
+ */
 function calculateBitcoinForPeriod(
   curtailedMwh: number,
   minerModel: string,
@@ -42,13 +51,13 @@ function calculateBitcoinForPeriod(
   const curtailedKwh = Number((curtailedMwh * 1000).toFixed(10));
   console.log('Curtailed kWh for settlement period:', curtailedKwh);
 
-  // Calculate miner consumption for one 10-minute block
-  const minerConsumptionKwhPer10Min = Number((miner.power / 1000) * (10 / 60)).toFixed(10);
-  console.log('Miner consumption kWh per 10-min block:', minerConsumptionKwhPer10Min);
-
   // Calculate energy available per 10-minute block
   const energyPer10MinBlock = Number((curtailedKwh / BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(10));
   console.log('Energy available per 10-min block:', energyPer10MinBlock);
+
+  // Calculate miner consumption for one 10-minute block
+  const minerConsumptionKwhPer10Min = Number((miner.power / 1000) * (10 / 60)).toFixed(10);
+  console.log('Miner consumption kWh per 10-min block:', minerConsumptionKwhPer10Min);
 
   // Calculate how many miners we can run with the available energy per block
   const minersPerBlock = Math.floor(energyPer10MinBlock / minerConsumptionKwhPer10Min);
