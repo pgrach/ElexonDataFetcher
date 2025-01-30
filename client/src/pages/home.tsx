@@ -182,7 +182,7 @@ export default function Home() {
     enabled: !!date && isValid(date)
   });
 
-  const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyBitcoinData[]>({
+  const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
     queryFn: async () => {
       if (!isValid(date)) {
@@ -194,11 +194,7 @@ export default function Home() {
         url.searchParams.set('leadParty', selectedLeadParty);
       }
 
-      console.log('Fetching hourly data with params:', {
-        date: formattedDate,
-        leadParty: selectedLeadParty,
-        minerModel: selectedMinerModel
-      });
+      console.log('Fetching hourly data from:', url.toString());
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -206,31 +202,9 @@ export default function Home() {
       }
 
       const hourlyData = await response.json();
-      console.log('Hourly energy data:', hourlyData);
+      console.log('Received hourly data:', hourlyData);
 
-      // Fetch Bitcoin mining potential for each hour
-      const bitcoinUrl = new URL(`/api/curtailment/hourly-mining-potential/${formattedDate}`, window.location.origin);
-      bitcoinUrl.searchParams.set('minerModel', selectedMinerModel);
-      bitcoinUrl.searchParams.set('hourlyData', JSON.stringify(hourlyData));
-
-      console.log('Fetching Bitcoin data from:', bitcoinUrl.toString());
-
-      const bitcoinResponse = await fetch(bitcoinUrl);
-      if (!bitcoinResponse.ok) {
-        throw new Error('Failed to fetch Bitcoin mining potential');
-      }
-
-      const bitcoinData = await bitcoinResponse.json();
-
-      // Combine the data
-      const combinedData = hourlyData.map((hour: HourlyData, index: number) => ({
-        ...hour,
-        bitcoinMined: bitcoinData[index]?.bitcoinMined || 0
-      }));
-
-      console.log('Combined hourly data with Bitcoin:', combinedData);
-
-      return combinedData;
+      return hourlyData;
     },
     enabled: !!formattedDate && isValid(date)
   });
