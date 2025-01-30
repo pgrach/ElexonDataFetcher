@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties, getYearlySummary } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
+import curtailmentRoutes from "./routes/curtailmentRoutes";
 
 export function registerRoutes(app: Express): Server {
   // Get lead parties endpoint
@@ -21,6 +22,9 @@ export function registerRoutes(app: Express): Server {
 
   // Hourly curtailment data endpoint
   app.get("/api/curtailment/hourly/:date", getHourlyCurtailment);
+
+  // Register Bitcoin mining calculation routes
+  app.use('/api/curtailment', curtailmentRoutes);
 
   // Re-ingest data endpoint
   app.post("/api/ingest/:date", async (req, res) => {
