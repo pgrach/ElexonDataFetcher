@@ -32,7 +32,7 @@ interface YearlySummary {
 interface HourlyData {
   hour: string;
   curtailedEnergy: number;
-  bitcoinMined: number; 
+  bitcoinMined: number;
 }
 
 export default function Home() {
@@ -177,6 +177,12 @@ export default function Home() {
         throw new Error('Invalid date selected');
       }
 
+      console.log('Fetching hourly data with params:', {
+        date: formattedDate,
+        leadParty: selectedLeadParty,
+        minerModel: selectedMinerModel
+      });
+
       const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
       if (selectedLeadParty) {
         url.searchParams.set('leadParty', selectedLeadParty);
@@ -186,17 +192,21 @@ export default function Home() {
         throw new Error('Failed to fetch hourly data');
       }
       const hourlyEnergy = await response.json();
+      console.log('Hourly energy data:', hourlyEnergy);
 
       // Fetch Bitcoin mining potential for each hour
       const btcUrl = new URL(`/api/curtailment/hourly-mining-potential/${formattedDate}`, window.location.origin);
       btcUrl.searchParams.set('minerModel', selectedMinerModel);
       btcUrl.searchParams.set('hourlyData', JSON.stringify(hourlyEnergy));
 
+      console.log('Fetching Bitcoin data from:', btcUrl.toString());
       const btcResponse = await fetch(btcUrl);
       if (!btcResponse.ok) {
         throw new Error('Failed to fetch hourly bitcoin data');
       }
-      return btcResponse.json();
+      const result = await btcResponse.json();
+      console.log('Combined hourly data with Bitcoin:', result);
+      return result;
     },
     enabled: !!formattedDate && isValid(date)
   });
@@ -579,10 +589,10 @@ export default function Home() {
                       <ChartTooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
-                          const data = payload[0];
-                          const hour = data.payload.hour;
-                          const energyValue = Number(data.value);
-                          const bitcoinValue = data.payload.bitcoinMined;
+                          const data = payload[0].payload;
+                          const hour = data.hour;
+                          const energyValue = data.curtailedEnergy;
+                          const bitcoinValue = data.bitcoinMined;
 
                           let message = "";
                           if (isHourInFuture(hour)) {
@@ -617,7 +627,7 @@ export default function Home() {
                         yAxisId="bitcoin"
                         dataKey="bitcoinMined"
                         fill="#F7931A"
-                        shape={(props) => {
+                        shape={(props: any) => {
                           const { cx, cy } = props;
                           return (
                             <circle
