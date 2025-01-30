@@ -42,19 +42,23 @@ function calculateBitcoinForPeriod(
   const curtailedKwh = Number((curtailedMwh * 1000).toFixed(10));
   console.log('Curtailed kWh for settlement period:', curtailedKwh);
 
-  // Calculate miner consumption in kWh for the settlement period
-  const minerConsumptionKwh = Number((miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60)).toFixed(10);
-  console.log('Miner consumption kWh per settlement period:', minerConsumptionKwh);
+  // Calculate miner consumption for one 10-minute block
+  const minerConsumptionKwhPer10Min = Number((miner.power / 1000) * (10 / 60)).toFixed(10);
+  console.log('Miner consumption kWh per 10-min block:', minerConsumptionKwhPer10Min);
 
-  // Calculate how many miners we can run with the available energy
-  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
-  console.log('Potential miners for settlement period:', potentialMiners);
+  // Calculate energy available per 10-minute block
+  const energyPer10MinBlock = Number((curtailedKwh / BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(10));
+  console.log('Energy available per 10-min block:', energyPer10MinBlock);
+
+  // Calculate how many miners we can run with the available energy per block
+  const minersPerBlock = Math.floor(energyPer10MinBlock / minerConsumptionKwhPer10Min);
+  console.log('Potential miners per block:', minersPerBlock);
 
   // Calculate hashes needed for one block
   const hashesPerBlock = Number((difficulty * Math.pow(2, 32)).toFixed(10));
   console.log('Hashes needed per block:', hashesPerBlock);
 
-  // Network hashrate in H/s (600 seconds = 10 minutes)
+  // Network hashrate in H/s (600 seconds = 10 minutes per block)
   const networkHashRate = Number((hashesPerBlock / 600).toFixed(10));
   console.log('Network hashrate (H/s):', networkHashRate);
 
@@ -62,24 +66,28 @@ function calculateBitcoinForPeriod(
   const networkHashRateTH = Number((networkHashRate / 1e12).toFixed(10));
   console.log('Network hashrate (TH/s):', networkHashRateTH);
 
-  // Calculate our total hashpower
-  const totalHashPower = Number((potentialMiners * miner.hashrate).toFixed(10));
-  console.log('Our total hash power (TH/s):', totalHashPower);
+  // Calculate our total hashpower for one block
+  const totalHashPower = Number((minersPerBlock * miner.hashrate).toFixed(10));
+  console.log('Our hash power per block (TH/s):', totalHashPower);
 
-  // Calculate our share of network
+  // Calculate our share of network for one block
   const ourNetworkShare = Number((totalHashPower / networkHashRateTH).toFixed(10));
-  console.log('Our network share:', ourNetworkShare);
+  console.log('Our network share per block:', ourNetworkShare);
 
-  // Calculate Bitcoin mined for the settlement period
-  const btcPerSettlementPeriod = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
-  console.log('Bitcoin mined in settlement period:', btcPerSettlementPeriod);
+  // Calculate Bitcoin mined per block (no averaging)
+  const btcPerBlock = Number((ourNetworkShare * BLOCK_REWARD).toFixed(8));
+  console.log('Bitcoin mined per block:', btcPerBlock);
+
+  // Sum up Bitcoin for all three blocks in the settlement period
+  const totalBitcoin = Number((btcPerBlock * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
+  console.log('Total Bitcoin mined in settlement period:', totalBitcoin);
 
   // Calculate value at current price
-  const valueAtCurrentPrice = Number((btcPerSettlementPeriod * currentPrice).toFixed(2));
+  const valueAtCurrentPrice = Number((totalBitcoin * currentPrice).toFixed(2));
   console.log('Value at current price:', valueAtCurrentPrice);
 
   return {
-    bitcoinMined: btcPerSettlementPeriod,
+    bitcoinMined: totalBitcoin,
     valueAtCurrentPrice,
     difficulty,
     price: currentPrice
