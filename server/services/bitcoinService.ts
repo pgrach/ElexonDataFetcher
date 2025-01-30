@@ -18,13 +18,6 @@ interface PeriodCalculation extends BitcoinCalculation {
   curtailedMwh: number;
 }
 
-const minerModels: { [key: string]: { hashrate: number; power: number } } = {
-  S19J_PRO: { hashrate: 104, power: 3068 },
-  S19_XP: { hashrate: 141, power: 3010 },
-  S19K_PRO: { hashrate: 112, power: 3472 },
-  M50S: { hashrate: 130, power: 3300 },
-};
-
 function calculateBitcoinForPeriod(
   curtailedMwh: number,
   minerModel: string,
@@ -45,41 +38,47 @@ function calculateBitcoinForPeriod(
 
   // Convert MWh to kWh for the 30-minute period
   const curtailedKwh = Number((curtailedMwh * 1000).toFixed(10));
-  console.log('Curtailed kWh:', curtailedKwh);
+  console.log('Curtailed kWh for 30-min period:', curtailedKwh);
 
-  // Calculate miner consumption in kWh for 10-minute block
-  const minerConsumptionKwhPer10Min = Number((miner.power / 1000 / 6).toFixed(10)); // Divide by 6 for 10-min block
-  console.log('Miner consumption kWh per 10-min block:', minerConsumptionKwhPer10Min);
+  // Calculate energy available per 10-minute block
+  const energyPer10MinBlock = Number((curtailedKwh / 3).toFixed(10));
+  console.log('Energy available per 10-min block:', energyPer10MinBlock);
 
-  // Calculate potential miners based on 10-minute power consumption
-  const potentialMiners = Math.floor((curtailedKwh / 3) / minerConsumptionKwhPer10Min); // Divide curtailedKwh by 3 for each 10-min block
-  console.log('Potential miners per 10-min block:', potentialMiners);
+  // Calculate miner consumption in kWh for one 10-minute block
+  const minerKwhPer10Min = Number((miner.power / 1000 / 6).toFixed(10)); // kW * (1/6) hour
+  console.log('Single miner consumption per 10-min block:', minerKwhPer10Min);
 
-  // Calculate hashes needed per block
+  // Calculate how many miners we can run with energy from one 10-minute block
+  const minersPerBlock = Math.floor(energyPer10MinBlock / minerKwhPer10Min);
+  console.log('Miners we can run per 10-min block:', minersPerBlock);
+
+  // Calculate hashes needed for one block
   const hashesPerBlock = Number((difficulty * Math.pow(2, 32)).toFixed(10));
-  console.log('Hashes per block:', hashesPerBlock);
+  console.log('Hashes needed per block:', hashesPerBlock);
 
-  // Network hashrate in H/s (600 seconds per block)
+  // Network hashrate in H/s for one block (600 seconds = 10 minutes)
   const networkHashRate = Number((hashesPerBlock / 600).toFixed(10));
   console.log('Network hashrate (H/s):', networkHashRate);
 
-  // Convert to TH/s
+  // Convert to TH/s for consistency with miner hashrates
   const networkHashRateTH = Number((networkHashRate / 1e12).toFixed(10));
   console.log('Network hashrate (TH/s):', networkHashRateTH);
 
-  // Calculate our total hashpower
-  const totalHashPower = Number((potentialMiners * miner.hashrate).toFixed(10));
-  console.log('Total hash power (TH/s):', totalHashPower);
+  // Calculate our total hashpower for one block
+  const totalHashPower = Number((minersPerBlock * miner.hashrate).toFixed(10));
+  console.log('Our total hash power (TH/s):', totalHashPower);
 
-  // Calculate our network share
-  const ourNetworkShare = Number((totalHashPower / networkHashRateTH).toFixed(10));
-  console.log('Network share:', ourNetworkShare);
+  // Calculate our share of network for one block
+  const networkShare = Number((totalHashPower / networkHashRateTH).toFixed(10));
+  console.log('Our network share:', networkShare);
 
-  // Calculate expected BTC mined for three consecutive 10-minute blocks
-  const bitcoinPerBlock = Number((ourNetworkShare * BLOCK_REWARD).toFixed(8));
-  const bitcoinMined = Number((bitcoinPerBlock * 3).toFixed(8)); // 3 blocks in 30 minutes
-  console.log('Bitcoin mined per block:', bitcoinPerBlock);
-  console.log('Total Bitcoin mined in period (3 blocks):', bitcoinMined);
+  // Calculate Bitcoin mined for each 10-minute block
+  const bitcoinPerBlock = Number((networkShare * BLOCK_REWARD).toFixed(8));
+  console.log('Bitcoin mined in one 10-min block:', bitcoinPerBlock);
+
+  // Total Bitcoin mined in 30-minute period (3 blocks)
+  const bitcoinMined = Number((bitcoinPerBlock * 3).toFixed(8));
+  console.log('Total Bitcoin mined in 30-min period (3 blocks):', bitcoinMined);
 
   // Calculate value at current price
   const valueAtCurrentPrice = Number((bitcoinMined * currentPrice).toFixed(2));
