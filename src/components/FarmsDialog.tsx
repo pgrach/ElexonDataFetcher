@@ -141,15 +141,6 @@ function FarmTableRow({
   );
 }
 
-// Export the button component that wraps the dialog
-export function ViewFarmsButton({ date }: { date: string }) {
-  return (
-    <div className="flex justify-center sm:justify-start">
-      <FarmsDialog date={date} />
-    </div>
-  );
-}
-
 // Main Dialog Component
 function FarmsDialog({ date }: { date: string }) {
   const [open, setOpen] = useState(false);
@@ -255,5 +246,20 @@ function FarmsDialog({ date }: { date: string }) {
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Export the button component that wraps the dialog
+export function ViewFarmsButton({ date }: { date: string }) {
+  return (
+    <Button
+      variant="outline"
+      className="w-full sm:w-auto gap-2 bg-sky-500 hover:bg-sky-600 text-white whitespace-nowrap"
+    >
+      <Wind className="h-4 w-4" />
+      <span className="hidden sm:inline">View All Curtailed Farms</span>
+      <span className="sm:hidden">All Farms</span>
+      <FarmsDialog date={date} />
+    </Button>
   );
 }
