@@ -141,8 +141,17 @@ function FarmTableRow({
   );
 }
 
+// Export the button component that wraps the dialog
+export function ViewFarmsButton({ date }: { date: string }) {
+  return (
+    <div className="flex justify-center sm:justify-start">
+      <FarmsDialog date={date} />
+    </div>
+  );
+}
+
 // Main Dialog Component
-export function FarmsDialog({ date }: { date: string }) {
+function FarmsDialog({ date }: { date: string }) {
   const [open, setOpen] = useState(false);
   const [expandedFarms, setExpandedFarms] = useState<Set<string>>(new Set());
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
