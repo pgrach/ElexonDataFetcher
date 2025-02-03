@@ -107,6 +107,7 @@ export default function Home() {
       `/api/curtailment/mining-potential`,
       selectedMinerModel,
       dailyData?.totalCurtailedEnergy,
+      selectedLeadParty, // Add leadParty to cache key
     ],
     queryFn: async () => {
       console.log("Bitcoin calculation parameters:", {
@@ -114,6 +115,7 @@ export default function Home() {
         isToday: isToday(date),
         minerModel: selectedMinerModel,
         curtailedEnergy: dailyData?.totalCurtailedEnergy,
+        leadParty: selectedLeadParty,
       });
 
       if (
@@ -141,6 +143,9 @@ export default function Home() {
       url.searchParams.set("date", formattedDate);
       url.searchParams.set("minerModel", selectedMinerModel);
       url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
+      if (selectedLeadParty) {
+        url.searchParams.set("leadParty", selectedLeadParty);
+      }
 
       console.log("Fetching from URL:", url.toString());
 
@@ -336,7 +341,8 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿0.00
+                      ₿{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
+                         (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -408,8 +414,9 @@ export default function Home() {
                       Failed to load yearly data
                     </div>
                   ) : yearlyData ? (
-                    <div className="text-2xl font-bold text-[#F7931A]">
-                      £0.00
+                     <div className="text-2xl font-bold text-[#F7931A]">
+                      £{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
+                         (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -485,8 +492,9 @@ export default function Home() {
                       Failed to load monthly data
                     </div>
                   ) : monthlyData ? (
-                    <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿0.00
+                     <div className="text-2xl font-bold text-[#F7931A]">
+                      ₿{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
+                         (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -559,7 +567,8 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £0.00
+                      £{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
+                         (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
