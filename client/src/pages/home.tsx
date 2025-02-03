@@ -88,6 +88,12 @@ export default function Home() {
 
       const response = await fetch(url);
       if (!response.ok) {
+        if (response.status === 404) {
+          return {
+            totalCurtailedEnergy: 0,
+            totalPayment: 0
+          };
+        }
         throw new Error(`API Error: ${response.status}`);
       }
 
@@ -177,7 +183,13 @@ export default function Home() {
       }
 
       const response = await fetch(url);
-      if (!response.ok) {
+       if (!response.ok) {
+         if (response.status === 404) {
+           return {
+             totalCurtailedEnergy: 0,
+             totalPayment: 0
+           };
+         }
         throw new Error(`API Error: ${response.status}`);
       }
 
