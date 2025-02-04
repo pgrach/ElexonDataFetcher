@@ -4,7 +4,7 @@ import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
 import { and, eq, between } from "drizzle-orm";
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
-import { getHistoricalData, getHistoricalDifficulty, getHistoricalPrice } from './dynamodbService';
+import { getHistoricalData } from './dynamodbService';
 import pLimit from 'p-limit';
 
 // Bitcoin network constants
@@ -13,20 +13,18 @@ const SETTLEMENT_PERIOD_MINUTES = 30; // Each settlement period is 30 minutes
 const BLOCKS_PER_SETTLEMENT_PERIOD = 3; // 3 blocks per 30 minutes (1 block every 10 minutes)
 const MAX_CONCURRENT_DAYS = 5; // Maximum number of days to process concurrently
 
-/**
- * Calculate potential BTC mined from curtailed energy using dynamic network difficulty
- */
 function calculateBitcoinForBMU(
   curtailedMwh: number,
   minerModel: string,
   difficulty: number,
   currentPrice: number
 ): BitcoinCalculation {
-  console.log('Calculating for BMU:', {
+  console.log('[Bitcoin Calculation] Starting calculation with parameters:', {
     curtailedMwh,
     minerModel,
     difficulty,
-    currentPrice
+    currentPrice,
+    difficultySource: difficulty === 108105433845147 ? 'DEFAULT_DIFFICULTY' : 'DynamoDB'
   });
 
   const miner = minerModels[minerModel];
@@ -36,42 +34,40 @@ function calculateBitcoinForBMU(
 
   // Convert MWh to kWh
   const curtailedKwh = curtailedMwh * 1000;
-  console.log('Curtailed kWh:', curtailedKwh);
 
   // Each miner consumes power in kWh per settlement period
   const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
-  console.log('Miner consumption kWh per settlement period:', minerConsumptionKwh);
 
   // How many miners can be powered for the settlement period
   const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
-  console.log('Potential miners for period:', potentialMiners);
 
   // Calculate expected hashes to find a block from difficulty
   const hashesPerBlock = difficulty * Math.pow(2, 32);
-  console.log('Hashes per block:', hashesPerBlock);
 
   // Calculate network hashrate (hashes per second)
   const networkHashRate = hashesPerBlock / 600; // 600 seconds = 10 minutes
-  console.log('Network hashrate (H/s):', networkHashRate);
 
   // Convert to TH/s for consistency with miner hashrates
   const networkHashRateTH = networkHashRate / 1e12;
-  console.log('Network hashrate (TH/s):', networkHashRateTH);
 
   // Total hash power from our miners in TH/s
   const totalHashPower = potentialMiners * miner.hashrate;
-  console.log('Our total hash power (TH/s):', totalHashPower);
 
   // Calculate probability of finding blocks
   const ourNetworkShare = totalHashPower / networkHashRateTH;
-  console.log('Our network share:', ourNetworkShare);
 
   // Estimate BTC mined per settlement period
   const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
-  console.log('Bitcoin mined in settlement period:', bitcoinMined);
-
   const valueAtCurrentPrice = Number((bitcoinMined * currentPrice).toFixed(2));
-  console.log('Value at current price:', valueAtCurrentPrice);
+
+  console.log('[Bitcoin Calculation] Calculation results:', {
+    networkHashRateTH,
+    potentialMiners,
+    totalHashPower,
+    ourNetworkShare,
+    bitcoinMined,
+    valueAtCurrentPrice
+  });
 
   return {
     bitcoinMined,
