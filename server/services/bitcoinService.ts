@@ -1,8 +1,9 @@
 import { BitcoinCalculation, MinerStats, minerModels } from '../types/bitcoin';
 import axios from 'axios';
 import { db } from "@db";
-import { curtailmentRecords } from "@db/schema";
-import { and, eq } from "drizzle-orm";
+import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
+import { and, eq, between } from "drizzle-orm";
+import { format, parseISO, eachDayOfInterval } from 'date-fns';
 
 // Bitcoin network constants
 const BLOCK_REWARD = 3.125; // Current block reward
@@ -160,15 +161,15 @@ export async function calculateBitcoinMining(
       bmuCalculations.push(bmuResult);
 
       // Only add to totals if it matches our filter criteria
-      if ((!farmId || record.farmId === farmId) && 
-          (!leadParty || record.leadPartyName === leadParty)) {
+      if ((!farmId || record.farmId === farmId) &&
+        (!leadParty || record.leadPartyName === leadParty)) {
         totalBitcoin += calculation.bitcoinMined;
         totalValue += calculation.valueAtCurrentPrice;
       }
     }
 
     // Calculate period totals only for matching records
-    const matchingBMUs = bmuCalculations.filter(calc => 
+    const matchingBMUs = bmuCalculations.filter(calc =>
       (!farmId || calc.farmId === farmId)
     );
 
@@ -203,5 +204,97 @@ export async function fetchFromMinerstat(): Promise<{ difficulty: number; price:
   } catch (error) {
     console.error('Error fetching from minerstat:', error);
     throw new Error('Failed to fetch data from minerstat');
+  }
+}
+
+/**
+ * Process historical Bitcoin mining calculations for a date range
+ * @param startDate Start date in YYYY-MM-DD format
+ * @param endDate End date in YYYY-MM-DD format
+ * @param minerModel Miner model to use for calculations
+ */
+export async function processHistoricalCalculations(
+  startDate: string,
+  endDate: string,
+  minerModel: string = 'S19J_PRO'
+): Promise<void> {
+  console.log('Processing historical calculations:', { startDate, endDate, minerModel });
+
+  const dateRange = eachDayOfInterval({
+    start: parseISO(startDate),
+    end: parseISO(endDate)
+  });
+
+  for (const date of dateRange) {
+    const formattedDate = format(date, 'yyyy-MM-dd');
+    console.log(`Processing date: ${formattedDate}`);
+
+    try {
+      // Get minerstat data for the day
+      const { difficulty, price } = await fetchFromMinerstat();
+
+      // Get all curtailment records for the day
+      const records = await db
+        .select({
+          settlementPeriod: curtailmentRecords.settlementPeriod,
+          farmId: curtailmentRecords.farmId,
+          volume: curtailmentRecords.volume
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.settlementDate, formattedDate));
+
+      // Group records by period and farm
+      const periodGroups = records.reduce((groups, record) => {
+        const key = `${record.settlementPeriod}-${record.farmId}`;
+        if (!groups[key]) {
+          groups[key] = {
+            settlementPeriod: record.settlementPeriod,
+            farmId: record.farmId,
+            totalVolume: 0
+          };
+        }
+        groups[key].totalVolume += Math.abs(Number(record.volume));
+        return groups;
+      }, {} as Record<string, { settlementPeriod: number; farmId: string; totalVolume: number; }>);
+
+      // Calculate and store results for each group
+      for (const group of Object.values(periodGroups)) {
+        const calculation = calculateBitcoinForBMU(
+          group.totalVolume,
+          minerModel,
+          difficulty,
+          price
+        );
+
+        // Store the calculation in the historical table
+        await db.insert(historicalBitcoinCalculations).values({
+          settlementDate: formattedDate,
+          settlementPeriod: group.settlementPeriod,
+          farmId: group.farmId,
+          minerModel,
+          bitcoinMined: calculation.bitcoinMined,
+          valueAtCurrentPrice: calculation.valueAtCurrentPrice,
+          difficulty: calculation.difficulty
+        }).onConflictDoUpdate({
+          target: [
+            historicalBitcoinCalculations.settlementDate,
+            historicalBitcoinCalculations.settlementPeriod,
+            historicalBitcoinCalculations.farmId,
+            historicalBitcoinCalculations.minerModel
+          ],
+          set: {
+            bitcoinMined: calculation.bitcoinMined,
+            valueAtCurrentPrice: calculation.valueAtCurrentPrice,
+            difficulty: calculation.difficulty,
+            calculatedAt: new Date()
+          }
+        });
+      }
+
+      console.log(`Completed processing for date: ${formattedDate}`);
+    } catch (error) {
+      console.error(`Error processing date ${formattedDate}:`, error);
+      // Continue with next date instead of throwing
+    }
   }
 }

@@ -16,6 +16,19 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Add new table for Bitcoin calculations
+export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calculations", {
+  id: serial("id").primaryKey(),
+  settlementDate: date("settlement_date").notNull(),
+  settlementPeriod: integer("settlement_period").notNull(),
+  farmId: text("farm_id").notNull(),
+  minerModel: text("miner_model").notNull(),
+  bitcoinMined: numeric("bitcoin_mined").notNull(),
+  valueAtCurrentPrice: numeric("value_at_current_price").notNull(),
+  difficulty: numeric("difficulty").notNull(),
+  calculatedAt: timestamp("calculated_at").defaultNow(),
+});
+
 export const dailySummaries = pgTable("daily_summaries", {
   summaryDate: date("summary_date").primaryKey(),
   totalCurtailedEnergy: numeric("total_curtailed_energy"),
@@ -48,7 +61,6 @@ export const ingestionProgress = pgTable("ingestion_progress", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
-// Export schemas for validation
 export const insertCurtailmentRecordSchema = createInsertSchema(curtailmentRecords);
 export const selectCurtailmentRecordSchema = createSelectSchema(curtailmentRecords);
 export const insertDailySummarySchema = createInsertSchema(dailySummaries);
@@ -60,7 +72,10 @@ export const selectYearlySummarySchema = createSelectSchema(yearlySummaries);
 export const insertIngestionProgressSchema = createInsertSchema(ingestionProgress);
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
 
-// Export types for TypeScript
+// Add new schemas for Bitcoin calculations
+export const insertHistoricalBitcoinCalculationSchema = createInsertSchema(historicalBitcoinCalculations);
+export const selectHistoricalBitcoinCalculationSchema = createSelectSchema(historicalBitcoinCalculations);
+
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
 export type DailySummary = typeof dailySummaries.$inferSelect;
@@ -71,3 +86,7 @@ export type YearlySummary = typeof yearlySummaries.$inferSelect;
 export type InsertYearlySummary = typeof yearlySummaries.$inferInsert;
 export type IngestionProgress = typeof ingestionProgress.$inferSelect;
 export type InsertIngestionProgress = typeof ingestionProgress.$inferInsert;
+
+// Add new types for Bitcoin calculations
+export type HistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferSelect;
+export type InsertHistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferInsert;

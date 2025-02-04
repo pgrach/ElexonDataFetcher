@@ -1,9 +1,42 @@
 import { Router } from 'express';
-import { format, parseISO, isToday } from 'date-fns';
-import { fetchFromMinerstat, calculateBitcoinMining } from '../services/bitcoinService';
+import { format, parseISO, isToday, isValid } from 'date-fns';
+import { fetchFromMinerstat, calculateBitcoinMining, processHistoricalCalculations } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 
 const router = Router();
+
+// Add historical calculations endpoint
+router.post('/historical-calculations', async (req, res) => {
+  try {
+    const { startDate, endDate, minerModel = 'S19J_PRO' } = req.body;
+
+    // Validate dates
+    if (!startDate || !endDate || !isValid(parseISO(startDate)) || !isValid(parseISO(endDate))) {
+      return res.status(400).json({
+        error: 'Invalid date format. Please provide dates in YYYY-MM-DD format.'
+      });
+    }
+
+    // Start processing in the background
+    processHistoricalCalculations(startDate, endDate, minerModel)
+      .then(() => console.log('Historical calculations completed'))
+      .catch(error => console.error('Error in historical calculations:', error));
+
+    res.json({
+      message: 'Historical calculations started',
+      startDate,
+      endDate,
+      minerModel
+    });
+
+  } catch (error) {
+    console.error('Error in historical-calculations endpoint:', error);
+    res.status(500).json({ 
+      error: 'Failed to start historical calculations',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
 
 // Add the bitcoin calculation endpoint
 router.get('/mining-potential', async (req, res) => {
