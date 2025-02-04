@@ -1,4 +1,4 @@
-import { pgTable, text, serial, date, integer, numeric, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, date, integer, numeric, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 export const curtailmentRecords = pgTable("curtailment_records", {
@@ -14,6 +14,15 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   soFlag: boolean("so_flag"),
   cadlFlag: boolean("cadl_flag"),
   createdAt: timestamp("created_at").defaultNow(),
+}, (table) => {
+  return {
+    // Add unique composite constraint for upsert operations
+    recordUnique: uniqueIndex("curtailment_record_unique_idx").on(
+      table.settlementDate,
+      table.settlementPeriod,
+      table.farmId
+    )
+  };
 });
 
 // Add new table for Bitcoin calculations
@@ -27,6 +36,16 @@ export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calcula
   valueAtCurrentPrice: numeric("value_at_current_price").notNull(),
   difficulty: numeric("difficulty").notNull(),
   calculatedAt: timestamp("calculated_at").defaultNow(),
+}, (table) => {
+  return {
+    // Add unique composite constraint for upsert operations
+    calculationUnique: uniqueIndex("historical_bitcoin_calc_unique_idx").on(
+      table.settlementDate,
+      table.settlementPeriod,
+      table.farmId,
+      table.minerModel
+    )
+  };
 });
 
 export const dailySummaries = pgTable("daily_summaries", {

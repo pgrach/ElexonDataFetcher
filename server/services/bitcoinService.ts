@@ -4,7 +4,7 @@ import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
 import { and, eq, between } from "drizzle-orm";
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
-import { getHistoricalData, getHistoricalDifficulty, getHistoricalPrice } from './dynamodbService';
+import { getHistoricalData } from './dynamodbService';
 import pLimit from 'p-limit';
 
 // Bitcoin network constants
@@ -96,8 +96,11 @@ async function processSingleDay(
   console.log(`Processing date: ${date}`);
 
   try {
-    // Get historical data from DynamoDB
-    const { difficulty, price } = await getHistoricalData(date);
+    // Get historical data from DynamoDB with error handling
+    const historicalData = await getHistoricalData(date);
+    if (!historicalData.difficulty || !historicalData.price) {
+      throw new Error(`Missing historical data for date: ${date}`);
+    }
 
     // Get all curtailment records for the day
     const records = await db
@@ -128,8 +131,8 @@ async function processSingleDay(
       const calculation = calculateBitcoinForBMU(
         group.totalVolume,
         minerModel,
-        difficulty,
-        price
+        historicalData.difficulty,
+        historicalData.price
       );
 
       try {
@@ -141,7 +144,7 @@ async function processSingleDay(
           minerModel,
           bitcoinMined: calculation.bitcoinMined.toString(),
           valueAtCurrentPrice: calculation.valueAtCurrentPrice.toString(),
-          difficulty: difficulty.toString()
+          difficulty: historicalData.difficulty.toString()
         }).onConflictDoUpdate({
           target: [
             historicalBitcoinCalculations.settlementDate,
@@ -152,7 +155,7 @@ async function processSingleDay(
           set: {
             bitcoinMined: calculation.bitcoinMined.toString(),
             valueAtCurrentPrice: calculation.valueAtCurrentPrice.toString(),
-            difficulty: difficulty.toString(),
+            difficulty: historicalData.difficulty.toString(),
             calculatedAt: new Date()
           }
         });
@@ -172,7 +175,7 @@ async function processSingleDay(
 /**
  * Process historical Bitcoin mining calculations for a date range with parallel processing
  */
-export async function processHistoricalCalculations(
+async function processHistoricalCalculations(
   startDate: string,
   endDate: string,
   minerModel: string = 'S19J_PRO'
@@ -325,3 +328,12 @@ export async function calculateBitcoinMining(
     periodCalculations
   };
 }
+
+export interface BMUCalculation {
+  farmId: string;
+  bitcoinMined: number;
+  valueAtCurrentPrice: number;
+  curtailedMwh: number;
+}
+
+export { processHistoricalCalculations };
