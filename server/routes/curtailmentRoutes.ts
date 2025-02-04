@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { format, parseISO, isToday, isValid } from 'date-fns';
 import { fetchFromMinerstat, calculateBitcoinMining, processHistoricalCalculations } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
+import { db } from "@db";
+import { historicalBitcoinCalculations } from "@db/schema";
+import { and, eq } from "drizzle-orm";
 
 const router = Router();
 
@@ -45,44 +48,72 @@ router.get('/mining-potential', async (req, res) => {
     const minerModel = req.query.minerModel as string || 'S19J_PRO';
     const leadParty = req.query.leadParty as string;
     const farmId = req.query.farmId as string;
+    const formattedDate = format(requestDate, 'yyyy-MM-dd');
 
     console.log('Mining potential request:', {
-      date: format(requestDate, 'yyyy-MM-dd'),
+      date: formattedDate,
       minerModel,
       leadParty,
       farmId,
       isToday: isToday(requestDate)
     });
 
-    // Only calculate for today's date
+    // For historical dates, fetch from historical_bitcoin_calculations
     if (!isToday(requestDate)) {
-      console.log('Not today, returning zero values');
-      return res.json({
-        bitcoinMined: 0,
-        valueAtCurrentPrice: 0,
-        difficulty: 0,
-        price: 0,
-        periodCalculations: []
-      });
+      const whereConditions = [
+        eq(historicalBitcoinCalculations.settlementDate, formattedDate),
+        eq(historicalBitcoinCalculations.minerModel, minerModel)
+      ];
+
+      if (farmId) {
+        whereConditions.push(eq(historicalBitcoinCalculations.farmId, farmId));
+      }
+
+      const historicalData = await db
+        .select()
+        .from(historicalBitcoinCalculations)
+        .where(and(...whereConditions));
+
+      if (historicalData && historicalData.length > 0) {
+        // Sum up all bitcoin mined and value for the day
+        const totalBitcoin = historicalData.reduce(
+          (sum, record) => sum + Number(record.bitcoinMined),
+          0
+        );
+        const totalValue = historicalData.reduce(
+          (sum, record) => sum + Number(record.valueAtCurrentPrice),
+          0
+        );
+
+        return res.json({
+          bitcoinMined: totalBitcoin,
+          valueAtCurrentPrice: totalValue,
+          difficulty: Number(historicalData[0].difficulty),
+          price: totalValue / totalBitcoin, // Derive price from value and bitcoin amount
+          periodCalculations: historicalData.map(record => ({
+            period: record.settlementPeriod,
+            bmuCalculations: [{
+              farmId: record.farmId,
+              bitcoinMined: Number(record.bitcoinMined),
+              valueAtCurrentPrice: Number(record.valueAtCurrentPrice)
+            }]
+          }))
+        });
+      }
     }
 
+    // For today's date or if no historical data found, use live calculation
     const { difficulty, price } = await fetchFromMinerstat();
     console.log('Minerstat data:', { difficulty, price });
 
     const result = await calculateBitcoinMining(
-      format(requestDate, 'yyyy-MM-dd'),
+      formattedDate,
       minerModel,
       difficulty,
       price,
       leadParty,
       farmId
     );
-
-    console.log('Calculation result:', {
-      totalBitcoin: result.totalBitcoin,
-      totalValue: result.totalValue,
-      periodCount: result.periodCalculations.length
-    });
 
     res.json({
       bitcoinMined: result.totalBitcoin,

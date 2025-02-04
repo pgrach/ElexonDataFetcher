@@ -107,25 +107,20 @@ export default function Home() {
       `/api/curtailment/mining-potential`,
       selectedMinerModel,
       dailyData?.totalCurtailedEnergy,
-      selectedLeadParty, // Add leadParty to cache key
+      selectedLeadParty,
+      formattedDate 
     ],
     queryFn: async () => {
       console.log("Bitcoin calculation parameters:", {
         date: formattedDate,
-        isToday: isToday(date),
         minerModel: selectedMinerModel,
         curtailedEnergy: dailyData?.totalCurtailedEnergy,
         leadParty: selectedLeadParty,
       });
 
-      if (
-        !isValid(date) ||
-        !isToday(date) ||
-        !dailyData?.totalCurtailedEnergy
-      ) {
+      if (!isValid(date) || !dailyData?.totalCurtailedEnergy) {
         console.log("Skipping Bitcoin calculation:", {
           isValidDate: isValid(date),
-          isToday: isToday(date),
           hasCurtailedEnergy: !!dailyData?.totalCurtailedEnergy,
         });
         return {
@@ -161,7 +156,6 @@ export default function Home() {
     enabled:
       !!formattedDate &&
       isValid(date) &&
-      isToday(date) &&
       !!dailyData?.totalCurtailedEnergy,
   });
 
@@ -188,13 +182,13 @@ export default function Home() {
       }
 
       const response = await fetch(url);
-       if (!response.ok) {
-         if (response.status === 404) {
-           return {
-             totalCurtailedEnergy: 0,
-             totalPayment: 0
-           };
-         }
+      if (!response.ok) {
+        if (response.status === 404) {
+          return {
+            totalCurtailedEnergy: 0,
+            totalPayment: 0
+          };
+        }
         throw new Error(`API Error: ${response.status}`);
       }
 
