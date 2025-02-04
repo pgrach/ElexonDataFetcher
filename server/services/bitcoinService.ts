@@ -88,12 +88,13 @@ async function processSingleDay(
   date: string,
   minerModel: string
 ): Promise<void> {
-  console.log(`Processing date: ${date}`);
+  console.log(`[Bitcoin Service] Processing date: ${date}`);
 
   try {
     // Get historical data from DynamoDB with fallback values
+    console.log(`[Bitcoin Service] Fetching historical data from DynamoDB for date: ${date}`);
     const { difficulty, price } = await getHistoricalData(date);
-    console.log(`Using difficulty: ${difficulty}, price: ${price} for date: ${date}`);
+    console.log(`[Bitcoin Service] Retrieved from DynamoDB - difficulty: ${difficulty}, price: ${price}`);
 
     // Get all curtailment records for the day
     const records = await db
@@ -104,6 +105,8 @@ async function processSingleDay(
       })
       .from(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, date));
+
+    console.log(`[Bitcoin Service] Retrieved ${records.length} curtailment records for date: ${date}`);
 
     // Group records by period and farm
     const periodGroups = records.reduce((groups, record) => {
@@ -153,14 +156,14 @@ async function processSingleDay(
           }
         });
       } catch (error) {
-        console.error('Error inserting/updating calculation:', error);
+        console.error('[Bitcoin Service] Error inserting/updating calculation:', error);
         throw error;
       }
     }
 
-    console.log(`Completed processing for date: ${date}`);
+    console.log(`[Bitcoin Service] Completed processing for date: ${date}`);
   } catch (error) {
-    console.error(`Error processing date ${date}:`, error);
+    console.error(`[Bitcoin Service] Error processing date ${date}:`, error);
     throw error;
   }
 }
