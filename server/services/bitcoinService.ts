@@ -4,18 +4,14 @@ import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
 import { and, eq, between } from "drizzle-orm";
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
+import { getHistoricalData, getHistoricalDifficulty, getHistoricalPrice } from './dynamodbService';
+import pLimit from 'p-limit';
 
 // Bitcoin network constants
 const BLOCK_REWARD = 3.125; // Current block reward
 const SETTLEMENT_PERIOD_MINUTES = 30; // Each settlement period is 30 minutes
 const BLOCKS_PER_SETTLEMENT_PERIOD = 3; // 3 blocks per 30 minutes (1 block every 10 minutes)
-
-interface BMUCalculation {
-  farmId: string;
-  bitcoinMined: number;
-  valueAtCurrentPrice: number;
-  curtailedMwh: number;
-}
+const MAX_CONCURRENT_DAYS = 5; // Maximum number of days to process concurrently
 
 /**
  * Calculate potential BTC mined from curtailed energy using dynamic network difficulty
@@ -89,6 +85,145 @@ function calculateBitcoinForBMU(
     price: currentPrice
   };
 }
+
+/**
+ * Process a single day's calculations
+ */
+async function processSingleDay(
+  date: string,
+  minerModel: string
+): Promise<void> {
+  console.log(`Processing date: ${date}`);
+
+  try {
+    // Get historical data from DynamoDB
+    const { difficulty, price } = await getHistoricalData(date);
+
+    // Get all curtailment records for the day
+    const records = await db
+      .select({
+        settlementPeriod: curtailmentRecords.settlementPeriod,
+        farmId: curtailmentRecords.farmId,
+        volume: curtailmentRecords.volume
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date));
+
+    // Group records by period and farm
+    const periodGroups = records.reduce((groups, record) => {
+      const key = `${record.settlementPeriod}-${record.farmId}`;
+      if (!groups[key]) {
+        groups[key] = {
+          settlementPeriod: record.settlementPeriod,
+          farmId: record.farmId,
+          totalVolume: 0
+        };
+      }
+      groups[key].totalVolume += Math.abs(Number(record.volume));
+      return groups;
+    }, {} as Record<string, { settlementPeriod: number; farmId: string; totalVolume: number; }>);
+
+    // Calculate and store results for each group
+    for (const group of Object.values(periodGroups)) {
+      const calculation = calculateBitcoinForBMU(
+        group.totalVolume,
+        minerModel,
+        difficulty,
+        price
+      );
+
+      try {
+        // Store the calculation in the historical table
+        await db.insert(historicalBitcoinCalculations).values({
+          settlementDate: date,
+          settlementPeriod: group.settlementPeriod,
+          farmId: group.farmId,
+          minerModel,
+          bitcoinMined: calculation.bitcoinMined.toString(),
+          valueAtCurrentPrice: calculation.valueAtCurrentPrice.toString(),
+          difficulty: difficulty.toString()
+        }).onConflictDoUpdate({
+          target: [
+            historicalBitcoinCalculations.settlementDate,
+            historicalBitcoinCalculations.settlementPeriod,
+            historicalBitcoinCalculations.farmId,
+            historicalBitcoinCalculations.minerModel
+          ],
+          set: {
+            bitcoinMined: calculation.bitcoinMined.toString(),
+            valueAtCurrentPrice: calculation.valueAtCurrentPrice.toString(),
+            difficulty: difficulty.toString(),
+            calculatedAt: new Date()
+          }
+        });
+      } catch (error) {
+        console.error('Error inserting/updating calculation:', error);
+        throw error;
+      }
+    }
+
+    console.log(`Completed processing for date: ${date}`);
+  } catch (error) {
+    console.error(`Error processing date ${date}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Process historical Bitcoin mining calculations for a date range with parallel processing
+ */
+export async function processHistoricalCalculations(
+  startDate: string,
+  endDate: string,
+  minerModel: string = 'S19J_PRO'
+): Promise<void> {
+  console.log('Processing historical calculations:', { startDate, endDate, minerModel });
+
+  const dateRange = eachDayOfInterval({
+    start: parseISO(startDate),
+    end: parseISO(endDate)
+  });
+
+  // Create a limit function to control concurrency
+  const limit = pLimit(MAX_CONCURRENT_DAYS);
+
+  // Process days in parallel with controlled concurrency
+  const processPromises = dateRange.map(date => {
+    const formattedDate = format(date, 'yyyy-MM-dd');
+    return limit(() => processSingleDay(formattedDate, minerModel));
+  });
+
+  try {
+    await Promise.all(processPromises);
+    console.log('Completed processing all dates');
+  } catch (error) {
+    console.error('Error during parallel processing:', error);
+    throw error;
+  }
+}
+
+export async function fetchFromMinerstat(): Promise<{ difficulty: number; price: number }> {
+  try {
+    const response = await axios.get('https://api.minerstat.com/v2/coins?list=BTC');
+    const { difficulty, price } = response.data[0];
+
+    if (!difficulty || !price) {
+      throw new Error('Data not found in minerstat response');
+    }
+
+    return { difficulty, price };
+  } catch (error) {
+    console.error('Error fetching from minerstat:', error);
+    throw new Error('Failed to fetch data from minerstat');
+  }
+}
+
+/**
+ * Process historical Bitcoin mining calculations for a date range
+ * @param startDate Start date in YYYY-MM-DD format
+ * @param endDate End date in YYYY-MM-DD format
+ * @param minerModel Miner model to use for calculations
+ */
 
 export async function calculateBitcoinMining(
   date: string,
@@ -189,112 +324,4 @@ export async function calculateBitcoinMining(
     totalValue,
     periodCalculations
   };
-}
-
-export async function fetchFromMinerstat(): Promise<{ difficulty: number; price: number }> {
-  try {
-    const response = await axios.get('https://api.minerstat.com/v2/coins?list=BTC');
-    const { difficulty, price } = response.data[0];
-
-    if (!difficulty || !price) {
-      throw new Error('Data not found in minerstat response');
-    }
-
-    return { difficulty, price };
-  } catch (error) {
-    console.error('Error fetching from minerstat:', error);
-    throw new Error('Failed to fetch data from minerstat');
-  }
-}
-
-/**
- * Process historical Bitcoin mining calculations for a date range
- * @param startDate Start date in YYYY-MM-DD format
- * @param endDate End date in YYYY-MM-DD format
- * @param minerModel Miner model to use for calculations
- */
-export async function processHistoricalCalculations(
-  startDate: string,
-  endDate: string,
-  minerModel: string = 'S19J_PRO'
-): Promise<void> {
-  console.log('Processing historical calculations:', { startDate, endDate, minerModel });
-
-  const dateRange = eachDayOfInterval({
-    start: parseISO(startDate),
-    end: parseISO(endDate)
-  });
-
-  for (const date of dateRange) {
-    const formattedDate = format(date, 'yyyy-MM-dd');
-    console.log(`Processing date: ${formattedDate}`);
-
-    try {
-      // Get minerstat data for the day
-      const { difficulty, price } = await fetchFromMinerstat();
-
-      // Get all curtailment records for the day
-      const records = await db
-        .select({
-          settlementPeriod: curtailmentRecords.settlementPeriod,
-          farmId: curtailmentRecords.farmId,
-          volume: curtailmentRecords.volume
-        })
-        .from(curtailmentRecords)
-        .where(eq(curtailmentRecords.settlementDate, formattedDate));
-
-      // Group records by period and farm
-      const periodGroups = records.reduce((groups, record) => {
-        const key = `${record.settlementPeriod}-${record.farmId}`;
-        if (!groups[key]) {
-          groups[key] = {
-            settlementPeriod: record.settlementPeriod,
-            farmId: record.farmId,
-            totalVolume: 0
-          };
-        }
-        groups[key].totalVolume += Math.abs(Number(record.volume));
-        return groups;
-      }, {} as Record<string, { settlementPeriod: number; farmId: string; totalVolume: number; }>);
-
-      // Calculate and store results for each group
-      for (const group of Object.values(periodGroups)) {
-        const calculation = calculateBitcoinForBMU(
-          group.totalVolume,
-          minerModel,
-          difficulty,
-          price
-        );
-
-        // Store the calculation in the historical table
-        await db.insert(historicalBitcoinCalculations).values({
-          settlementDate: formattedDate,
-          settlementPeriod: group.settlementPeriod,
-          farmId: group.farmId,
-          minerModel,
-          bitcoinMined: calculation.bitcoinMined,
-          valueAtCurrentPrice: calculation.valueAtCurrentPrice,
-          difficulty: calculation.difficulty
-        }).onConflictDoUpdate({
-          target: [
-            historicalBitcoinCalculations.settlementDate,
-            historicalBitcoinCalculations.settlementPeriod,
-            historicalBitcoinCalculations.farmId,
-            historicalBitcoinCalculations.minerModel
-          ],
-          set: {
-            bitcoinMined: calculation.bitcoinMined,
-            valueAtCurrentPrice: calculation.valueAtCurrentPrice,
-            difficulty: calculation.difficulty,
-            calculatedAt: new Date()
-          }
-        });
-      }
-
-      console.log(`Completed processing for date: ${formattedDate}`);
-    } catch (error) {
-      console.error(`Error processing date ${formattedDate}:`, error);
-      // Continue with next date instead of throwing
-    }
-  }
 }
