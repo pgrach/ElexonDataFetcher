@@ -37,28 +37,53 @@ app.use((req, res, next) => {
   next();
 });
 
+let dataUpdateServiceStarted = false;
+
 (async () => {
-  const server = registerRoutes(app);
+  try {
+    const server = registerRoutes(app);
 
-  // Start the real-time data update service
-  startDataUpdateService();
+    // Start the real-time data update service with error handling
+    if (!dataUpdateServiceStarted) {
+      try {
+        console.log("Initializing data update service...");
+        const updateServiceInterval = startDataUpdateService();
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+        // Handle cleanup on server shutdown
+        process.on('SIGTERM', () => {
+          console.log('Shutting down data update service...');
+          clearInterval(updateServiceInterval);
+          process.exit(0);
+        });
 
-    res.status(status).json({ message });
-    throw err;
-  });
+        dataUpdateServiceStarted = true;
+        console.log("Data update service started successfully");
+      } catch (error) {
+        console.error("Failed to start data update service:", error);
+        // Continue running the server even if the update service fails
+      }
+    }
 
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      console.error(`Server error: ${message}`, err);
+      res.status(status).json({ message });
+    });
+
+    if (app.get("env") === "development") {
+      await setupVite(app, server);
+    } else {
+      serveStatic(app);
+    }
+
+    const PORT = 5000;
+    server.listen(PORT, "0.0.0.0", () => {
+      log(`Server started on port ${PORT}`);
+      log(`Environment: ${app.get("env")}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
   }
-
-  const PORT = 5000;
-  server.listen(PORT, "0.0.0.0", () => {
-    log(`serving on port ${PORT}`);
-  });
 })();
