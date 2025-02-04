@@ -15,6 +15,18 @@ export interface MinerStats {
   power: number;      // Watts
 }
 
+export interface BMUCalculation {
+  farmId: string;
+  bitcoinMined: number;
+  valueAtCurrentPrice: number;
+  curtailedMwh: number;
+}
+
+export interface DynamoDBHistoricalData {
+  difficulty: number;
+  price: number;
+}
+
 export const minerModels: Record<string, MinerStats> = {
   S19J_PRO: {
     hashrate: 100,
@@ -29,3 +41,7 @@ export const minerModels: Record<string, MinerStats> = {
     power: 3360
   }
 };
+
+// Default values for fallback
+export const DEFAULT_DIFFICULTY = 108105433845147; // Current network difficulty as fallback
+export const DEFAULT_PRICE = 99212.39; // Current BTC price in USD as fallback

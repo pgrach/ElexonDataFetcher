@@ -1,4 +1,4 @@
-import { BitcoinCalculation, MinerStats, minerModels } from '../types/bitcoin';
+import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation } from '../types/bitcoin';
 import axios from 'axios';
 import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
@@ -15,11 +15,6 @@ const MAX_CONCURRENT_DAYS = 5; // Maximum number of days to process concurrently
 
 /**
  * Calculate potential BTC mined from curtailed energy using dynamic network difficulty
- * @param curtailedMwh - Curtailed energy in MWh for a 30-minute settlement period
- * @param minerModel - Miner model to use for calculations
- * @param difficulty - Current network difficulty
- * @param currentPrice - Current Bitcoin price in USD
- * @returns Potential BTC that could be mined in the 30-minute settlement period
  */
 function calculateBitcoinForBMU(
   curtailedMwh: number,
@@ -96,8 +91,9 @@ async function processSingleDay(
   console.log(`Processing date: ${date}`);
 
   try {
-    // Get historical data from DynamoDB
+    // Get historical data from DynamoDB with fallback values
     const { difficulty, price } = await getHistoricalData(date);
+    console.log(`Using difficulty: ${difficulty}, price: ${price} for date: ${date}`);
 
     // Get all curtailment records for the day
     const records = await db
