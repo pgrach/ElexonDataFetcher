@@ -2,20 +2,29 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { DEFAULT_DIFFICULTY, DEFAULT_PRICE, DynamoDBHistoricalData } from '../types/bitcoin';
 
-const client = new DynamoDBClient({ region: "us-east-1" });
-const docClient = DynamoDBDocumentClient.from(client);
+const client = new DynamoDBClient({ 
+  region: "us-east-1",
+  logger: console 
+});
+const docClient = DynamoDBDocumentClient.from(client, {
+  marshallOptions: {
+    convertEmptyValues: true,
+    removeUndefinedValues: true,
+    convertClassInstanceToMap: true,
+  },
+});
 
 const DIFFICULTY_TABLE = "asics-dynamodb-DifficultyTable-DQ308ID3POT6";
 const PRICES_TABLE = "asics-dynamodb-PricesTable-1LXU143BUOBN";
 
-/**
- * Get historical difficulty from DynamoDB for a specific date with fallback
- * @param date Date in YYYY-MM-DD format
- * @returns Promise<number> Historical difficulty
- */
 export async function getHistoricalDifficulty(date: string): Promise<number> {
   try {
     console.log(`[DynamoDB] Fetching difficulty for date: ${date} from table: ${DIFFICULTY_TABLE}`);
+    console.log('[DynamoDB] AWS credentials status:', {
+      hasAccessKeyId: !!process.env.AWS_ACCESS_KEY_ID,
+      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY
+    });
+
     const command = new QueryCommand({
       TableName: DIFFICULTY_TABLE,
       KeyConditionExpression: "#date = :date",
@@ -42,19 +51,23 @@ export async function getHistoricalDifficulty(date: string): Promise<number> {
     return difficulty;
   } catch (error) {
     console.error('[DynamoDB] Error fetching historical difficulty:', error);
+    if (error instanceof Error) {
+      console.error('[DynamoDB] Error details:', error.message);
+      console.error('[DynamoDB] Error stack:', error.stack);
+    }
     console.warn(`[DynamoDB] Using default difficulty value: ${DEFAULT_DIFFICULTY}`);
     return DEFAULT_DIFFICULTY;
   }
 }
 
-/**
- * Get historical price from DynamoDB for a specific date with fallback
- * @param date Date in YYYY-MM-DD format
- * @returns Promise<number> Historical price
- */
 export async function getHistoricalPrice(date: string): Promise<number> {
   try {
     console.log(`[DynamoDB] Fetching price for date: ${date} from table: ${PRICES_TABLE}`);
+    console.log('[DynamoDB] AWS credentials status:', {
+      hasAccessKeyId: !!process.env.AWS_ACCESS_KEY_ID,
+      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY
+    });
+
     const command = new QueryCommand({
       TableName: PRICES_TABLE,
       KeyConditionExpression: "#date = :date",
@@ -81,23 +94,28 @@ export async function getHistoricalPrice(date: string): Promise<number> {
     return price;
   } catch (error) {
     console.error('[DynamoDB] Error fetching historical price:', error);
+    if (error instanceof Error) {
+      console.error('[DynamoDB] Error details:', error.message);
+      console.error('[DynamoDB] Error stack:', error.stack);
+    }
     console.warn(`[DynamoDB] Using default price value: ${DEFAULT_PRICE}`);
     return DEFAULT_PRICE;
   }
 }
 
-/**
- * Get both historical difficulty and price for a specific date with fallback values
- * @param date Date in YYYY-MM-DD format
- * @returns Promise<DynamoDBHistoricalData>
- */
 export async function getHistoricalData(date: string): Promise<DynamoDBHistoricalData> {
   console.log('[DynamoDB] Fetching both difficulty and price data...');
-  const [difficulty, price] = await Promise.all([
-    getHistoricalDifficulty(date),
-    getHistoricalPrice(date)
-  ]);
 
-  console.log('[DynamoDB] Retrieved data:', { difficulty, price });
-  return { difficulty, price };
+  try {
+    const [difficulty, price] = await Promise.all([
+      getHistoricalDifficulty(date),
+      getHistoricalPrice(date)
+    ]);
+
+    console.log('[DynamoDB] Retrieved data:', { difficulty, price });
+    return { difficulty, price };
+  } catch (error) {
+    console.error('[DynamoDB] Error in getHistoricalData:', error);
+    throw error;
+  }
 }
