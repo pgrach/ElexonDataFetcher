@@ -208,12 +208,18 @@ export async function getDiagnosticData(date: string): Promise<void> {
   try {
     console.log('\n[DynamoDB Diagnostic] Starting diagnostic check...');
 
-    // 1. Check table description
+    // 1. Check table description with more details
     const describeCommand = new DescribeTableCommand({ TableName: DIFFICULTY_TABLE });
     const tableDescription = await client.send(describeCommand);
-    console.log('\n[DynamoDB Diagnostic] Table Description:', JSON.stringify(tableDescription.Table, null, 2));
+    console.log('\n[DynamoDB Diagnostic] Table Description:', {
+      tableName: tableDescription.Table?.TableName,
+      keySchema: tableDescription.Table?.KeySchema,
+      attributeDefinitions: tableDescription.Table?.AttributeDefinitions,
+      itemCount: tableDescription.Table?.ItemCount,
+      tableStatus: tableDescription.Table?.TableStatus,
+    });
 
-    // 2. Try multiple date formats
+    // 2. Try multiple date formats and expanded query
     const formats = [
       date,
       format(parse(date, 'yyyy-MM-dd', new Date()), 'yyyy-MM-dd'),
@@ -232,15 +238,50 @@ export async function getDiagnosticData(date: string): Promise<void> {
         ExpressionAttributeValues: {
           ":date": dateFormat,
         },
+        // Add ProjectionExpression to see all attributes
+        ProjectionExpression: "Date, Difficulty, #ts, Price",
+        ExpressionAttributeNames: {
+          "#date": "Date",
+          "#ts": "Timestamp"  // In case there's a timestamp field
+        },
       });
 
       console.log(`\n[DynamoDB Diagnostic] Querying with date format: ${dateFormat}`);
-      const response = await docClient.send(command);
-      console.log('[DynamoDB Diagnostic] Query response:', JSON.stringify(response, null, 2));
+      console.log('Query parameters:', {
+        TableName: command.input.TableName,
+        KeyConditionExpression: command.input.KeyConditionExpression,
+        ExpressionAttributeNames: command.input.ExpressionAttributeNames,
+        ExpressionAttributeValues: command.input.ExpressionAttributeValues,
+        ProjectionExpression: command.input.ProjectionExpression
+      });
+
+      try {
+        const response = await docClient.send(command);
+        console.log('[DynamoDB Diagnostic] Query response:', {
+          count: response.Count,
+          scannedCount: response.ScannedCount,
+          items: response.Items,
+          lastEvaluatedKey: response.LastEvaluatedKey
+        });
+
+        if (response.Items && response.Items.length > 0) {
+          console.log('[DynamoDB Diagnostic] First item attribute names:', Object.keys(response.Items[0]));
+          console.log('[DynamoDB Diagnostic] First item values:', response.Items[0]);
+        }
+      } catch (error) {
+        console.error(`[DynamoDB Diagnostic] Query failed for format ${dateFormat}:`, error);
+      }
     }
 
   } catch (error) {
     console.error('[DynamoDB Diagnostic] Error during diagnostic:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
   }
 }
 
