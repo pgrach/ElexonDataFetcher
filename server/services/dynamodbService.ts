@@ -31,12 +31,23 @@ const docClient = DynamoDBDocumentClient.from(client, {
   },
 });
 
-function formatDateForDynamoDB(dateStr: string): string {
+function formatDateForDifficulty(dateStr: string): string {
   try {
     const date = parse(dateStr, 'yyyy-MM-dd', new Date());
     return format(date, 'yyyy-MM-dd');
   } catch (error) {
-    console.error(`[DynamoDB] Error formatting date ${dateStr}:`, error);
+    console.error(`[DynamoDB] Error formatting difficulty date ${dateStr}:`, error);
+    throw new Error(`Invalid date format: ${dateStr}. Expected format: YYYY-MM-DD`);
+  }
+}
+
+function formatDateForPrice(dateStr: string): string {
+  try {
+    const date = parse(dateStr, 'yyyy-MM-dd', new Date());
+    // Try just the date format since that's what we see in some records
+    return format(date, 'yyyy-MM-dd');
+  } catch (error) {
+    console.error(`[DynamoDB] Error formatting price date ${dateStr}:`, error);
     throw new Error(`Invalid date format: ${dateStr}. Expected format: YYYY-MM-DD`);
   }
 }
@@ -63,7 +74,7 @@ async function verifyTableExists(tableName: string): Promise<boolean> {
 
 async function getHistoricalDifficulty(date: string): Promise<number> {
   try {
-    const formattedDate = formatDateForDynamoDB(date);
+    const formattedDate = formatDateForDifficulty(date);
     console.info(`[DynamoDB] Fetching difficulty for date: ${formattedDate}`);
 
     const tableExists = await verifyTableExists(DIFFICULTY_TABLE);
@@ -72,7 +83,7 @@ async function getHistoricalDifficulty(date: string): Promise<number> {
       return DEFAULT_DIFFICULTY;
     }
 
-    const scanCommand = new ScanCommand({
+    const command = new ScanCommand({
       TableName: DIFFICULTY_TABLE,
       FilterExpression: "#date = :date",
       ExpressionAttributeNames: {
@@ -85,26 +96,20 @@ async function getHistoricalDifficulty(date: string): Promise<number> {
 
     console.debug('[DynamoDB] Executing difficulty scan:', {
       table: DIFFICULTY_TABLE,
-      filter: scanCommand.input.FilterExpression,
+      filter: command.input.FilterExpression,
       date: formattedDate
     });
 
-    const response = await retryOperation(() => docClient.send(scanCommand));
+    const response = await retryOperation(() => docClient.send(command));
 
     if (!response.Items?.length) {
       console.warn(`[DynamoDB] No difficulty data found for ${formattedDate}`);
       return DEFAULT_DIFFICULTY;
     }
 
-    const matchingItem = response.Items.find(item => item.Date === formattedDate);
-    if (!matchingItem) {
-      console.warn(`[DynamoDB] No exact date match for ${formattedDate}`);
-      return DEFAULT_DIFFICULTY;
-    }
-
-    const difficulty = Number(matchingItem.Difficulty);
+    const difficulty = Number(response.Items[0].Difficulty);
     if (isNaN(difficulty)) {
-      console.error(`[DynamoDB] Invalid difficulty value:`, matchingItem.Difficulty);
+      console.error(`[DynamoDB] Invalid difficulty value:`, response.Items[0].Difficulty);
       return DEFAULT_DIFFICULTY;
     }
 
@@ -163,9 +168,9 @@ async function retryOperation<T>(operation: () => Promise<T>, attempt = 1): Prom
   }
 }
 
-export async function getHistoricalPrice(date: string): Promise<number> {
+async function getHistoricalPrice(date: string): Promise<number> {
   try {
-    const formattedDate = formatDateForDynamoDB(date);
+    const formattedDate = formatDateForPrice(date);
     console.info(`[DynamoDB] Fetching price for date: ${formattedDate}`);
 
     const tableExists = await verifyTableExists(PRICES_TABLE);
@@ -174,9 +179,22 @@ export async function getHistoricalPrice(date: string): Promise<number> {
       return DEFAULT_PRICE;
     }
 
-    const command = new QueryCommand({
+    // Add logging of a sample record
+    const sampleCommand = new ScanCommand({
       TableName: PRICES_TABLE,
-      KeyConditionExpression: "#date = :date",
+      Limit: 1
+    });
+
+    const sampleResponse = await docClient.send(sampleCommand);
+    if (sampleResponse.Items?.[0]) {
+      console.debug('[DynamoDB] Sample price record:', {
+        record: sampleResponse.Items[0]
+      });
+    }
+
+    const command = new ScanCommand({
+      TableName: PRICES_TABLE,
+      FilterExpression: "#date = :date",
       ExpressionAttributeNames: {
         "#date": "Date"
       },
@@ -185,11 +203,13 @@ export async function getHistoricalPrice(date: string): Promise<number> {
       }
     });
 
-    const response = await docClient.send(command);
-    console.debug('[DynamoDB] Price response:', {
-      items: response.Items?.length,
+    console.debug('[DynamoDB] Executing price scan:', {
+      table: PRICES_TABLE,
+      filter: command.input.FilterExpression,
       date: formattedDate
     });
+
+    const response = await docClient.send(command);
 
     if (!response.Items?.length) {
       console.warn(`[DynamoDB] No price data for ${formattedDate}`);
