@@ -100,44 +100,63 @@ async function processSingleDay(
 
     console.log(`[Bitcoin Service] Retrieved ${records.length} curtailment records for date: ${date}`);
 
-    // Group records by period and farm, ensuring we capture all records
+    // Group records by period and farm
     const periodGroups = records.reduce((groups, record) => {
-      const periodFarmKey = `${record.settlementPeriod}-${record.farmId}`;
-      if (!groups[periodFarmKey]) {
-        groups[periodFarmKey] = {
+      const key = `${record.settlementPeriod}`;
+      if (!groups[key]) {
+        groups[key] = {
           settlementPeriod: record.settlementPeriod,
-          farmId: record.farmId,
-          totalVolume: 0
+          totalVolume: 0,
+          farms: new Map<string, number>()
         };
       }
-      groups[periodFarmKey].totalVolume += Math.abs(Number(record.volume));
+      // Add absolute volume to both period total and farm-specific total
+      const absVolume = Math.abs(Number(record.volume));
+      groups[key].totalVolume += absVolume;
+      const currentFarmTotal = groups[key].farms.get(record.farmId) || 0;
+      groups[key].farms.set(record.farmId, currentFarmTotal + absVolume);
       return groups;
-    }, {} as Record<string, { settlementPeriod: number; farmId: string; totalVolume: number; }>);
+    }, {} as Record<string, { 
+      settlementPeriod: number; 
+      totalVolume: number;
+      farms: Map<string, number>;
+    }>);
 
-    console.log(`[Bitcoin Service] Grouped into ${Object.keys(periodGroups).length} period-farm combinations`);
+    console.log(`[Bitcoin Service] Processing ${Object.keys(periodGroups).length} settlement periods`);
 
-    // Process each group and store results
-    for (const group of Object.values(periodGroups)) {
-      const bitcoinMined = calculateBitcoinForBMU(
-        group.totalVolume,
+    // Process each period
+    for (const periodData of Object.values(periodGroups)) {
+      console.log(`[Bitcoin Service] Processing period ${periodData.settlementPeriod}:`, {
+        totalVolume: periodData.totalVolume,
+        numberOfFarms: periodData.farms.size
+      });
+
+      // Calculate total Bitcoin for the period
+      const periodBitcoin = calculateBitcoinForBMU(
+        periodData.totalVolume,
         minerModel,
         difficulty
       );
 
-      console.log(`[Bitcoin Service] Calculated for period ${group.settlementPeriod}, farm ${group.farmId}:`, {
-        totalVolume: group.totalVolume,
-        bitcoinMined,
-        difficulty
-      });
+      // Distribute Bitcoin among farms proportionally
+      for (const [farmId, farmVolume] of periodData.farms.entries()) {
+        const farmShare = farmVolume / periodData.totalVolume;
+        const farmBitcoin = (periodBitcoin * farmShare).toFixed(8);
 
-      // Store calculation with improved error handling
-      try {
+        console.log(`[Bitcoin Service] Farm ${farmId} calculation:`, {
+          farmVolume,
+          totalVolume: periodData.totalVolume,
+          share: farmShare,
+          bitcoin: farmBitcoin
+        });
+
+        // Store calculation
         await db.insert(historicalBitcoinCalculations).values({
           settlementDate: date,
-          settlementPeriod: group.settlementPeriod,
-          farmId: group.farmId,
+          settlementPeriod: periodData.settlementPeriod,
+          farmId: farmId,
           minerModel,
-          bitcoinMined: bitcoinMined.toString(),
+          bitcoinMined: farmBitcoin,
           difficulty: difficulty.toString()
         }).onConflictDoUpdate({
           target: [
@@ -147,16 +166,11 @@ async function processSingleDay(
             historicalBitcoinCalculations.minerModel
           ],
           set: {
-            bitcoinMined: bitcoinMined.toString(),
+            bitcoinMined: farmBitcoin,
             difficulty: difficulty.toString(),
             calculatedAt: new Date()
           }
         });
-
-        console.log(`[Bitcoin Service] Successfully stored calculation for period ${group.settlementPeriod}, farm ${group.farmId}`);
-      } catch (error) {
-        console.error(`[Bitcoin Service] Error storing calculation for period ${group.settlementPeriod}, farm ${group.farmId}:`, error);
-        throw error;
       }
     }
 
