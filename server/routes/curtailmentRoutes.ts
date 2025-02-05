@@ -5,7 +5,7 @@ import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations } from "@db/schema";
 import { and, eq } from "drizzle-orm";
-import { getHistoricalData } from '../services/dynamodbService';
+import { getDifficultyData } from '../services/dynamodbService';
 
 const router = Router();
 
@@ -55,15 +55,9 @@ router.post('/regenerate-historical', async (req, res) => {
 
     console.log(`Starting regeneration for date: ${date} with miner model: ${minerModel}`);
 
-    // First, verify we can get historical data from DynamoDB
-    const historicalData = await getHistoricalData(date);
-    console.log('Retrieved historical data from DynamoDB:', historicalData);
-
-    if (!historicalData.difficulty) {
-      return res.status(400).json({
-        error: 'Could not retrieve historical difficulty data'
-      });
-    }
+    // Get historical difficulty data
+    const difficulty = await getDifficultyData(date);
+    console.log('Retrieved historical difficulty:', difficulty);
 
     // Delete existing calculations for this date
     await db.delete(historicalBitcoinCalculations)
@@ -100,7 +94,7 @@ router.post('/regenerate-historical', async (req, res) => {
       date,
       minerModel,
       recordCount: regeneratedData.length,
-      historicalDifficulty: historicalData.difficulty
+      difficulty
     });
 
   } catch (error) {
@@ -120,7 +114,6 @@ router.get('/mining-potential', async (req, res) => {
     const leadParty = req.query.leadParty as string;
     const farmId = req.query.farmId as string;
     const formattedDate = format(requestDate, 'yyyy-MM-dd');
-    const energy = Number(req.query.energy || 0);
 
     console.log('Mining potential request:', {
       date: formattedDate,
@@ -130,7 +123,15 @@ router.get('/mining-potential', async (req, res) => {
       isToday: isToday(requestDate)
     });
 
-    // For historical dates, fetch from historical_bitcoin_calculations
+    // Always fetch current price for fiat conversion
+    const { difficulty: currentDifficulty, price: currentPrice } = await fetchFromMinerstat();
+    console.log('Current data from Minerstat:', { 
+      difficulty: currentDifficulty, 
+      price: currentPrice,
+      source: 'Minerstat API'
+    });
+
+    // For historical dates, get stored calculations
     if (!isToday(requestDate)) {
       // First try to get historical calculations
       const historicalData = await db
@@ -154,70 +155,31 @@ router.get('/mining-potential', async (req, res) => {
           (sum, record) => sum + Number(record.bitcoinMined),
           0
         );
-        const totalValue = historicalData.reduce(
-          (sum, record) => sum + Number(record.valueAtCurrentPrice),
-          0
-        );
-        const historicalDifficulty = Number(historicalData[0].difficulty);
-
-        console.log('Using historical difficulty:', historicalDifficulty);
 
         return res.json({
           bitcoinMined: totalBitcoin,
-          valueAtCurrentPrice: totalValue,
-          difficulty: historicalDifficulty,
-          price: totalValue / totalBitcoin
+          valueAtCurrentPrice: totalBitcoin * currentPrice,
+          difficulty: Number(historicalData[0].difficulty),
+          currentPrice
         });
       }
-
-      // If no historical calculations found, get historical difficulty and price from DynamoDB
-      const { difficulty, price } = await getHistoricalData(formattedDate);
-      console.log('Historical data from DynamoDB:', { 
-        difficulty, 
-        price, 
-        date: formattedDate,
-        source: 'DynamoDB'
-      });
-
-      const result = await calculateBitcoinMining(
-        formattedDate,
-        minerModel,
-        difficulty,
-        price,
-        leadParty,
-        farmId
-      );
-
-      return res.json({
-        bitcoinMined: result.totalBitcoin,
-        valueAtCurrentPrice: result.totalValue,
-        difficulty,
-        price
-      });
     }
 
-    // For today's date, use live calculation with current difficulty and price
-    const { difficulty, price } = await fetchFromMinerstat();
-    console.log('Current data from Minerstat:', { 
-      difficulty, 
-      price,
-      source: 'Minerstat API'
-    });
-
+    // For today or missing historical data, calculate using current difficulty
     const result = await calculateBitcoinMining(
       formattedDate,
       minerModel,
-      difficulty,
-      price,
+      currentDifficulty,
+      currentPrice,
       leadParty,
       farmId
     );
 
     res.json({
       bitcoinMined: result.totalBitcoin,
-      valueAtCurrentPrice: result.totalValue,
-      difficulty,
-      price
+      valueAtCurrentPrice: result.totalBitcoin * currentPrice,
+      difficulty: currentDifficulty,
+      currentPrice
     });
 
   } catch (error) {

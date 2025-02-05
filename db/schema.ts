@@ -24,7 +24,6 @@ export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calcula
   farmId: text("farm_id").notNull(),
   minerModel: text("miner_model").notNull(),
   bitcoinMined: numeric("bitcoin_mined").notNull(),
-  valueAtCurrentPrice: numeric("value_at_current_price").notNull(),
   difficulty: numeric("difficulty").notNull(),
   calculatedAt: timestamp("calculated_at").defaultNow(),
 });

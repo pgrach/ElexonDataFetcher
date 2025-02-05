@@ -2,9 +2,7 @@ import { z } from 'zod';
 
 export const BitcoinCalculationSchema = z.object({
   bitcoinMined: z.number(),
-  valueAtCurrentPrice: z.number(),
-  difficulty: z.number(),
-  price: z.number()
+  difficulty: z.number()
 });
 
 export type BitcoinCalculation = z.infer<typeof BitcoinCalculationSchema>;
@@ -18,13 +16,11 @@ export interface MinerStats {
 export interface BMUCalculation {
   farmId: string;
   bitcoinMined: number;
-  valueAtCurrentPrice: number;
   curtailedMwh: number;
 }
 
 export interface DynamoDBHistoricalData {
   difficulty: number;
-  price: number;
 }
 
 export const minerModels: Record<string, MinerStats> = {
@@ -44,4 +40,3 @@ export const minerModels: Record<string, MinerStats> = {
 
 // Default values for fallback
 export const DEFAULT_DIFFICULTY = 108105433845147; // Current network difficulty as fallback
-export const DEFAULT_PRICE = 99212.39; // Current BTC price in USD as fallback

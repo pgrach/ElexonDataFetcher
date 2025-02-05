@@ -4,7 +4,7 @@ import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
 import { and, eq, between } from "drizzle-orm";
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
-import { getHistoricalData } from './dynamodbService';
+import { getDifficultyData } from './dynamodbService';
 import pLimit from 'p-limit';
 
 // Bitcoin network constants
@@ -16,14 +16,12 @@ const MAX_CONCURRENT_DAYS = 5; // Maximum number of days to process concurrently
 function calculateBitcoinForBMU(
   curtailedMwh: number,
   minerModel: string,
-  difficulty: number,
-  currentPrice: number
-): BitcoinCalculation {
+  difficulty: number
+): number {
   console.log('[Bitcoin Calculation] Starting calculation with parameters:', {
     curtailedMwh,
     minerModel,
     difficulty,
-    currentPrice,
     difficultySource: difficulty === DEFAULT_DIFFICULTY ? 'DEFAULT_DIFFICULTY' : 'Historical'
   });
 
@@ -58,7 +56,6 @@ function calculateBitcoinForBMU(
 
   // Estimate BTC mined per settlement period
   const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
-  const valueAtCurrentPrice = Number((bitcoinMined * currentPrice).toFixed(2));
 
   console.log('[Bitcoin Calculation] Calculation results:', {
     networkHashRateTH,
@@ -66,16 +63,10 @@ function calculateBitcoinForBMU(
     totalHashPower,
     ourNetworkShare,
     bitcoinMined,
-    valueAtCurrentPrice,
     usedDifficulty: difficulty
   });
 
-  return {
-    bitcoinMined,
-    valueAtCurrentPrice,
-    difficulty,
-    price: currentPrice
-  };
+  return bitcoinMined;
 }
 
 async function processSingleDay(
@@ -85,9 +76,9 @@ async function processSingleDay(
   console.log(`[Bitcoin Service] Processing date: ${date}`);
 
   try {
-    console.log(`[Bitcoin Service] Fetching historical data from DynamoDB for date: ${date}`);
-    const { difficulty, price } = await getHistoricalData(date);
-    console.log(`[Bitcoin Service] Retrieved from DynamoDB - difficulty: ${difficulty}, price: ${price}`);
+    console.log(`[Bitcoin Service] Fetching difficulty data for date: ${date}`);
+    const difficulty = await getDifficultyData(date);
+    console.log(`[Bitcoin Service] Retrieved difficulty: ${difficulty}`);
 
     const records = await db
       .select({
@@ -116,11 +107,10 @@ async function processSingleDay(
 
     // Calculate and store results for each group
     for (const group of Object.values(periodGroups)) {
-      const calculation = calculateBitcoinForBMU(
+      const bitcoinMined = calculateBitcoinForBMU(
         group.totalVolume,
         minerModel,
-        difficulty,
-        price
+        difficulty
       );
 
       console.log(`[Bitcoin Service] Storing calculation with difficulty ${difficulty} for date ${date}, period ${group.settlementPeriod}, farm ${group.farmId}`);
@@ -131,8 +121,7 @@ async function processSingleDay(
           settlementPeriod: group.settlementPeriod,
           farmId: group.farmId,
           minerModel,
-          bitcoinMined: calculation.bitcoinMined.toString(),
-          valueAtCurrentPrice: calculation.valueAtCurrentPrice.toString(),
+          bitcoinMined: bitcoinMined.toString(),
           difficulty: difficulty.toString()
         }).onConflictDoUpdate({
           target: [
@@ -142,8 +131,7 @@ async function processSingleDay(
             historicalBitcoinCalculations.minerModel
           ],
           set: {
-            bitcoinMined: calculation.bitcoinMined.toString(),
-            valueAtCurrentPrice: calculation.valueAtCurrentPrice.toString(),
+            bitcoinMined: bitcoinMined.toString(),
             difficulty: difficulty.toString(),
             calculatedAt: new Date()
           }
@@ -275,14 +263,13 @@ async function calculateBitcoinMining(
       const calculation = calculateBitcoinForBMU(
         curtailedMwh,
         minerModel,
-        difficulty,
-        currentPrice
+        difficulty
       );
 
       const bmuResult = {
         farmId: record.farmId,
-        bitcoinMined: calculation.bitcoinMined,
-        valueAtCurrentPrice: calculation.valueAtCurrentPrice,
+        bitcoinMined: calculation,
+        valueAtCurrentPrice: calculation * currentPrice,
         curtailedMwh
       };
 
@@ -291,8 +278,8 @@ async function calculateBitcoinMining(
       // Only add to totals if it matches our filter criteria
       if ((!farmId || record.farmId === farmId) &&
         (!leadParty || record.leadPartyName === leadParty)) {
-        totalBitcoin += calculation.bitcoinMined;
-        totalValue += calculation.valueAtCurrentPrice;
+        totalBitcoin += calculation;
+        totalValue += calculation * currentPrice;
       }
     }
 
