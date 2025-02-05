@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { format, parseISO, isToday, isValid } from 'date-fns';
-import { fetchFromMinerstat, calculateBitcoinMining, processHistoricalCalculations } from '../services/bitcoinService';
+import { fetchFromMinerstat, calculateBitcoinMining, processHistoricalCalculations, processSingleDay } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations } from "@db/schema";
@@ -149,6 +149,39 @@ router.get('/mining-potential', async (req, res) => {
     console.error('Error in mining-potential endpoint:', error);
     res.status(500).json({ 
       error: 'Failed to calculate mining potential',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.post('/regenerate-historical', async (req, res) => {
+  try {
+    const { date, minerModel = 'S19J_PRO' } = req.body;
+
+    // Validate date
+    if (!date || !isValid(parseISO(date))) {
+      return res.status(400).json({
+        error: 'Invalid date format. Please provide date in YYYY-MM-DD format.'
+      });
+    }
+
+    // First, delete existing calculations for this date
+    await db.delete(historicalBitcoinCalculations)
+      .where(eq(historicalBitcoinCalculations.settlementDate, date));
+
+    // Process the single day
+    await processSingleDay(date, minerModel);
+
+    res.json({
+      message: 'Historical calculations regenerated',
+      date,
+      minerModel
+    });
+
+  } catch (error) {
+    console.error('Error in regenerate-historical endpoint:', error);
+    res.status(500).json({ 
+      error: 'Failed to regenerate historical calculations',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

@@ -77,9 +77,6 @@ function calculateBitcoinForBMU(
   };
 }
 
-/**
- * Process a single day's calculations
- */
 async function processSingleDay(
   date: string,
   minerModel: string
@@ -87,12 +84,10 @@ async function processSingleDay(
   console.log(`[Bitcoin Service] Processing date: ${date}`);
 
   try {
-    // Get historical data from DynamoDB with fallback values
     console.log(`[Bitcoin Service] Fetching historical data from DynamoDB for date: ${date}`);
     const { difficulty, price } = await getHistoricalData(date);
     console.log(`[Bitcoin Service] Retrieved from DynamoDB - difficulty: ${difficulty}, price: ${price}`);
 
-    // Get all curtailment records for the day
     const records = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
@@ -128,7 +123,7 @@ async function processSingleDay(
       );
 
       try {
-        // Store the calculation in the historical table
+        console.log(`[Bitcoin Service] Storing calculation for ${date}, period ${group.settlementPeriod}, farm ${group.farmId} with difficulty ${difficulty}`);
         await db.insert(historicalBitcoinCalculations).values({
           settlementDate: date,
           settlementPeriod: group.settlementPeriod,
@@ -164,10 +159,7 @@ async function processSingleDay(
   }
 }
 
-/**
- * Process historical Bitcoin mining calculations for a date range with parallel processing
- */
-export async function processHistoricalCalculations(
+async function processHistoricalCalculations(
   startDate: string,
   endDate: string,
   minerModel: string = 'S19J_PRO'
@@ -197,7 +189,7 @@ export async function processHistoricalCalculations(
   }
 }
 
-export async function fetchFromMinerstat(): Promise<{ difficulty: number; price: number }> {
+async function fetchFromMinerstat(): Promise<{ difficulty: number; price: number }> {
   try {
     const response = await axios.get('https://api.minerstat.com/v2/coins?list=BTC');
     const { difficulty, price } = response.data[0];
@@ -213,14 +205,7 @@ export async function fetchFromMinerstat(): Promise<{ difficulty: number; price:
   }
 }
 
-/**
- * Process historical Bitcoin mining calculations for a date range
- * @param startDate Start date in YYYY-MM-DD format
- * @param endDate End date in YYYY-MM-DD format
- * @param minerModel Miner model to use for calculations
- */
-
-export async function calculateBitcoinMining(
+async function calculateBitcoinMining(
   date: string,
   minerModel: string,
   difficulty: number,
@@ -320,3 +305,12 @@ export async function calculateBitcoinMining(
     periodCalculations
   };
 }
+
+// Single consolidated export statement
+export {
+  calculateBitcoinForBMU,
+  calculateBitcoinMining,
+  processHistoricalCalculations,
+  fetchFromMinerstat,
+  processSingleDay
+};
