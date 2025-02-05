@@ -4,7 +4,8 @@ import { getHistoricalData } from '../services/dynamodbService';
 
 async function testDynamoDBRetrieval() {
   try {
-    console.log('Testing DynamoDB data retrieval for 2025-01-15...');
+    // Try a more recent date since 2025 data might not exist yet
+    console.log('Testing DynamoDB data retrieval for 2024-01-15...');
 
     // First inspect the price table structure and sample data
     const client = new DynamoDBClient({ 
@@ -46,7 +47,7 @@ async function testDynamoDBRetrieval() {
     }
 
     // Now try to get the actual data
-    const data = await getHistoricalData('2025-01-15');
+    const data = await getHistoricalData('2024-01-15');
 
     console.log('Retrieved Data:', {
       difficulty: {

@@ -44,8 +44,8 @@ function formatDateForDifficulty(dateStr: string): string {
 function formatDateForPrice(dateStr: string): string {
   try {
     const date = parse(dateStr, 'yyyy-MM-dd', new Date());
-    // Try just the date format since that's what we see in some records
-    return format(date, 'yyyy-MM-dd');
+    // Match the exact format from the DynamoDB table: '2022-06-21T00:00:00'
+    return format(date, "yyyy-MM-dd'T'HH:mm:ss");
   } catch (error) {
     console.error(`[DynamoDB] Error formatting price date ${dateStr}:`, error);
     throw new Error(`Invalid date format: ${dateStr}. Expected format: YYYY-MM-DD`);
@@ -179,7 +179,7 @@ async function getHistoricalPrice(date: string): Promise<number> {
       return DEFAULT_PRICE;
     }
 
-    // Add logging of a sample record
+    // Get a sample record to understand the data format
     const sampleCommand = new ScanCommand({
       TableName: PRICES_TABLE,
       Limit: 1
@@ -188,10 +188,14 @@ async function getHistoricalPrice(date: string): Promise<number> {
     const sampleResponse = await docClient.send(sampleCommand);
     if (sampleResponse.Items?.[0]) {
       console.debug('[DynamoDB] Sample price record:', {
-        record: sampleResponse.Items[0]
+        record: sampleResponse.Items[0],
+        recordDate: sampleResponse.Items[0].Date,
+        searchDate: formattedDate,
+        match: sampleResponse.Items[0].Date === formattedDate
       });
     }
 
+    // Since ID is the hash key, we need to scan and filter by Date
     const command = new ScanCommand({
       TableName: PRICES_TABLE,
       FilterExpression: "#date = :date",
@@ -206,13 +210,15 @@ async function getHistoricalPrice(date: string): Promise<number> {
     console.debug('[DynamoDB] Executing price scan:', {
       table: PRICES_TABLE,
       filter: command.input.FilterExpression,
-      date: formattedDate
+      formattedDate,
+      expressionValues: command.input.ExpressionAttributeValues,
+      attributeNames: command.input.ExpressionAttributeNames
     });
 
-    const response = await docClient.send(command);
+    const response = await retryOperation(() => docClient.send(command));
 
     if (!response.Items?.length) {
-      console.warn(`[DynamoDB] No price data for ${formattedDate}`);
+      console.warn(`[DynamoDB] No price data for ${formattedDate}, scanned ${response.ScannedCount} items`);
       return DEFAULT_PRICE;
     }
 
@@ -223,6 +229,7 @@ async function getHistoricalPrice(date: string): Promise<number> {
     }
 
     return price;
+
   } catch (error) {
     console.error('[DynamoDB] Error fetching price:', error);
     return DEFAULT_PRICE;
