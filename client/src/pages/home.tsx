@@ -12,6 +12,12 @@ import {
 } from "lucide-react";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { DualAxisChart } from "@/components/ui/dual-axis-chart";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface BitcoinCalculation {
   bitcoinMined: number;
@@ -336,7 +342,7 @@ export default function Home() {
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       ₿{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                         (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
+                        (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -410,7 +416,7 @@ export default function Home() {
                   ) : yearlyData ? (
                      <div className="text-2xl font-bold text-[#F7931A]">
                       £{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                         (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                        (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -488,7 +494,7 @@ export default function Home() {
                   ) : monthlyData ? (
                      <div className="text-2xl font-bold text-[#F7931A]">
                       ₿{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                         (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
+                        (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -562,7 +568,7 @@ export default function Home() {
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       £{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                         (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                        (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -642,7 +648,16 @@ export default function Home() {
 
                   <div>
                     <div className="text-sm text-muted-foreground mb-1">
-                      Mining Opportunity Loss
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help">
+                            Mining Opportunity Loss
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Network Difficulty: {bitcoinPotential?.difficulty.toLocaleString()}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
                     {isDailyLoading ? (
                       <div className="text-3xl font-bold animate-pulse">
