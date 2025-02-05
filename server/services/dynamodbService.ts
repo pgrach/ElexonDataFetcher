@@ -39,7 +39,7 @@ export async function getHistoricalDifficulty(date: string): Promise<number> {
 
     console.log('[DynamoDB] Sending query command for difficulty...');
     const response = await docClient.send(command);
-    console.log(`[DynamoDB] Received response:`, JSON.stringify(response.Items, null, 2));
+    console.log('[DynamoDB] Received response:', JSON.stringify(response.Items, null, 2));
 
     if (!response.Items || response.Items.length === 0) {
       console.warn(`[DynamoDB] No difficulty data found for date: ${date}, using default value: ${DEFAULT_DIFFICULTY}`);
@@ -63,10 +63,6 @@ export async function getHistoricalDifficulty(date: string): Promise<number> {
 export async function getHistoricalPrice(date: string): Promise<number> {
   try {
     console.log(`[DynamoDB] Fetching price for date: ${date} from table: ${PRICES_TABLE}`);
-    console.log('[DynamoDB] AWS credentials status:', {
-      hasAccessKeyId: !!process.env.AWS_ACCESS_KEY_ID,
-      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY
-    });
 
     const command = new QueryCommand({
       TableName: PRICES_TABLE,
@@ -80,9 +76,8 @@ export async function getHistoricalPrice(date: string): Promise<number> {
       Limit: 1,
     });
 
-    console.log('[DynamoDB] Sending query command for price...');
     const response = await docClient.send(command);
-    console.log(`[DynamoDB] Received response:`, JSON.stringify(response.Items, null, 2));
+    console.log(`[DynamoDB] Received price response:`, JSON.stringify(response.Items, null, 2));
 
     if (!response.Items || response.Items.length === 0) {
       console.warn(`[DynamoDB] No price data found for date: ${date}, using default value: ${DEFAULT_PRICE}`);
@@ -107,6 +102,12 @@ export async function getHistoricalData(date: string): Promise<DynamoDBHistorica
   console.log('[DynamoDB] Fetching both difficulty and price data...');
 
   try {
+    // Add AWS credentials check
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+      console.error('[DynamoDB] Missing AWS credentials');
+      throw new Error('AWS credentials not found');
+    }
+
     const [difficulty, price] = await Promise.all([
       getHistoricalDifficulty(date),
       getHistoricalPrice(date)

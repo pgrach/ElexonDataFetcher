@@ -42,6 +42,76 @@ router.post('/historical-calculations', async (req, res) => {
   }
 });
 
+router.post('/regenerate-historical', async (req, res) => {
+  try {
+    const { date, minerModel = 'S19J_PRO' } = req.body;
+
+    // Validate date
+    if (!date || !isValid(parseISO(date))) {
+      return res.status(400).json({
+        error: 'Invalid date format. Please provide date in YYYY-MM-DD format.'
+      });
+    }
+
+    console.log(`Starting regeneration for date: ${date} with miner model: ${minerModel}`);
+
+    // First, verify we can get historical data from DynamoDB
+    const historicalData = await getHistoricalData(date);
+    console.log('Retrieved historical data from DynamoDB:', historicalData);
+
+    if (!historicalData.difficulty) {
+      return res.status(400).json({
+        error: 'Could not retrieve historical difficulty data'
+      });
+    }
+
+    // Delete existing calculations for this date
+    await db.delete(historicalBitcoinCalculations)
+      .where(
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, date),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        )
+      );
+
+    // Process the single day with the verified historical data
+    await processSingleDay(date, minerModel);
+
+    // Verify the regenerated data
+    const regeneratedData = await db
+      .select()
+      .from(historicalBitcoinCalculations)
+      .where(
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, date),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        )
+      );
+
+    console.log('Regenerated data verification:', {
+      date,
+      recordCount: regeneratedData.length,
+      sampleDifficulty: regeneratedData[0]?.difficulty,
+      minerModel
+    });
+
+    res.json({
+      message: 'Historical calculations regenerated',
+      date,
+      minerModel,
+      recordCount: regeneratedData.length,
+      historicalDifficulty: historicalData.difficulty
+    });
+
+  } catch (error) {
+    console.error('Error in regenerate-historical endpoint:', error);
+    res.status(500).json({ 
+      error: 'Failed to regenerate historical calculations',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Add the bitcoin calculation endpoint
 router.get('/mining-potential', async (req, res) => {
   try {
@@ -154,39 +224,6 @@ router.get('/mining-potential', async (req, res) => {
     console.error('Error in mining-potential endpoint:', error);
     res.status(500).json({ 
       error: 'Failed to calculate mining potential',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-router.post('/regenerate-historical', async (req, res) => {
-  try {
-    const { date, minerModel = 'S19J_PRO' } = req.body;
-
-    // Validate date
-    if (!date || !isValid(parseISO(date))) {
-      return res.status(400).json({
-        error: 'Invalid date format. Please provide date in YYYY-MM-DD format.'
-      });
-    }
-
-    // First, delete existing calculations for this date
-    await db.delete(historicalBitcoinCalculations)
-      .where(eq(historicalBitcoinCalculations.settlementDate, date));
-
-    // Process the single day
-    await processSingleDay(date, minerModel);
-
-    res.json({
-      message: 'Historical calculations regenerated',
-      date,
-      minerModel
-    });
-
-  } catch (error) {
-    console.error('Error in regenerate-historical endpoint:', error);
-    res.status(500).json({ 
-      error: 'Failed to regenerate historical calculations',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
