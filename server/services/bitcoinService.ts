@@ -57,13 +57,19 @@ function calculateBitcoinForBMU(
   // Estimate BTC mined per settlement period
   const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
 
-  console.log('[Bitcoin Calculation] Calculation results:', {
-    networkHashRateTH,
+  console.log('[Bitcoin Calculation] Calculation details:', {
+    curtailedMwh,
+    curtailedKwh,
+    minerConsumptionKwh,
     potentialMiners,
+    networkHashRateTH,
     totalHashPower,
     ourNetworkShare,
     bitcoinMined,
-    usedDifficulty: difficulty
+    usedDifficulty: difficulty,
+    minerModel,
+    minerHashrate: miner.hashrate,
+    minerPower: miner.power
   });
 
   return bitcoinMined;
@@ -80,6 +86,7 @@ async function processSingleDay(
     const difficulty = await getDifficultyData(date);
     console.log(`[Bitcoin Service] Retrieved difficulty: ${difficulty}`);
 
+    // Fetch all records for the date
     const records = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
@@ -91,21 +98,23 @@ async function processSingleDay(
 
     console.log(`[Bitcoin Service] Retrieved ${records.length} curtailment records for date: ${date}`);
 
-    // Group records by period and farm
+    // Group records by period and farm, ensuring we capture all records
     const periodGroups = records.reduce((groups, record) => {
-      const key = `${record.settlementPeriod}-${record.farmId}`;
-      if (!groups[key]) {
-        groups[key] = {
+      const periodFarmKey = `${record.settlementPeriod}-${record.farmId}`;
+      if (!groups[periodFarmKey]) {
+        groups[periodFarmKey] = {
           settlementPeriod: record.settlementPeriod,
           farmId: record.farmId,
           totalVolume: 0
         };
       }
-      groups[key].totalVolume += Math.abs(Number(record.volume));
+      groups[periodFarmKey].totalVolume += Math.abs(Number(record.volume));
       return groups;
     }, {} as Record<string, { settlementPeriod: number; farmId: string; totalVolume: number; }>);
 
-    // Calculate and store results for each group
+    console.log(`[Bitcoin Service] Grouped into ${Object.keys(periodGroups).length} period-farm combinations`);
+
+    // Process each group and store results
     for (const group of Object.values(periodGroups)) {
       const bitcoinMined = calculateBitcoinForBMU(
         group.totalVolume,
@@ -113,8 +122,13 @@ async function processSingleDay(
         difficulty
       );
 
-      console.log(`[Bitcoin Service] Storing calculation with difficulty ${difficulty} for date ${date}, period ${group.settlementPeriod}, farm ${group.farmId}`);
+      console.log(`[Bitcoin Service] Calculated for period ${group.settlementPeriod}, farm ${group.farmId}:`, {
+        totalVolume: group.totalVolume,
+        bitcoinMined,
+        difficulty
+      });
 
+      // Store calculation with improved error handling
       try {
         await db.insert(historicalBitcoinCalculations).values({
           settlementDate: date,
@@ -136,8 +150,10 @@ async function processSingleDay(
             calculatedAt: new Date()
           }
         });
+
+        console.log(`[Bitcoin Service] Successfully stored calculation for period ${group.settlementPeriod}, farm ${group.farmId}`);
       } catch (error) {
-        console.error('[Bitcoin Service] Error inserting/updating calculation:', error);
+        console.error(`[Bitcoin Service] Error storing calculation for period ${group.settlementPeriod}, farm ${group.farmId}:`, error);
         throw error;
       }
     }
