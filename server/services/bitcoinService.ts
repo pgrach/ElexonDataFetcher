@@ -183,7 +183,11 @@ async function processHistoricalCalculations(
   // Process days in parallel with controlled concurrency
   const processPromises = dateRange.map(date => {
     const formattedDate = format(date, 'yyyy-MM-dd');
-    return limit(() => processSingleDay(formattedDate, minerModel));
+    return limit(() => processSingleDay(formattedDate, minerModel)
+      .catch(error => {
+        console.error(`Failed to process date ${formattedDate}:`, error);
+        throw error;
+      }));
   });
 
   try {
