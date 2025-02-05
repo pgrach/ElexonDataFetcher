@@ -203,6 +203,47 @@ export async function getHistoricalPrice(date: string): Promise<number> {
   }
 }
 
+// Add diagnostic function to check table contents directly
+export async function getDiagnosticData(date: string): Promise<void> {
+  try {
+    console.log('\n[DynamoDB Diagnostic] Starting diagnostic check...');
+
+    // 1. Check table description
+    const describeCommand = new DescribeTableCommand({ TableName: DIFFICULTY_TABLE });
+    const tableDescription = await client.send(describeCommand);
+    console.log('\n[DynamoDB Diagnostic] Table Description:', JSON.stringify(tableDescription.Table, null, 2));
+
+    // 2. Try multiple date formats
+    const formats = [
+      date,
+      format(parse(date, 'yyyy-MM-dd', new Date()), 'yyyy-MM-dd'),
+      format(parse(date, 'yyyy-MM-dd', new Date()), 'YYYY-MM-DD'),
+    ];
+
+    console.log('\n[DynamoDB Diagnostic] Trying multiple date formats:', formats);
+
+    for (const dateFormat of formats) {
+      const command = new QueryCommand({
+        TableName: DIFFICULTY_TABLE,
+        KeyConditionExpression: "#date = :date",
+        ExpressionAttributeNames: {
+          "#date": "Date",
+        },
+        ExpressionAttributeValues: {
+          ":date": dateFormat,
+        },
+      });
+
+      console.log(`\n[DynamoDB Diagnostic] Querying with date format: ${dateFormat}`);
+      const response = await docClient.send(command);
+      console.log('[DynamoDB Diagnostic] Query response:', JSON.stringify(response, null, 2));
+    }
+
+  } catch (error) {
+    console.error('[DynamoDB Diagnostic] Error during diagnostic:', error);
+  }
+}
+
 export async function getHistoricalData(date: string): Promise<DynamoDBHistoricalData> {
   console.log('[DynamoDB] Fetching both difficulty and price data...');
   try {
@@ -210,6 +251,9 @@ export async function getHistoricalData(date: string): Promise<DynamoDBHistorica
       console.error('[DynamoDB] Missing AWS credentials');
       throw new Error('AWS credentials not found');
     }
+
+    // Run diagnostics first
+    await getDiagnosticData(date);
 
     const [difficulty, price] = await Promise.all([
       getHistoricalDifficulty(date),
