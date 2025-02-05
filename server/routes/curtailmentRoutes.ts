@@ -5,6 +5,7 @@ import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations } from "@db/schema";
 import { and, eq } from "drizzle-orm";
+import { getHistoricalData } from '../services/dynamodbService';
 
 const router = Router();
 
@@ -100,9 +101,30 @@ router.get('/mining-potential', async (req, res) => {
           }))
         });
       }
+
+      // If no historical calculations found, get historical difficulty and price from DynamoDB
+      const { difficulty, price } = await getHistoricalData(formattedDate);
+      console.log('Historical data from DynamoDB:', { difficulty, price, date: formattedDate });
+
+      const result = await calculateBitcoinMining(
+        formattedDate,
+        minerModel,
+        difficulty,
+        price,
+        leadParty,
+        farmId
+      );
+
+      return res.json({
+        bitcoinMined: result.totalBitcoin,
+        valueAtCurrentPrice: result.totalValue,
+        difficulty,
+        price,
+        periodCalculations: result.periodCalculations
+      });
     }
 
-    // For today's date or if no historical data found, use live calculation
+    // For today's date, use live calculation with current difficulty and price
     const { difficulty, price } = await fetchFromMinerstat();
     console.log('Minerstat data:', { difficulty, price });
 
