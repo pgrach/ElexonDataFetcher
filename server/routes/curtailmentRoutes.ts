@@ -50,6 +50,7 @@ router.get('/mining-potential', async (req, res) => {
     const leadParty = req.query.leadParty as string;
     const farmId = req.query.farmId as string;
     const formattedDate = format(requestDate, 'yyyy-MM-dd');
+    const energy = Number(req.query.energy || 0);
 
     console.log('Mining potential request:', {
       date: formattedDate,
@@ -61,22 +62,24 @@ router.get('/mining-potential', async (req, res) => {
 
     // For historical dates, fetch from historical_bitcoin_calculations
     if (!isToday(requestDate)) {
-      const whereConditions = [
-        eq(historicalBitcoinCalculations.settlementDate, formattedDate),
-        eq(historicalBitcoinCalculations.minerModel, minerModel)
-      ];
-
-      if (farmId) {
-        whereConditions.push(eq(historicalBitcoinCalculations.farmId, farmId));
-      }
-
+      // First try to get historical calculations
       const historicalData = await db
         .select()
         .from(historicalBitcoinCalculations)
-        .where(and(...whereConditions));
+        .where(
+          and(
+            eq(historicalBitcoinCalculations.settlementDate, formattedDate),
+            eq(historicalBitcoinCalculations.minerModel, minerModel)
+          )
+        );
+
+      console.log('Historical data from DB:', {
+        found: historicalData.length > 0,
+        date: formattedDate,
+        firstRecord: historicalData[0]
+      });
 
       if (historicalData && historicalData.length > 0) {
-        // Sum up all bitcoin mined and value for the day
         const totalBitcoin = historicalData.reduce(
           (sum, record) => sum + Number(record.bitcoinMined),
           0
@@ -85,26 +88,26 @@ router.get('/mining-potential', async (req, res) => {
           (sum, record) => sum + Number(record.valueAtCurrentPrice),
           0
         );
+        const historicalDifficulty = Number(historicalData[0].difficulty);
+
+        console.log('Using historical difficulty:', historicalDifficulty);
 
         return res.json({
           bitcoinMined: totalBitcoin,
           valueAtCurrentPrice: totalValue,
-          difficulty: Number(historicalData[0].difficulty),
-          price: totalValue / totalBitcoin, // Derive price from value and bitcoin amount
-          periodCalculations: historicalData.map(record => ({
-            period: record.settlementPeriod,
-            bmuCalculations: [{
-              farmId: record.farmId,
-              bitcoinMined: Number(record.bitcoinMined),
-              valueAtCurrentPrice: Number(record.valueAtCurrentPrice)
-            }]
-          }))
+          difficulty: historicalDifficulty,
+          price: totalValue / totalBitcoin
         });
       }
 
       // If no historical calculations found, get historical difficulty and price from DynamoDB
       const { difficulty, price } = await getHistoricalData(formattedDate);
-      console.log('Historical data from DynamoDB:', { difficulty, price, date: formattedDate });
+      console.log('Historical data from DynamoDB:', { 
+        difficulty, 
+        price, 
+        date: formattedDate,
+        source: 'DynamoDB'
+      });
 
       const result = await calculateBitcoinMining(
         formattedDate,
@@ -119,14 +122,17 @@ router.get('/mining-potential', async (req, res) => {
         bitcoinMined: result.totalBitcoin,
         valueAtCurrentPrice: result.totalValue,
         difficulty,
-        price,
-        periodCalculations: result.periodCalculations
+        price
       });
     }
 
     // For today's date, use live calculation with current difficulty and price
     const { difficulty, price } = await fetchFromMinerstat();
-    console.log('Minerstat data:', { difficulty, price });
+    console.log('Current data from Minerstat:', { 
+      difficulty, 
+      price,
+      source: 'Minerstat API'
+    });
 
     const result = await calculateBitcoinMining(
       formattedDate,
@@ -141,8 +147,7 @@ router.get('/mining-potential', async (req, res) => {
       bitcoinMined: result.totalBitcoin,
       valueAtCurrentPrice: result.totalValue,
       difficulty,
-      price,
-      periodCalculations: result.periodCalculations
+      price
     });
 
   } catch (error) {

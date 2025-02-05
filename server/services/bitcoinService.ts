@@ -1,4 +1,4 @@
-import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation } from '../types/bitcoin';
+import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation, DEFAULT_DIFFICULTY } from '../types/bitcoin';
 import axios from 'axios';
 import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
@@ -24,7 +24,7 @@ function calculateBitcoinForBMU(
     minerModel,
     difficulty,
     currentPrice,
-    difficultySource: difficulty === 108105433845147 ? 'DEFAULT_DIFFICULTY' : 'DynamoDB'
+    difficultySource: difficulty === DEFAULT_DIFFICULTY ? 'DEFAULT_DIFFICULTY' : 'Historical'
   });
 
   const miner = minerModels[minerModel];
@@ -66,7 +66,8 @@ function calculateBitcoinForBMU(
     totalHashPower,
     ourNetworkShare,
     bitcoinMined,
-    valueAtCurrentPrice
+    valueAtCurrentPrice,
+    usedDifficulty: difficulty
   });
 
   return {
@@ -122,8 +123,9 @@ async function processSingleDay(
         price
       );
 
+      console.log(`[Bitcoin Service] Storing calculation with difficulty ${difficulty} for date ${date}, period ${group.settlementPeriod}, farm ${group.farmId}`);
+
       try {
-        console.log(`[Bitcoin Service] Storing calculation for ${date}, period ${group.settlementPeriod}, farm ${group.farmId} with difficulty ${difficulty}`);
         await db.insert(historicalBitcoinCalculations).values({
           settlementDate: date,
           settlementPeriod: group.settlementPeriod,
@@ -217,6 +219,15 @@ async function calculateBitcoinMining(
   totalValue: number;
   periodCalculations: any[];
 }> {
+  console.log('[Bitcoin Mining] Starting calculation with parameters:', {
+    date,
+    minerModel,
+    difficulty,
+    currentPrice,
+    leadParty,
+    farmId
+  });
+
   // Build the where clause based on filters
   const whereClause = [eq(curtailmentRecords.settlementDate, date)];
 
@@ -237,6 +248,8 @@ async function calculateBitcoinMining(
     .from(curtailmentRecords)
     .where(and(...whereClause))
     .orderBy(curtailmentRecords.settlementPeriod);
+
+  console.log(`[Bitcoin Mining] Retrieved ${periodRecords.length} records for processing`);
 
   // Group records by period
   const periodGroups = periodRecords.reduce((groups, record) => {
@@ -298,6 +311,13 @@ async function calculateBitcoinMining(
       }
     });
   }
+
+  console.log('[Bitcoin Mining] Calculation completed:', {
+    totalBitcoin,
+    totalValue,
+    usedDifficulty: difficulty,
+    periodCount: periodCalculations.length
+  });
 
   return {
     totalBitcoin,
