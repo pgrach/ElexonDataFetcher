@@ -21,7 +21,7 @@ function calculateBitcoinForBMU(
   console.log('[Bitcoin Calculation] Starting calculation with parameters:', {
     curtailedMwh,
     minerModel,
-    difficulty,
+    difficulty: difficulty.toLocaleString(),
     difficultySource: difficulty === DEFAULT_DIFFICULTY ? 'DEFAULT_DIFFICULTY' : 'Historical'
   });
 
@@ -40,7 +40,9 @@ function calculateBitcoinForBMU(
   const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
 
   // Calculate expected hashes to find a block from difficulty
-  const hashesPerBlock = difficulty * Math.pow(2, 32);
+  // Ensure difficulty is treated as a number
+  const difficultyNum = typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty;
+  const hashesPerBlock = difficultyNum * Math.pow(2, 32);
 
   // Calculate network hashrate (hashes per second)
   const networkHashRate = hashesPerBlock / 600; // 600 seconds = 10 minutes
@@ -62,11 +64,11 @@ function calculateBitcoinForBMU(
     curtailedKwh,
     minerConsumptionKwh,
     potentialMiners,
-    networkHashRateTH,
-    totalHashPower,
+    networkHashRateTH: networkHashRateTH.toLocaleString(),
+    totalHashPower: totalHashPower.toLocaleString(),
     ourNetworkShare,
     bitcoinMined,
-    usedDifficulty: difficulty,
+    usedDifficulty: difficultyNum.toLocaleString(),
     minerModel,
     minerHashrate: miner.hashrate,
     minerPower: miner.power
