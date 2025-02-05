@@ -1,11 +1,17 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, DescribeTableCommand } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { DEFAULT_DIFFICULTY, DEFAULT_PRICE, DynamoDBHistoricalData } from '../types/bitcoin';
+import { parse, format } from 'date-fns';
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
 
 const client = new DynamoDBClient({ 
   region: "us-east-1",
-  logger: console 
+  logger: console,
+  maxAttempts: MAX_RETRIES 
 });
+
 const docClient = DynamoDBDocumentClient.from(client, {
   marshallOptions: {
     convertEmptyValues: true,
@@ -17,13 +23,71 @@ const docClient = DynamoDBDocumentClient.from(client, {
 const DIFFICULTY_TABLE = "asics-dynamodb-DifficultyTable-DQ308ID3POT6";
 const PRICES_TABLE = "asics-dynamodb-PricesTable-1LXU143BUOBN";
 
+// Helper function to ensure consistent date formatting
+function formatDateForDynamoDB(dateStr: string): string {
+  try {
+    const date = parse(dateStr, 'yyyy-MM-dd', new Date());
+    return format(date, 'yyyy-MM-dd');
+  } catch (error) {
+    console.error(`[DynamoDB] Error formatting date ${dateStr}:`, error);
+    throw new Error(`Invalid date format: ${dateStr}`);
+  }
+}
+
+// Helper function to verify table existence
+async function verifyTableExists(tableName: string): Promise<boolean> {
+  try {
+    const command = new DescribeTableCommand({ TableName: tableName });
+    const response = await client.send(command);
+    console.log(`[DynamoDB] Table ${tableName} exists:`, {
+      status: response.Table?.TableStatus,
+      itemCount: response.Table?.ItemCount,
+      tableArn: response.Table?.TableArn
+    });
+    return true;
+  } catch (error) {
+    console.error(`[DynamoDB] Error verifying table ${tableName}:`, error);
+    return false;
+  }
+}
+
+// Helper function to implement retry logic
+async function retryOperation<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(`[DynamoDB] Attempt ${attempt} failed:`, error);
+      if (attempt < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export async function getHistoricalDifficulty(date: string): Promise<number> {
   try {
-    console.log(`[DynamoDB] Fetching difficulty for date: ${date} from table: ${DIFFICULTY_TABLE}`);
+    const formattedDate = formatDateForDynamoDB(date);
+    console.log(`[DynamoDB] Fetching difficulty for date: ${formattedDate} from table: ${DIFFICULTY_TABLE}`);
+
+    // Verify AWS credentials and table existence
     console.log('[DynamoDB] AWS credentials status:', {
       hasAccessKeyId: !!process.env.AWS_ACCESS_KEY_ID,
-      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY
+      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+      region: client.config.region,
+      table: DIFFICULTY_TABLE
     });
+
+    const tableExists = await verifyTableExists(DIFFICULTY_TABLE);
+    if (!tableExists) {
+      console.error(`[DynamoDB] Table ${DIFFICULTY_TABLE} does not exist`);
+      return DEFAULT_DIFFICULTY;
+    }
 
     const command = new QueryCommand({
       TableName: DIFFICULTY_TABLE,
@@ -32,28 +96,63 @@ export async function getHistoricalDifficulty(date: string): Promise<number> {
         "#date": "Date",
       },
       ExpressionAttributeValues: {
-        ":date": date,
+        ":date": formattedDate,
       },
       Limit: 1,
     });
 
-    console.log('[DynamoDB] Sending query command for difficulty...');
-    const response = await docClient.send(command);
-    console.log('[DynamoDB] Received response:', JSON.stringify(response.Items, null, 2));
+    console.log('[DynamoDB] Query command parameters:', {
+      TableName: command.input.TableName,
+      KeyConditionExpression: command.input.KeyConditionExpression,
+      ExpressionAttributeValues: command.input.ExpressionAttributeValues
+    });
+
+    const response = await retryOperation(() => docClient.send(command));
+    console.log('[DynamoDB] Raw DynamoDB response:', JSON.stringify(response, null, 2));
+    console.log('[DynamoDB] Items returned:', response.Items?.length || 0);
+
+    if (response.Items?.[0]) {
+      console.log('[DynamoDB] First item:', JSON.stringify(response.Items[0], null, 2));
+    } else {
+      console.warn(`[DynamoDB] No items found for date: ${formattedDate}`);
+    }
 
     if (!response.Items || response.Items.length === 0) {
-      console.warn(`[DynamoDB] No difficulty data found for date: ${date}, using default value: ${DEFAULT_DIFFICULTY}`);
+      console.warn(`[DynamoDB] No difficulty data found for date: ${formattedDate}, using default value: ${DEFAULT_DIFFICULTY}`);
       return DEFAULT_DIFFICULTY;
     }
 
-    const difficulty = Number(response.Items[0].Difficulty);
-    console.log(`[DynamoDB] Retrieved difficulty for ${date}: ${difficulty}`);
+    // Log the structure of the first item to understand the actual column names
+    console.log('[DynamoDB] Item structure:', Object.keys(response.Items[0]));
+
+    // Try different possible column names for difficulty
+    const difficultyValue = response.Items[0].Difficulty || response.Items[0].difficulty || response.Items[0].DIFFICULTY;
+
+    if (difficultyValue === undefined) {
+      console.error('[DynamoDB] Could not find difficulty value in response item:', response.Items[0]);
+      return DEFAULT_DIFFICULTY;
+    }
+
+    const difficulty = Number(difficultyValue);
+    if (isNaN(difficulty)) {
+      console.error(`[DynamoDB] Invalid difficulty value in response:`, difficultyValue);
+      return DEFAULT_DIFFICULTY;
+    }
+
+    console.log(`[DynamoDB] Retrieved difficulty for ${formattedDate}: ${difficulty}`);
     return difficulty;
   } catch (error) {
     console.error('[DynamoDB] Error fetching historical difficulty:', error);
     if (error instanceof Error) {
       console.error('[DynamoDB] Error details:', error.message);
       console.error('[DynamoDB] Error stack:', error.stack);
+      console.error('[DynamoDB] Error name:', error.name);
+
+      if (error.name === 'AccessDeniedException') {
+        console.error('[DynamoDB] Access denied to table. Please check IAM permissions');
+      } else if (error.name === 'ResourceNotFoundException') {
+        console.error('[DynamoDB] Table not found. Please check table name and region');
+      }
     }
     console.warn(`[DynamoDB] Using default difficulty value: ${DEFAULT_DIFFICULTY}`);
     return DEFAULT_DIFFICULTY;
@@ -62,7 +161,8 @@ export async function getHistoricalDifficulty(date: string): Promise<number> {
 
 export async function getHistoricalPrice(date: string): Promise<number> {
   try {
-    console.log(`[DynamoDB] Fetching price for date: ${date} from table: ${PRICES_TABLE}`);
+    const formattedDate = formatDateForDynamoDB(date);
+    console.log(`[DynamoDB] Fetching price for date: ${formattedDate} from table: ${PRICES_TABLE}`);
 
     const command = new QueryCommand({
       TableName: PRICES_TABLE,
@@ -71,21 +171,26 @@ export async function getHistoricalPrice(date: string): Promise<number> {
         "#date": "Date",
       },
       ExpressionAttributeValues: {
-        ":date": date,
+        ":date": formattedDate,
       },
       Limit: 1,
     });
 
     const response = await docClient.send(command);
-    console.log(`[DynamoDB] Received price response:`, JSON.stringify(response.Items, null, 2));
+    console.log('[DynamoDB] Raw price response:', JSON.stringify(response, null, 2));
 
     if (!response.Items || response.Items.length === 0) {
-      console.warn(`[DynamoDB] No price data found for date: ${date}, using default value: ${DEFAULT_PRICE}`);
+      console.warn(`[DynamoDB] No price data found for date: ${formattedDate}, using default value: ${DEFAULT_PRICE}`);
       return DEFAULT_PRICE;
     }
 
     const price = Number(response.Items[0].Price);
-    console.log(`[DynamoDB] Retrieved price for ${date}: ${price}`);
+    if (isNaN(price)) {
+      console.error(`[DynamoDB] Invalid price value in response:`, response.Items[0].Price);
+      return DEFAULT_PRICE;
+    }
+
+    console.log(`[DynamoDB] Retrieved price for ${formattedDate}: ${price}`);
     return price;
   } catch (error) {
     console.error('[DynamoDB] Error fetching historical price:', error);
@@ -100,9 +205,7 @@ export async function getHistoricalPrice(date: string): Promise<number> {
 
 export async function getHistoricalData(date: string): Promise<DynamoDBHistoricalData> {
   console.log('[DynamoDB] Fetching both difficulty and price data...');
-
   try {
-    // Add AWS credentials check
     if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
       console.error('[DynamoDB] Missing AWS credentials');
       throw new Error('AWS credentials not found');
@@ -113,7 +216,14 @@ export async function getHistoricalData(date: string): Promise<DynamoDBHistorica
       getHistoricalPrice(date)
     ]);
 
-    console.log('[DynamoDB] Retrieved data:', { difficulty, price });
+    console.log('[DynamoDB] Retrieved data:', { 
+      date,
+      difficulty,
+      price,
+      isDefaultDifficulty: difficulty === DEFAULT_DIFFICULTY,
+      isDefaultPrice: price === DEFAULT_PRICE
+    });
+
     return { difficulty, price };
   } catch (error) {
     console.error('[DynamoDB] Error in getHistoricalData:', error);
