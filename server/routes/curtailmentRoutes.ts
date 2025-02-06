@@ -44,7 +44,7 @@ router.post('/historical-calculations', async (req, res) => {
 
 router.post('/regenerate-historical', async (req, res) => {
   try {
-    const { date, minerModel = 'S19J_PRO' } = req.body;
+    const { date, minerModel } = req.body;
 
     // Validate date
     if (!date || !isValid(parseISO(date))) {
@@ -53,23 +53,31 @@ router.post('/regenerate-historical', async (req, res) => {
       });
     }
 
-    console.log(`Starting regeneration for date: ${date} with miner model: ${minerModel}`);
+    console.log(`Starting regeneration for date: ${date}`);
 
     // Get historical difficulty data
     const difficulty = await getDifficultyData(date);
     console.log('Retrieved historical difficulty:', difficulty);
 
-    // Delete existing calculations for this date
+    // Process for all supported miner models if no specific model is provided
+    const minerModels = minerModel ? [minerModel] : ['S19J_PRO', 'S9', 'M20S'];
+
+    // Delete existing calculations for this date and specified models
     await db.delete(historicalBitcoinCalculations)
       .where(
         and(
           eq(historicalBitcoinCalculations.settlementDate, date),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
+          minerModel ? eq(historicalBitcoinCalculations.minerModel, minerModel) : undefined
         )
       );
 
-    // Process the single day with the verified historical data
-    await processSingleDay(date, minerModel);
+    // Process each miner model
+    for (const model of minerModels) {
+      await processSingleDay(date, model)
+        .catch(error => {
+          console.error(`Error processing Bitcoin calculations for ${date} with ${model}:`, error);
+        });
+    }
 
     // Verify the regenerated data
     const regeneratedData = await db
@@ -78,21 +86,21 @@ router.post('/regenerate-historical', async (req, res) => {
       .where(
         and(
           eq(historicalBitcoinCalculations.settlementDate, date),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
+          minerModel ? eq(historicalBitcoinCalculations.minerModel, minerModel) : undefined
         )
       );
 
     console.log('Regenerated data verification:', {
       date,
       recordCount: regeneratedData.length,
-      sampleDifficulty: regeneratedData[0]?.difficulty,
-      minerModel
+      minerModels: minerModels.join(', '),
+      sampleDifficulty: regeneratedData[0]?.difficulty
     });
 
     res.json({
       message: 'Historical calculations regenerated',
       date,
-      minerModel,
+      minerModels,
       recordCount: regeneratedData.length,
       difficulty
     });
