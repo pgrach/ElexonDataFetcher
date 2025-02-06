@@ -4,6 +4,7 @@ import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays, subMonth
 import { processDailyCurtailment } from "./curtailment";
 import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
+import { processSingleDay } from "./bitcoinService";
 
 const MAX_CONCURRENT_DAYS = 5;
 const RECONCILIATION_HOUR = 3; // Run at 3 AM to ensure all updates are captured
@@ -116,6 +117,21 @@ export async function reconcileDay(date: string): Promise<void> {
         energy: `${Number(summary?.totalCurtailedEnergy || 0).toFixed(2)} MWh`,
         payment: `£${Number(summary?.totalPayment || 0).toFixed(2)}`
       });
+
+      // Update Bitcoin calculations after curtailment data is updated
+      console.log(`[${date}] Updating Bitcoin calculations...`);
+
+      // Process for each miner model to maintain historical calculations
+      const minerModels = ['S19J_PRO', 'S9', 'M20S'];
+      for (const minerModel of minerModels) {
+        await processSingleDay(date, minerModel)
+          .catch(error => {
+            console.error(`Error processing Bitcoin calculations for ${date} with ${minerModel}:`, error);
+            // Continue with other models even if one fails
+          });
+      }
+
+      console.log(`[${date}] Bitcoin calculations updated`);
     } else {
       console.log(`[${date}] Data is up to date`);
     }
