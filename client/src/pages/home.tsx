@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, isValid, isToday } from "date-fns";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -165,11 +165,7 @@ export default function Home() {
       !!dailyData?.totalCurtailedEnergy,
   });
 
-  const {
-    data: monthlyData,
-    isLoading: isMonthlyLoading,
-    error: monthlyError,
-  } = useQuery<MonthlySummary>({
+  const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
     queryKey: [
       `/api/summary/monthly/${format(date, "yyyy-MM")}`,
       selectedLeadParty,
@@ -203,11 +199,7 @@ export default function Home() {
     enabled: !!date && isValid(date),
   });
 
-  const {
-    data: yearlyData,
-    isLoading: isYearlyLoading,
-    error: yearlyError,
-  } = useQuery<YearlySummary>({
+  const { data: yearlyData, isLoading: isYearlyLoading, error: yearlyError } = useQuery<YearlySummary>({
     queryKey: [
       `/api/summary/yearly/${format(date, "yyyy")}`,
       selectedLeadParty,
@@ -270,6 +262,16 @@ export default function Home() {
     }
     return selectedDate > now;
   };
+
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+      queryClient.invalidateQueries({ queryKey: [`/api/summary/daily/${formattedDate}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/summary/monthly/${format(date, "yyyy-MM")}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/summary/yearly/${format(date, "yyyy")}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/curtailment/hourly/${formattedDate}`] });
+  }, [date, queryClient]);
+
 
   return (
     <div className="min-h-screen">
