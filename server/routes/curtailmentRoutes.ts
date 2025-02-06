@@ -134,17 +134,18 @@ router.get('/mining-potential', async (req, res) => {
       isToday: isToday(requestDate)
     });
 
-    // Always fetch current price for fiat conversion
-    const { difficulty: currentDifficulty, price: currentPrice } = await fetchFromMinerstat();
-    console.log('Current data from Minerstat:', { 
-      difficulty: currentDifficulty, 
-      price: currentPrice,
-      source: 'Minerstat API'
-    });
+    // Get current price for fiat conversion
+    const { price: currentPrice } = await fetchFromMinerstat();
+    let difficulty;
 
     // For historical dates, get stored calculations
     if (!isToday(requestDate)) {
-      // First try to get historical calculations
+      // First try to get historical difficulty
+      console.log(`Getting historical difficulty for ${formattedDate}`);
+      difficulty = await getDifficultyData(formattedDate);
+      console.log(`Using historical difficulty for ${formattedDate}:`, difficulty.toLocaleString());
+
+      // Check for existing historical calculations
       const historicalData = await db
         .select()
         .from(historicalBitcoinCalculations)
@@ -158,7 +159,8 @@ router.get('/mining-potential', async (req, res) => {
       console.log('Historical data from DB:', {
         found: historicalData.length > 0,
         date: formattedDate,
-        firstRecord: historicalData[0]
+        firstRecord: historicalData[0],
+        difficulty: difficulty.toLocaleString()
       });
 
       if (historicalData && historicalData.length > 0) {
@@ -174,13 +176,18 @@ router.get('/mining-potential', async (req, res) => {
           currentPrice
         });
       }
+    } else {
+      // For today, use current network difficulty
+      const { difficulty: currentDifficulty } = await fetchFromMinerstat();
+      difficulty = currentDifficulty;
+      console.log(`Using current difficulty for today:`, difficulty.toLocaleString());
     }
 
-    // For today or missing historical data, calculate using current difficulty
+    // Calculate using appropriate difficulty
     const result = await calculateBitcoinMining(
       formattedDate,
       minerModel,
-      currentDifficulty,
+      difficulty,
       currentPrice,
       leadParty,
       farmId
@@ -189,7 +196,7 @@ router.get('/mining-potential', async (req, res) => {
     res.json({
       bitcoinMined: result.totalBitcoin,
       valueAtCurrentPrice: result.totalBitcoin * currentPrice,
-      difficulty: currentDifficulty,
+      difficulty,
       currentPrice
     });
 
