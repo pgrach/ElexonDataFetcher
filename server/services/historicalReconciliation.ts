@@ -121,17 +121,17 @@ export async function reconcileDay(date: string): Promise<void> {
       // Update Bitcoin calculations after curtailment data is updated
       console.log(`[${date}] Updating Bitcoin calculations...`);
 
-      // Process for each miner model to maintain historical calculations
-      const minerModels = ['S19J_PRO', 'S9', 'M20S'];
+      // Process for S19J_PRO and S9 models to maintain historical calculations
+      const minerModels = ['S19J_PRO', 'S9'];  // Only process these two models for now
       for (const minerModel of minerModels) {
         await processSingleDay(date, minerModel)
           .catch(error => {
             console.error(`Error processing Bitcoin calculations for ${date} with ${minerModel}:`, error);
-            // Continue with other models even if one fails
+            // Continue with other model even if one fails
           });
       }
 
-      console.log(`[${date}] Bitcoin calculations updated`);
+      console.log(`[${date}] Bitcoin calculations updated for models: ${minerModels.join(', ')}`);
     } else {
       console.log(`[${date}] Data is up to date`);
     }
