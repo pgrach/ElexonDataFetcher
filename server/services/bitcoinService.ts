@@ -13,6 +13,178 @@ const SETTLEMENT_PERIOD_MINUTES = 30; // Each settlement period is 30 minutes
 const BLOCKS_PER_SETTLEMENT_PERIOD = 3; // 3 blocks per 30 minutes (1 block every 10 minutes)
 const MAX_CONCURRENT_DAYS = 5; // Maximum number of days to process concurrently
 
+// Shared difficulty cache
+const DIFFICULTY_CACHE = new Map<string, string>();
+const PROCESSING_LOCK = new Map<string, Promise<void>>();
+const MAX_CONCURRENT_MINERS = 3;
+
+async function prefetchDifficultyData(dates: string[]): Promise<Map<string, string>> {
+  const uncachedDates = dates.filter(date => !DIFFICULTY_CACHE.has(date));
+
+  if (uncachedDates.length > 0) {
+    console.log(`[Bitcoin Service] Prefetching difficulty data for ${uncachedDates.length} dates`);
+
+    for (const date of uncachedDates) {
+      try {
+        const difficulty = await getDifficultyData(date);
+        DIFFICULTY_CACHE.set(date, difficulty.toString());
+        console.log(`[Bitcoin Service] Cached difficulty for ${date}: ${difficulty.toLocaleString()}`);
+      } catch (error) {
+        console.error(`[Bitcoin Service] Error fetching difficulty for ${date}:`, error);
+        DIFFICULTY_CACHE.set(date, DEFAULT_DIFFICULTY.toString());
+      }
+    }
+  }
+
+  return DIFFICULTY_CACHE;
+}
+
+async function processSingleDay(
+  date: string,
+  minerModel: string
+): Promise<void> {
+  const lockKey = `${date}_${minerModel}`;
+
+  // Check if this combination is already being processed
+  if (PROCESSING_LOCK.has(lockKey)) {
+    console.log(`[Bitcoin Service] Waiting for existing process: ${lockKey}`);
+    await PROCESSING_LOCK.get(lockKey);
+    return;
+  }
+
+  // Create a new processing promise
+  const processingPromise = (async () => {
+    try {
+      console.log(`[Bitcoin Service] Processing date: ${date} for model ${minerModel}`);
+
+      // Check existing records
+      const existingRecords = await db
+        .select({
+          count: sql<number>`count(*)::int`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            eq(historicalBitcoinCalculations.settlementDate, date),
+            eq(historicalBitcoinCalculations.minerModel, minerModel)
+          )
+        );
+
+      const recordCount = existingRecords[0]?.count || 0;
+
+      if (recordCount > 0) {
+        console.log(`[Bitcoin Service] Skipping ${date} for ${minerModel} - already processed`);
+        return;
+      }
+
+      // Check for curtailment records
+      const curtailmentCount = await db
+        .select({
+          count: sql<number>`count(*)::int`
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.settlementDate, date));
+
+      if (curtailmentCount[0]?.count === 0) {
+        console.log(`[Bitcoin Service] No curtailment records found for ${date}, skipping`);
+        return;
+      }
+
+      // Use cached difficulty data
+      const difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
+
+      // Fetch all records for the date
+      const records = await db
+        .select()
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.settlementDate, date));
+
+      if (records.length === 0) {
+        console.log(`[Bitcoin Service] No curtailment records to process for ${date}`);
+        return;
+      }
+
+      // Process in transaction for atomicity
+      await db.transaction(async (tx) => {
+        // Group and process records
+        const periodGroups = records.reduce((groups, record) => {
+          const key = `${record.settlementPeriod}`;
+          if (!groups[key]) {
+            groups[key] = {
+              settlementPeriod: record.settlementPeriod,
+              totalVolume: 0,
+              farms: new Map<string, number>()
+            };
+          }
+          const absVolume = Math.abs(Number(record.volume));
+          groups[key].totalVolume += absVolume;
+          const currentFarmTotal = groups[key].farms.get(record.farmId) || 0;
+          groups[key].farms.set(record.farmId, currentFarmTotal + absVolume);
+          return groups;
+        }, {} as Record<string, {
+          settlementPeriod: number;
+          totalVolume: number;
+          farms: Map<string, number>;
+        }>);
+
+        // Bulk insert preparation
+        const calculations = [];
+
+        for (const periodData of Object.values(periodGroups)) {
+          const periodBitcoin = calculateBitcoinForBMU(
+            periodData.totalVolume,
+            minerModel,
+            parseFloat(difficulty)
+          );
+
+          for (const [farmId, farmVolume] of periodData.farms.entries()) {
+            const farmShare = farmVolume / periodData.totalVolume;
+            const farmBitcoin = (periodBitcoin * farmShare).toFixed(8);
+
+            calculations.push({
+              settlementDate: date,
+              settlementPeriod: periodData.settlementPeriod,
+              farmId: farmId,
+              minerModel,
+              bitcoinMined: farmBitcoin,
+              difficulty: difficulty
+            });
+          }
+        }
+
+        // Bulk insert all calculations
+        if (calculations.length > 0) {
+          await tx.insert(historicalBitcoinCalculations)
+            .values(calculations)
+            .onConflictDoUpdate({
+              target: [
+                historicalBitcoinCalculations.settlementDate,
+                historicalBitcoinCalculations.settlementPeriod,
+                historicalBitcoinCalculations.farmId,
+                historicalBitcoinCalculations.minerModel
+              ],
+              set: {
+                bitcoinMined: sql`EXCLUDED.bitcoin_mined`,
+                difficulty: sql`EXCLUDED.difficulty`,
+                calculatedAt: new Date()
+              }
+            });
+        }
+      });
+
+      console.log(`[Bitcoin Service] Completed processing for date: ${date}, model: ${minerModel}`);
+    } finally {
+      PROCESSING_LOCK.delete(lockKey);
+    }
+  })();
+
+  // Store the promise in the lock map
+  PROCESSING_LOCK.set(lockKey, processingPromise);
+
+  // Wait for processing to complete
+  await processingPromise;
+}
+
 function calculateBitcoinForBMU(
   curtailedMwh: number,
   minerModel: string,
@@ -77,135 +249,6 @@ function calculateBitcoinForBMU(
   return bitcoinMined;
 }
 
-async function processSingleDay(
-  date: string,
-  minerModel: string
-): Promise<void> {
-  console.log(`[Bitcoin Service] Processing date: ${date} for model ${minerModel}`);
-
-  try {
-    // First check if calculations already exist for this date and model
-    const existingRecords = await db
-      .select({
-        count: sql<number>`count(*)::int`
-      })
-      .from(historicalBitcoinCalculations)
-      .where(
-        and(
-          eq(historicalBitcoinCalculations.settlementDate, date),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
-        )
-      );
-
-    const recordCount = existingRecords[0]?.count || 0;
-    console.log(`[Bitcoin Service] Found ${recordCount} existing records for ${date} and ${minerModel}`);
-
-    if (recordCount > 0) {
-      console.log(`[Bitcoin Service] Skipping ${date} for ${minerModel} - already processed`);
-      return;
-    }
-
-    console.log(`[Bitcoin Service] Fetching difficulty data for date: ${date}`);
-    const difficulty = await getDifficultyData(date);
-    console.log(`[Bitcoin Service] Retrieved difficulty: ${difficulty.toLocaleString()} for ${date}`);
-
-    // Fetch all records for the date
-    const records = await db
-      .select({
-        settlementPeriod: curtailmentRecords.settlementPeriod,
-        farmId: curtailmentRecords.farmId,
-        volume: curtailmentRecords.volume
-      })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date));
-
-    console.log(`[Bitcoin Service] Retrieved ${records.length} curtailment records for date: ${date}`);
-
-    // Group records by period and farm
-    const periodGroups = records.reduce((groups, record) => {
-      const key = `${record.settlementPeriod}`;
-      if (!groups[key]) {
-        groups[key] = {
-          settlementPeriod: record.settlementPeriod,
-          totalVolume: 0,
-          farms: new Map<string, number>()
-        };
-      }
-      // Add absolute volume to both period total and farm-specific total
-      const absVolume = Math.abs(Number(record.volume));
-      groups[key].totalVolume += absVolume;
-      const currentFarmTotal = groups[key].farms.get(record.farmId) || 0;
-      groups[key].farms.set(record.farmId, currentFarmTotal + absVolume);
-      return groups;
-    }, {} as Record<string, {
-      settlementPeriod: number;
-      totalVolume: number;
-      farms: Map<string, number>;
-    }>);
-
-    console.log(`[Bitcoin Service] Processing ${Object.keys(periodGroups).length} settlement periods with difficulty ${difficulty.toLocaleString()}`);
-
-    // Process each period
-    for (const periodData of Object.values(periodGroups)) {
-      console.log(`[Bitcoin Service] Processing period ${periodData.settlementPeriod}:`, {
-        totalVolume: periodData.totalVolume,
-        numberOfFarms: periodData.farms.size,
-        difficulty: difficulty.toLocaleString(),
-        minerModel
-      });
-
-      // Calculate total Bitcoin for the period
-      const periodBitcoin = calculateBitcoinForBMU(
-        periodData.totalVolume,
-        minerModel,
-        difficulty
-      );
-
-      // Distribute Bitcoin among farms proportionally
-      for (const [farmId, farmVolume] of periodData.farms) {
-        const farmShare = farmVolume / periodData.totalVolume;
-        const farmBitcoin = (periodBitcoin * farmShare).toFixed(8);
-
-        console.log(`[Bitcoin Service] Farm ${farmId} calculation:`, {
-          farmVolume,
-          totalVolume: periodData.totalVolume,
-          share: farmShare,
-          bitcoin: farmBitcoin,
-          difficulty: difficulty.toLocaleString(),
-          minerModel
-        });
-
-        // Store calculation
-        await db.insert(historicalBitcoinCalculations).values({
-          settlementDate: date,
-          settlementPeriod: periodData.settlementPeriod,
-          farmId: farmId,
-          minerModel,
-          bitcoinMined: farmBitcoin,
-          difficulty: difficulty.toString()
-        }).onConflictDoUpdate({
-          target: [
-            historicalBitcoinCalculations.settlementDate,
-            historicalBitcoinCalculations.settlementPeriod,
-            historicalBitcoinCalculations.farmId,
-            historicalBitcoinCalculations.minerModel
-          ],
-          set: {
-            bitcoinMined: farmBitcoin,
-            difficulty: difficulty.toString(),
-            calculatedAt: new Date()
-          }
-        });
-      }
-    }
-
-    console.log(`[Bitcoin Service] Completed processing for date: ${date}, model: ${minerModel}, difficulty: ${difficulty.toLocaleString()}`);
-  } catch (error) {
-    console.error(`[Bitcoin Service] Error processing date ${date}:`, error);
-    throw error;
-  }
-}
-
 async function processHistoricalCalculations(
   startDate: string,
   endDate: string,
@@ -218,22 +261,28 @@ async function processHistoricalCalculations(
     end: parseISO(endDate)
   });
 
-  // Create a limit function to control concurrency
-  const limit = pLimit(MAX_CONCURRENT_DAYS);
+  // Prefetch ALL difficulty data at once
+  const dates = dateRange.map(date => format(date, 'yyyy-MM-dd'));
+  await prefetchDifficultyData(dates);
 
-  // Process days in parallel with controlled concurrency
-  const processPromises = dateRange.map(date => {
-    const formattedDate = format(date, 'yyyy-MM-dd');
-    return limit(() => processSingleDay(formattedDate, minerModel)
-      .catch(error => {
-        console.error(`Failed to process date ${formattedDate}:`, error);
+  // Process miner models in parallel with concurrency limit
+  const limit = pLimit(MAX_CONCURRENT_MINERS);
+  const MINER_MODELS = Object.keys(minerModels);
+
+  const minerPromises = MINER_MODELS.map(model =>
+    limit(async () => {
+      try {
+        await processSingleDay(startDate, model);
+      } catch (error) {
+        console.error(`Failed to process ${model} for ${startDate}:`, error);
         throw error;
-      }));
-  });
+      }
+    })
+  );
 
   try {
-    await Promise.all(processPromises);
-    console.log('Completed processing all dates');
+    await Promise.all(minerPromises);
+    console.log(`Completed processing all miner models for ${startDate}`);
   } catch (error) {
     console.error('Error during parallel processing:', error);
     throw error;
@@ -380,5 +429,6 @@ export {
   calculateBitcoinMining,
   processHistoricalCalculations,
   fetchFromMinerstat,
-  processSingleDay
+  processSingleDay,
+  prefetchDifficultyData
 };

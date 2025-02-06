@@ -1,18 +1,65 @@
-import { format, eachDayOfInterval, isValid, addWeeks, startOfWeek, endOfWeek, isBefore } from 'date-fns';
+import { format, eachDayOfInterval, isValid, addDays, isBefore } from 'date-fns';
 import { minerModels } from '../types/bitcoin';
-import { processSingleDay } from '../services/bitcoinService';
+import { processSingleDay, prefetchDifficultyData } from '../services/bitcoinService';
 import { db } from "@db";
 import { historicalBitcoinCalculations, curtailmentRecords } from "@db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import pLimit from 'p-limit';
 
 const START_DATE = '2024-01-01';
 const END_DATE = '2024-12-31';
-const MAX_CONCURRENT_DAYS = 3; // Reduced for better stability
+const BATCH_SIZE = 1; // Process 1 day at a time to prevent timeouts
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000; // 2 seconds between retries
 const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
+
+interface ProcessingProgress {
+  lastProcessedDate: string;
+  totalProcessed: number;
+  failures: Array<{
+    date: string;
+    minerModel: string;
+    error: string;
+  }>;
+}
+
+async function getLastProcessedDate(): Promise<string | null> {
+  try {
+    const lastRecord = await db
+      .select()
+      .from(historicalBitcoinCalculations)
+      .orderBy(historicalBitcoinCalculations.settlementDate)
+      .limit(1);
+
+    return lastRecord[0]?.settlementDate || null;
+  } catch (error) {
+    console.error('Error getting last processed date:', error);
+    return null;
+  }
+}
 
 async function verifyDayCalculations(date: string, minerModel: string) {
   try {
+    // First check if there are any curtailment records for this date
+    const curtailments = await db
+      .select({
+        count: sql<number>`count(*)::int`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date));
+
+    // If no curtailment records exist, the day is considered complete
+    if (curtailments[0]?.count === 0) {
+      console.log(`No curtailment records found for ${date}, marking as complete`);
+      return {
+        recordCount: 0,
+        curtailmentCount: 0,
+        difficulty: null,
+        totalBitcoin: 0,
+        isComplete: true // Mark as complete since there's nothing to process
+      };
+    }
+
     // Verify historical calculations exist
     const records = await db
       .select()
@@ -24,149 +71,140 @@ async function verifyDayCalculations(date: string, minerModel: string) {
         )
       );
 
-    // Verify curtailment records exist
-    const curtailments = await db
-      .select()
-      .from(curtailmentRecords)
-      .where(
-        eq(curtailmentRecords.settlementDate, date)
-      );
-
     const bitcoinMined = records.reduce((sum, r) => sum + Number(r.bitcoinMined), 0);
 
     return {
       recordCount: records.length,
-      curtailmentCount: curtailments.length,
+      curtailmentCount: curtailments[0]?.count || 0,
       difficulty: records[0]?.difficulty,
       totalBitcoin: bitcoinMined,
-      isComplete: records.length > 0 && records[0]?.difficulty !== null && curtailments.length > 0
+      isComplete: records.length > 0 && records[0]?.difficulty !== null
     };
   } catch (error) {
     console.error(`Error verifying calculations for ${date} - ${minerModel}:`, error);
-    return {
-      recordCount: 0,
-      curtailmentCount: 0,
-      difficulty: null,
-      totalBitcoin: 0,
-      isComplete: false
-    };
+    throw error;
   }
 }
 
-async function processWeeklyBatch(startDate: Date, endDate: Date) {
-  console.log(`\n=== Processing Weekly Batch ===`);
-  console.log(`Date Range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
+async function processBatch(date: Date, progress: ProcessingProgress): Promise<boolean> {
+  const formattedDate = format(date, 'yyyy-MM-dd');
+  console.log(`\n=== Processing Date: ${formattedDate} ===`);
 
-  const dateRange = eachDayOfInterval({
-    start: startDate,
-    end: endDate
-  });
+  // Prefetch difficulty data for the date
+  await prefetchDifficultyData([formattedDate]);
 
-  // Create a limit function to control concurrency
-  const limit = pLimit(MAX_CONCURRENT_DAYS);
-  let retryQueue: { date: string; minerModel: string }[] = [];
-  let totalProcessed = 0;
-  const totalToProcess = dateRange.length * MINER_MODELS.length;
+  let batchSuccess = true;
+  let retryQueue: { minerModel: string; retryCount: number }[] = [];
 
-  console.log(`Total days to process: ${dateRange.length}`);
-  console.log(`Total calculations to perform: ${totalToProcess}\n`);
+  for (const minerModel of MINER_MODELS) {
+    try {
+      console.log(`- Processing ${minerModel}`);
 
-  // Process each date for all miner models
-  const processPromises = dateRange.map(date => {
-    const formattedDate = format(date, 'yyyy-MM-dd');
+      // First verify if we already have complete data
+      const existingData = await verifyDayCalculations(formattedDate, minerModel);
+      if (existingData.isComplete) {
+        console.log(`✓ Data already exists for ${minerModel} on ${formattedDate}`);
+        progress.totalProcessed++;
+        continue;
+      }
 
-    return limit(async () => {
-      console.log(`\nProcessing date: ${formattedDate}`);
+      // Process with retries
+      let success = false;
+      let attempt = 0;
 
-      for (const minerModel of MINER_MODELS) {
+      while (!success && attempt < MAX_RETRIES) {
         try {
-          console.log(`- Starting calculations for ${minerModel}`);
+          await db.transaction(async (tx) => {
+            await processSingleDay(formattedDate, minerModel);
+          });
+          success = true;
+        } catch (error) {
+          attempt++;
+          console.error(`Attempt ${attempt} failed for ${minerModel} on ${formattedDate}:`, error);
 
-          // First verify if we already have complete data
-          const existingData = await verifyDayCalculations(formattedDate, minerModel);
-          if (existingData.isComplete) {
-            console.log(`✓ Data already exists for ${minerModel} on ${formattedDate}`);
-            totalProcessed++;
-            continue;
-          }
-
-          // Process the day within a transaction
-          try {
-            await db.transaction(async (tx) => {
-              await processSingleDay(formattedDate, minerModel);
-            });
-          } catch (error) {
-            console.error(`Failed to process date ${formattedDate} in transaction:`, error);
+          if (attempt === MAX_RETRIES) {
             throw error;
           }
 
-          // Verify the calculations
-          const verification = await verifyDayCalculations(formattedDate, minerModel);
-
-          if (!verification.isComplete) {
-            console.log(`! Incomplete data for ${minerModel} on ${formattedDate}, adding to retry queue`);
-            retryQueue.push({ date: formattedDate, minerModel });
-          } else {
-            console.log(`✓ Completed ${minerModel} for ${formattedDate}:`, {
-              records: verification.recordCount,
-              curtailments: verification.curtailmentCount,
-              difficulty: verification.difficulty,
-              totalBitcoin: verification.totalBitcoin.toFixed(8)
-            });
-          }
-
-          totalProcessed++;
-          const progress = ((totalProcessed / totalToProcess) * 100).toFixed(1);
-          console.log(`Progress: ${progress}% (${totalProcessed}/${totalToProcess})`);
-
-        } catch (error) {
-          console.error(`× Error processing ${minerModel} for ${formattedDate}:`, error);
-          retryQueue.push({ date: formattedDate, minerModel });
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * Math.pow(2, attempt)));
         }
-
-        // Add a small delay between iterations to prevent overwhelming DynamoDB
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Increased delay
       }
-    });
-  });
 
-  try {
-    await Promise.all(processPromises);
-    console.log('\nCompleted initial processing of weekly batch');
+      // Verify the calculations after processing
+      const verification = await verifyDayCalculations(formattedDate, minerModel);
 
-    // Handle retry queue
-    if (retryQueue.length > 0) {
-      console.log(`\nProcessing retry queue (${retryQueue.length} items)...`);
-      for (const item of retryQueue) {
-        console.log(`Retrying ${item.minerModel} for ${item.date}`);
-        try {
-          await db.transaction(async (tx) => {
-            await processSingleDay(item.date, item.minerModel);
-          });
-
-          const verification = await verifyDayCalculations(item.date, item.minerModel);
-          if (verification.isComplete) {
-            console.log(`✓ Retry successful for ${item.minerModel} on ${item.date}`);
-          } else {
-            console.error(`! Failed retry for ${item.minerModel} on ${item.date} - incomplete data`);
-          }
-        } catch (error) {
-          console.error(`× Failed retry for ${item.minerModel} on ${item.date}:`, error);
-        }
-        // Add delay between retries
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Increased delay for retries
+      if (!verification.isComplete) {
+        console.log(`! Incomplete data for ${minerModel}, will retry`);
+        retryQueue.push({ minerModel, retryCount: 0 });
+        batchSuccess = false;
+      } else {
+        console.log(`✓ Completed ${minerModel} for ${formattedDate}:`, {
+          records: verification.recordCount,
+          curtailments: verification.curtailmentCount,
+          totalBitcoin: verification.totalBitcoin.toFixed(8)
+        });
       }
+
+      progress.totalProcessed++;
+      progress.lastProcessedDate = formattedDate;
+
+    } catch (error) {
+      console.error(`× Error processing ${minerModel} for ${formattedDate}:`, error);
+      progress.failures.push({
+        date: formattedDate,
+        minerModel,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      batchSuccess = false;
     }
 
-    return {
-      totalProcessed,
-      retryQueueSize: retryQueue.length,
-      isComplete: retryQueue.length === 0
-    };
-  } catch (error) {
-    console.error('Error during parallel processing:', error);
-    throw error;
+    // Add delay between miner models
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
   }
+
+  // Handle any remaining retries
+  while (retryQueue.length > 0) {
+    const item = retryQueue.shift()!;
+
+    if (item.retryCount >= MAX_RETRIES) {
+      console.error(`! Maximum retries reached for ${item.minerModel}`);
+      progress.failures.push({
+        date: formattedDate,
+        minerModel: item.minerModel,
+        error: 'Maximum retries exceeded'
+      });
+      continue;
+    }
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * Math.pow(2, item.retryCount)));
+      await processSingleDay(formattedDate, item.minerModel);
+
+      const verification = await verifyDayCalculations(formattedDate, item.minerModel);
+      if (!verification.isComplete) {
+        retryQueue.push({
+          ...item,
+          retryCount: item.retryCount + 1
+        });
+      }
+    } catch (error) {
+      console.error(`× Error during retry for ${item.minerModel}:`, error);
+      if (item.retryCount < MAX_RETRIES - 1) {
+        retryQueue.push({
+          ...item,
+          retryCount: item.retryCount + 1
+        });
+      } else {
+        progress.failures.push({
+          date: formattedDate,
+          minerModel: item.minerModel,
+          error: error instanceof Error ? error.message : 'Retry failed'
+        });
+      }
+    }
+  }
+
+  return batchSuccess;
 }
 
 async function updateHistoricalCalculations() {
@@ -180,37 +218,55 @@ async function updateHistoricalCalculations() {
     const endDate = new Date(END_DATE);
 
     if (!isValid(startDate) || !isValid(endDate)) {
-      throw new Error(`Invalid date format. Please provide dates in YYYY-MM-DD format. Provided dates: ${START_DATE}, ${END_DATE}`);
+      throw new Error(`Invalid date format. Please use YYYY-MM-DD format.`);
     }
 
-    let currentWeekStart = startOfWeek(startDate);
-    const finalEndDate = endOfWeek(endDate);
-    let totalWeeksProcessed = 0;
-    const totalWeeks = Math.ceil((finalEndDate.getTime() - currentWeekStart.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    // Get the last processed date to enable resume capability
+    const lastProcessedDate = await getLastProcessedDate();
+    let currentDate = lastProcessedDate ? new Date(lastProcessedDate) : startDate;
 
-    while (isBefore(currentWeekStart, finalEndDate)) {
-      const currentWeekEnd = endOfWeek(currentWeekStart);
-      const weekEndDate = isBefore(currentWeekEnd, finalEndDate) ? currentWeekEnd : finalEndDate;
+    let progress: ProcessingProgress = {
+      lastProcessedDate: format(currentDate, 'yyyy-MM-dd'),
+      totalProcessed: 0,
+      failures: []
+    };
 
-      console.log(`\n=== Processing Week ${format(currentWeekStart, 'yyyy-MM-dd')} ===`);
-      console.log(`Week ${totalWeeksProcessed + 1} of ${totalWeeks}`);
+    const totalDays = Math.ceil((endDate.getTime() - currentDate.getTime()) / (24 * 60 * 60 * 1000));
+    let daysProcessed = 0;
 
-      const result = await processWeeklyBatch(currentWeekStart, weekEndDate);
+    console.log(`Resuming from date: ${format(currentDate, 'yyyy-MM-dd')}`);
 
-      totalWeeksProcessed++;
-      const weeklyProgress = ((totalWeeksProcessed / totalWeeks) * 100).toFixed(1);
-      console.log(`\nOverall Progress: ${weeklyProgress}% (${totalWeeksProcessed}/${totalWeeks} weeks)`);
+    while (isBefore(currentDate, endDate)) {
+      const success = await processBatch(currentDate, progress);
+      daysProcessed++;
 
-      currentWeekStart = addWeeks(currentWeekStart, 1);
+      if (!success) {
+        console.log(`\nWarning: Incomplete processing for ${format(currentDate, 'yyyy-MM-dd')}`);
+      }
+
+      const overallProgress = ((daysProcessed / totalDays) * 100).toFixed(1);
+      console.log(`\nOverall Progress: ${overallProgress}% (${daysProcessed}/${totalDays} days)`);
+
+      if (progress.failures.length > 0) {
+        console.log('\nFailures:', progress.failures);
+      }
+
+      currentDate = addDays(currentDate, BATCH_SIZE);
+
+      // Add cooldown between days
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
     }
 
     console.log('\n=== Historical Calculations Update Complete ===');
     console.log('Final Statistics:', {
-      totalWeeksProcessed,
-      totalWeeks,
-      isComplete: totalWeeksProcessed === totalWeeks
+      daysProcessed,
+      totalDays,
+      totalFailures: progress.failures.length
     });
-    console.log('\n');
+
+    if (progress.failures.length > 0) {
+      console.log('\nFailed Calculations:', progress.failures);
+    }
 
   } catch (error) {
     console.error('Error during historical calculations update:', error);
