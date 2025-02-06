@@ -2,7 +2,7 @@ import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation, DEFAULT_DI
 import axios from 'axios';
 import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
-import { and, eq, between } from "drizzle-orm";
+import { and, eq, between, sql } from "drizzle-orm";
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
 import { getDifficultyData } from './dynamodbService';
 import pLimit from 'p-limit';
@@ -84,6 +84,27 @@ async function processSingleDay(
   console.log(`[Bitcoin Service] Processing date: ${date} for model ${minerModel}`);
 
   try {
+    // First check if calculations already exist for this date and model
+    const existingRecords = await db
+      .select({
+        count: sql<number>`count(*)::int`
+      })
+      .from(historicalBitcoinCalculations)
+      .where(
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, date),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        )
+      );
+
+    const recordCount = existingRecords[0]?.count || 0;
+    console.log(`[Bitcoin Service] Found ${recordCount} existing records for ${date} and ${minerModel}`);
+
+    if (recordCount > 0) {
+      console.log(`[Bitcoin Service] Skipping ${date} for ${minerModel} - already processed`);
+      return;
+    }
+
     console.log(`[Bitcoin Service] Fetching difficulty data for date: ${date}`);
     const difficulty = await getDifficultyData(date);
     console.log(`[Bitcoin Service] Retrieved difficulty: ${difficulty.toLocaleString()} for ${date}`);
@@ -116,8 +137,8 @@ async function processSingleDay(
       const currentFarmTotal = groups[key].farms.get(record.farmId) || 0;
       groups[key].farms.set(record.farmId, currentFarmTotal + absVolume);
       return groups;
-    }, {} as Record<string, { 
-      settlementPeriod: number; 
+    }, {} as Record<string, {
+      settlementPeriod: number;
       totalVolume: number;
       farms: Map<string, number>;
     }>);

@@ -121,13 +121,13 @@ export async function reconcileDay(date: string): Promise<void> {
       // Update Bitcoin calculations after curtailment data is updated
       console.log(`[${date}] Updating Bitcoin calculations...`);
 
-      // Process for S19J_PRO and S9 models to maintain historical calculations
-      const minerModels = ['S19J_PRO', 'S9'];  // Only process these two models for now
+      // Process for all three miner models
+      const minerModels = ['S19J_PRO', 'S9', 'M20S'];
       for (const minerModel of minerModels) {
         await processSingleDay(date, minerModel)
           .catch(error => {
             console.error(`Error processing Bitcoin calculations for ${date} with ${minerModel}:`, error);
-            // Continue with other model even if one fails
+            // Continue with other models even if one fails
           });
       }
 
@@ -248,5 +248,20 @@ export async function reconcileYearlyData(): Promise<void> {
     }
   } catch (error) {
     console.error('Error during yearly reconciliation:', error);
+  }
+}
+
+// Add export to reprocessDay function
+export async function reprocessDay(dateStr: string) {
+  try {
+    console.log(`\n=== Starting Data Re-processing for ${dateStr} ===`);
+
+    // Use the reconciliation process to check and update if needed
+    await reconcileDay(dateStr);
+
+    console.log(`\n=== Data Re-processing Complete for ${dateStr} ===\n`);
+  } catch (error) {
+    console.error('Error during re-processing:', error);
+    throw error;
   }
 }
