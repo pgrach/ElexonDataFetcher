@@ -1,13 +1,14 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { getHistoricalData } from '../services/dynamodbService';
+import { getDifficultyData } from '../services/dynamodbService';
 
 async function testDynamoDBRetrieval() {
   try {
-    // Try a more recent date since 2025 data might not exist yet
-    console.log('Testing DynamoDB data retrieval for 2024-01-15...');
+    // Test with January 15th, 2025
+    const testDate = '2025-01-15';
+    console.log(`Testing DynamoDB difficulty data retrieval for ${testDate}...`);
 
-    // First inspect the price table structure and sample data
+    // First inspect the difficulty table structure
     const client = new DynamoDBClient({ 
       region: process.env.AWS_REGION || 'us-east-1'
     });
@@ -15,50 +16,45 @@ async function testDynamoDBRetrieval() {
     const docClient = DynamoDBDocumentClient.from(client);
 
     const describeCommand = new DescribeTableCommand({
-      TableName: process.env.DYNAMODB_PRICES_TABLE || 'asics-dynamodb-PricesTable-1LXU143BUOBN'
+      TableName: process.env.DYNAMODB_DIFFICULTY_TABLE || 'asics-dynamodb-DifficultyTable-DQ308ID3POT6'
     });
 
     const tableInfo = await client.send(describeCommand);
-    console.log('Price Table Structure:', {
+    console.log('Difficulty Table Structure:', {
       attributeDefinitions: tableInfo.Table?.AttributeDefinitions,
       keySchema: tableInfo.Table?.KeySchema,
+      itemCount: tableInfo.Table?.ItemCount
     });
 
-    // Get a sample record to understand the data format
+    // Get sample records to understand the data format
     const sampleCommand = new ScanCommand({
-      TableName: process.env.DYNAMODB_PRICES_TABLE || 'asics-dynamodb-PricesTable-1LXU143BUOBN',
-      Limit: 1
+      TableName: process.env.DYNAMODB_DIFFICULTY_TABLE || 'asics-dynamodb-DifficultyTable-DQ308ID3POT6',
+      Limit: 5
     });
 
     const sampleResponse = await docClient.send(sampleCommand);
-    if (sampleResponse.Items?.[0]) {
-      console.log('Sample Price Record:', sampleResponse.Items[0]);
+    if (sampleResponse.Items?.length) {
+      console.log('Sample Difficulty Records:', 
+        sampleResponse.Items.map(item => ({
+          date: item.Date,
+          difficulty: item.Difficulty
+        }))
+      );
     }
 
-    // Get another sample from difficulty table
-    const difficultyCommand = new ScanCommand({
-      TableName: process.env.DYNAMODB_DIFFICULTY_TABLE || 'asics-dynamodb-DifficultyTable-DQ308ID3POT6',
-      Limit: 1
-    });
+    // Now try to get the actual historical data for January 15th
+    console.log('\nTesting getDifficultyData...');
+    const difficulty = await getDifficultyData(testDate);
 
-    const difficultyResponse = await docClient.send(difficultyCommand);
-    if (difficultyResponse.Items?.[0]) {
-      console.log('Sample Difficulty Record:', difficultyResponse.Items[0]);
-    }
-
-    // Now try to get the actual data
-    const data = await getHistoricalData('2024-01-15');
-
-    console.log('Retrieved Data:', {
+    console.log('\nRetrieved Historical Data:', {
+      date: testDate,
       difficulty: {
-        value: data.difficulty,
-        isDefault: data.difficulty === 108105433845147
-      },
-      price: {
-        value: data.price,
-        isDefault: data.price === 99212.39
+        value: difficulty,
+        isDefault: difficulty === 108105433845147,
+        formatted: difficulty.toLocaleString()
       }
     });
+
   } catch (error) {
     console.error('Error testing DynamoDB:', error);
   }

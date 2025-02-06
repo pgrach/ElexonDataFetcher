@@ -81,11 +81,12 @@ export async function getDifficultyData(date: string): Promise<number> {
 
     const tableExists = await verifyTableExists(DIFFICULTY_TABLE);
     if (!tableExists) {
-      console.warn(`[DynamoDB] Using default difficulty (${DEFAULT_DIFFICULTY})`);
+      console.warn(`[DynamoDB] Table ${DIFFICULTY_TABLE} does not exist, using default difficulty (${DEFAULT_DIFFICULTY})`);
       return DEFAULT_DIFFICULTY;
     }
 
-    const command = new ScanCommand({
+    // First, scan the table to find records with our date
+    const scanCommand = new ScanCommand({
       TableName: DIFFICULTY_TABLE,
       FilterExpression: "#date = :date",
       ExpressionAttributeNames: {
@@ -98,20 +99,31 @@ export async function getDifficultyData(date: string): Promise<number> {
 
     console.debug('[DynamoDB] Executing difficulty scan:', {
       table: DIFFICULTY_TABLE,
-      filter: command.input.FilterExpression,
-      date: formattedDate
+      date: formattedDate,
+      command: 'ScanCommand'
     });
 
-    const response = await retryOperation(() => docClient.send(command));
+    const scanResponse = await retryOperation(() => docClient.send(scanCommand));
 
-    if (!response.Items?.length) {
-      console.warn(`[DynamoDB] No difficulty data found for ${formattedDate}`);
+    if (!scanResponse.Items?.length) {
+      console.warn(`[DynamoDB] No difficulty data found for ${formattedDate}, using default: ${DEFAULT_DIFFICULTY}`);
       return DEFAULT_DIFFICULTY;
     }
 
-    const difficulty = Number(response.Items[0].Difficulty);
+    // Sort items by date (descending) to get the most recent record if multiple exist
+    const sortedItems = scanResponse.Items.sort((a, b) => 
+      b.Date.localeCompare(a.Date)
+    );
+
+    const difficulty = Number(sortedItems[0].Difficulty);
+    console.info(`[DynamoDB] Found historical difficulty for ${formattedDate}:`, {
+      difficulty: difficulty.toLocaleString(),
+      id: sortedItems[0].ID,
+      totalRecords: sortedItems.length
+    });
+
     if (isNaN(difficulty)) {
-      console.error(`[DynamoDB] Invalid difficulty value:`, response.Items[0].Difficulty);
+      console.error(`[DynamoDB] Invalid difficulty value:`, sortedItems[0].Difficulty);
       return DEFAULT_DIFFICULTY;
     }
 
