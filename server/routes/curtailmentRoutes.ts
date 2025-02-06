@@ -73,6 +73,7 @@ router.post('/regenerate-historical', async (req, res) => {
 
     // Process each miner model
     for (const model of minerModels) {
+      console.log(`Processing model ${model} with difficulty ${difficulty}`);
       await processSingleDay(date, model)
         .catch(error => {
           console.error(`Error processing Bitcoin calculations for ${date} with ${model}:`, error);
@@ -94,7 +95,8 @@ router.post('/regenerate-historical', async (req, res) => {
       date,
       recordCount: regeneratedData.length,
       minerModels: minerModels.join(', '),
-      sampleDifficulty: regeneratedData[0]?.difficulty
+      sampleDifficulty: regeneratedData[0]?.difficulty,
+      uniqueDifficulties: [...new Set(regeneratedData.map(r => r.difficulty))]
     });
 
     res.json({
@@ -102,7 +104,8 @@ router.post('/regenerate-historical', async (req, res) => {
       date,
       minerModels,
       recordCount: regeneratedData.length,
-      difficulty
+      difficulty,
+      uniqueDifficulties: [...new Set(regeneratedData.map(r => r.difficulty))]
     });
 
   } catch (error) {

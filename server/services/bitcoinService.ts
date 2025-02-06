@@ -81,12 +81,12 @@ async function processSingleDay(
   date: string,
   minerModel: string
 ): Promise<void> {
-  console.log(`[Bitcoin Service] Processing date: ${date}`);
+  console.log(`[Bitcoin Service] Processing date: ${date} for model ${minerModel}`);
 
   try {
     console.log(`[Bitcoin Service] Fetching difficulty data for date: ${date}`);
     const difficulty = await getDifficultyData(date);
-    console.log(`[Bitcoin Service] Retrieved difficulty: ${difficulty}`);
+    console.log(`[Bitcoin Service] Retrieved difficulty: ${difficulty.toLocaleString()} for ${date}`);
 
     // Fetch all records for the date
     const records = await db
@@ -122,13 +122,15 @@ async function processSingleDay(
       farms: Map<string, number>;
     }>);
 
-    console.log(`[Bitcoin Service] Processing ${Object.keys(periodGroups).length} settlement periods`);
+    console.log(`[Bitcoin Service] Processing ${Object.keys(periodGroups).length} settlement periods with difficulty ${difficulty.toLocaleString()}`);
 
     // Process each period
     for (const periodData of Object.values(periodGroups)) {
       console.log(`[Bitcoin Service] Processing period ${periodData.settlementPeriod}:`, {
         totalVolume: periodData.totalVolume,
-        numberOfFarms: periodData.farms.size
+        numberOfFarms: periodData.farms.size,
+        difficulty: difficulty.toLocaleString(),
+        minerModel
       });
 
       // Calculate total Bitcoin for the period
@@ -139,7 +141,7 @@ async function processSingleDay(
       );
 
       // Distribute Bitcoin among farms proportionally
-      for (const [farmId, farmVolume] of periodData.farms.entries()) {
+      for (const [farmId, farmVolume] of periodData.farms) {
         const farmShare = farmVolume / periodData.totalVolume;
         const farmBitcoin = (periodBitcoin * farmShare).toFixed(8);
 
@@ -147,7 +149,9 @@ async function processSingleDay(
           farmVolume,
           totalVolume: periodData.totalVolume,
           share: farmShare,
-          bitcoin: farmBitcoin
+          bitcoin: farmBitcoin,
+          difficulty: difficulty.toLocaleString(),
+          minerModel
         });
 
         // Store calculation
@@ -174,7 +178,7 @@ async function processSingleDay(
       }
     }
 
-    console.log(`[Bitcoin Service] Completed processing for date: ${date}`);
+    console.log(`[Bitcoin Service] Completed processing for date: ${date}, model: ${minerModel}, difficulty: ${difficulty.toLocaleString()}`);
   } catch (error) {
     console.error(`[Bitcoin Service] Error processing date ${date}:`, error);
     throw error;
