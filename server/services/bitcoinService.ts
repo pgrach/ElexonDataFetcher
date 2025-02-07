@@ -62,58 +62,83 @@ async function saveDifficultiesToCache(): Promise<void> {
   }
 }
 
-async function fetch2024Difficulties(): Promise<void> {
-  console.log('Fetching 2024 difficulty data...');
-  await loadCachedDifficulties();
-
-  const dateRange = eachDayOfInterval({
-    start: new Date('2024-01-01'),
-    end: new Date('2024-12-31')
+export async function calculateBitcoinForBMU(
+  curtailedMwh: number,
+  minerModel: string,
+  difficulty: number
+): Promise<number> {
+  console.log('Calculating Bitcoin for:', {
+    curtailedMwh,
+    minerModel,
+    difficulty
   });
 
-  const dates = dateRange.map(date => format(date, 'yyyy-MM-dd'));
-  const uncachedDates = dates.filter(date => !DIFFICULTY_CACHE.has(date));
-
-  if (uncachedDates.length === 0) {
-    console.log('All difficulties already cached');
-    return;
+  const miner = minerModels[minerModel];
+  if (!miner) {
+    console.error(`Invalid miner model: ${minerModel}`);
+    throw new Error(`Invalid miner model: ${minerModel}`);
   }
 
-  console.log(`Need to fetch ${uncachedDates.length} difficulties`);
-  const limit = pLimit(1); // Single request at a time
+  try {
+    const curtailedKwh = curtailedMwh * 1000;
+    const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
+    const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
 
-  for (const date of uncachedDates) {
-    await limit(async () => {
-      let retries = 0;
-      let success = false;
-
-      while (!success && retries < MAX_RETRIES) {
-        try {
-          console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
-          const difficulty = await getDifficultyData(date);
-          DIFFICULTY_CACHE.set(date, difficulty.toString());
-          console.log(`✓ Cached difficulty for ${date}`);
-          success = true;
-          await saveDifficultiesToCache();
-        } catch (error) {
-          retries++;
-          if (retries === MAX_RETRIES) {
-            console.error(`Max retries reached for ${date}, using default difficulty`);
-            DIFFICULTY_CACHE.set(date, DEFAULT_DIFFICULTY.toString());
-            await saveDifficultiesToCache();
-            break;
-          }
-          const delay = BASE_DELAY * Math.pow(2, retries - 1);
-          console.log(`Attempt ${retries} failed, waiting ${delay/1000}s before retry`);
-          await sleep(delay);
-        }
-      }
-
-      await sleep(5000); // 5 second cooldown between requests
+    console.log('Mining calculations:', {
+      curtailedKwh,
+      minerConsumptionKwh,
+      potentialMiners,
+      minerHashrate: miner.hashrate,
+      minerPower: miner.power
     });
-  }
 
-  console.log(`Completed caching difficulties. Total cached: ${DIFFICULTY_CACHE.size}`);
+    const difficultyNum = typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty;
+    const hashesPerBlock = difficultyNum * Math.pow(2, 32);
+    const networkHashRate = hashesPerBlock / 600;
+    const networkHashRateTH = networkHashRate / 1e12;
+    const totalHashPower = potentialMiners * miner.hashrate;
+    const ourNetworkShare = totalHashPower / networkHashRateTH;
+
+    console.log('Network calculations:', {
+      difficultyNum,
+      hashesPerBlock,
+      networkHashRate,
+      networkHashRateTH,
+      totalHashPower,
+      ourNetworkShare
+    });
+
+    const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
+    console.log('Bitcoin mined:', bitcoinMined);
+
+    return bitcoinMined;
+  } catch (error) {
+    console.error('Error in calculateBitcoinForBMU:', error);
+    throw error;
+  }
+}
+
+async function processHistoricalCalculations(
+  startDate: string,
+  endDate: string,
+  minerModel: string = 'S19J_PRO'
+): Promise<void> {
+  await fetch2024Difficulties();
+  const limit = pLimit(10);
+  const MINER_MODELS = Object.keys(minerModels);
+
+  await Promise.all(
+    MINER_MODELS.map(model =>
+      limit(async () => {
+        try {
+          await processSingleDay(startDate, model);
+        } catch (error) {
+          console.error(`Failed to process ${model} for ${startDate}:`, error);
+          throw error;
+        }
+      })
+    )
+  );
 }
 
 async function processSingleDay(
@@ -197,19 +222,9 @@ async function processSingleDay(
           );
         }
 
-        // Calculate and insert records for each period
-        const bulkInsertData: Array<{
-          settlementDate: string;
-          settlementPeriod: number;
-          farmId: string;
-          minerModel: string;
-          bitcoinMined: string;
-          difficulty: string;
-          calculatedAt: Date;
-        }> = [];
-
+        const bulkInsertData = [];
         for (const [period, data] of periodGroups.entries()) {
-          const periodBitcoin = calculateBitcoinForBMU(
+          const periodBitcoin = await calculateBitcoinForBMU(
             data.totalVolume,
             minerModel,
             parseFloat(difficulty)
@@ -251,51 +266,61 @@ async function processSingleDay(
   await processingPromise;
 }
 
-function calculateBitcoinForBMU(
-  curtailedMwh: number,
-  minerModel: string,
-  difficulty: number
-): number {
-  const miner = minerModels[minerModel];
-  if (!miner) throw new Error(`Invalid miner model: ${minerModel}`);
+async function fetch2024Difficulties(): Promise<void> {
+  console.log('Fetching 2024 difficulty data...');
+  await loadCachedDifficulties();
 
-  const curtailedKwh = curtailedMwh * 1000;
-  const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
-  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
-  const difficultyNum = typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty;
-  const hashesPerBlock = difficultyNum * Math.pow(2, 32);
-  const networkHashRate = hashesPerBlock / 600;
-  const networkHashRateTH = networkHashRate / 1e12;
-  const totalHashPower = potentialMiners * miner.hashrate;
-  const ourNetworkShare = totalHashPower / networkHashRateTH;
-  return Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
-}
+  const dateRange = eachDayOfInterval({
+    start: new Date('2024-01-01'),
+    end: new Date('2024-12-31')
+  });
 
-async function processHistoricalCalculations(
-  startDate: string,
-  endDate: string,
-  minerModel: string = 'S19J_PRO'
-): Promise<void> {
-  await fetch2024Difficulties();
-  const limit = pLimit(10);
-  const MINER_MODELS = Object.keys(minerModels);
+  const dates = dateRange.map(date => format(date, 'yyyy-MM-dd'));
+  const uncachedDates = dates.filter(date => !DIFFICULTY_CACHE.has(date));
 
-  await Promise.all(
-    MINER_MODELS.map(model =>
-      limit(async () => {
+  if (uncachedDates.length === 0) {
+    console.log('All difficulties already cached');
+    return;
+  }
+
+  console.log(`Need to fetch ${uncachedDates.length} difficulties`);
+  const limit = pLimit(1); // Single request at a time
+
+  for (const date of uncachedDates) {
+    await limit(async () => {
+      let retries = 0;
+      let success = false;
+
+      while (!success && retries < MAX_RETRIES) {
         try {
-          await processSingleDay(startDate, model);
+          console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
+          const difficulty = await getDifficultyData(date);
+          DIFFICULTY_CACHE.set(date, difficulty.toString());
+          console.log(`✓ Cached difficulty for ${date}`);
+          success = true;
+          await saveDifficultiesToCache();
         } catch (error) {
-          console.error(`Failed to process ${model} for ${startDate}:`, error);
-          throw error;
+          retries++;
+          if (retries === MAX_RETRIES) {
+            console.error(`Max retries reached for ${date}, using default difficulty`);
+            DIFFICULTY_CACHE.set(date, DEFAULT_DIFFICULTY.toString());
+            await saveDifficultiesToCache();
+            break;
+          }
+          const delay = BASE_DELAY * Math.pow(2, retries - 1);
+          console.log(`Attempt ${retries} failed, waiting ${delay/1000}s before retry`);
+          await sleep(delay);
         }
-      })
-    )
-  );
+      }
+
+      await sleep(5000); // 5 second cooldown between requests
+    });
+  }
+
+  console.log(`Completed caching difficulties. Total cached: ${DIFFICULTY_CACHE.size}`);
 }
 
 export {
-  calculateBitcoinForBMU,
   processHistoricalCalculations,
   processSingleDay,
   fetch2024Difficulties

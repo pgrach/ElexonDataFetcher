@@ -33,23 +33,44 @@ async function calculateBitcoinMining(
   leadParty?: string,
   farmId?: string
 ): Promise<{ totalBitcoin: number }> {
-  const records = await db
-    .select()
-    .from(historicalBitcoinCalculations)
-    .where(
-      and(
-        eq(historicalBitcoinCalculations.settlementDate, date),
-        eq(historicalBitcoinCalculations.minerModel, minerModel),
-        leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
-      )
+  console.log('Starting Bitcoin mining calculation:', {
+    date,
+    minerModel,
+    difficulty,
+    currentPrice,
+    leadParty,
+    farmId
+  });
+
+  try {
+    const records = await db
+      .select()
+      .from(historicalBitcoinCalculations)
+      .where(
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, date),
+          eq(historicalBitcoinCalculations.minerModel, minerModel),
+          leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
+        )
+      );
+
+    console.log(`Found ${records.length} historical records`);
+
+    const totalBitcoin = records.reduce(
+      (sum, record) => {
+        const bitcoinAmount = Number(record.bitcoinMined);
+        console.log(`Record bitcoin amount: ${bitcoinAmount}`);
+        return sum + bitcoinAmount;
+      },
+      0
     );
 
-  const totalBitcoin = records.reduce(
-    (sum, record) => sum + Number(record.bitcoinMined),
-    0
-  );
-
-  return { totalBitcoin };
+    console.log('Total Bitcoin calculated:', totalBitcoin);
+    return { totalBitcoin };
+  } catch (error) {
+    console.error('Error in calculateBitcoinMining:', error);
+    throw error;
+  }
 }
 
 // Add historical calculations endpoint
@@ -167,13 +188,15 @@ router.get('/mining-potential', async (req, res) => {
       isToday: isToday(requestDate)
     });
 
-    const { price: currentPrice, difficulty: currentDifficulty } = await fetchFromMinerstat();
-    let difficulty;
+    const minerstatData = await fetchFromMinerstat();
+    console.log('Minerstat data:', minerstatData);
+
+    let difficulty = minerstatData.difficulty;
 
     if (!isToday(requestDate)) {
       console.log(`Getting historical difficulty for ${formattedDate}`);
       difficulty = await getDifficultyData(formattedDate);
-      console.log(`Using historical difficulty for ${formattedDate}:`, difficulty.toLocaleString());
+      console.log(`Using historical difficulty: ${difficulty}`);
 
       const historicalData = await db
         .select()
@@ -185,10 +208,9 @@ router.get('/mining-potential', async (req, res) => {
           )
         );
 
-      console.log('Historical data from DB:', {
-        found: historicalData.length > 0,
+      console.log('Historical data found:', {
+        records: historicalData.length,
         date: formattedDate,
-        firstRecord: historicalData[0],
         difficulty: difficulty.toLocaleString()
       });
 
@@ -198,32 +220,41 @@ router.get('/mining-potential', async (req, res) => {
           0
         );
 
+        console.log('Calculated from historical data:', {
+          totalBitcoin,
+          valueAtCurrentPrice: totalBitcoin * minerstatData.price
+        });
+
         return res.json({
           bitcoinMined: totalBitcoin,
-          valueAtCurrentPrice: totalBitcoin * currentPrice,
+          valueAtCurrentPrice: totalBitcoin * minerstatData.price,
           difficulty: Number(historicalData[0].difficulty),
-          currentPrice
+          currentPrice: minerstatData.price
         });
       }
-    } else {
-      difficulty = currentDifficulty;
-      console.log(`Using current difficulty for today:`, difficulty.toLocaleString());
     }
 
     const result = await calculateBitcoinMining(
       formattedDate,
       minerModel,
       difficulty,
-      currentPrice,
+      minerstatData.price,
       leadParty,
       farmId
     );
 
+    console.log('Final calculation result:', {
+      bitcoinMined: result.totalBitcoin,
+      valueAtCurrentPrice: result.totalBitcoin * minerstatData.price,
+      difficulty,
+      currentPrice: minerstatData.price
+    });
+
     res.json({
       bitcoinMined: result.totalBitcoin,
-      valueAtCurrentPrice: result.totalBitcoin * currentPrice,
+      valueAtCurrentPrice: result.totalBitcoin * minerstatData.price,
       difficulty,
-      currentPrice
+      currentPrice: minerstatData.price
     });
 
   } catch (error) {
