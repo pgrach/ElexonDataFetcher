@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { minerModels } from '../types/bitcoin';
-import { processSingleDay, prefetchDifficultyData } from '../services/bitcoinService';
+import { processSingleDay, fetch2024Difficulties } from '../services/bitcoinService';
 import { db } from "@db";
 
 // Get command line arguments
@@ -20,13 +20,13 @@ if (!minerModels[minerModel]) {
 async function processDate() {
   try {
     console.log(`Processing date ${date} for model ${minerModel}`);
-    
-    // Prefetch difficulty data
-    await prefetchDifficultyData([date]);
+
+    // Fetch difficulty data first
+    await fetch2024Difficulties();
 
     // Process the date
     await processSingleDay(date, minerModel);
-    
+
     console.log('Processing complete');
   } catch (error) {
     console.error('Error processing date:', error);

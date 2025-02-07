@@ -1,14 +1,14 @@
 import { format, eachDayOfInterval, isValid, addDays, isBefore } from 'date-fns';
 import { minerModels } from '../types/bitcoin';
-import { processSingleDay, prefetchDifficultyData } from '../services/bitcoinService';
+import { processSingleDay, fetch2024Difficulties } from '../services/bitcoinService';
 import { db } from "@db";
 import { historicalBitcoinCalculations, curtailmentRecords } from "@db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import pLimit from 'p-limit';
 
 const START_DATE = '2024-01-01';
-const END_DATE = '2024-12-31';
-const BATCH_SIZE = 1; // Process 1 day at a time to prevent timeouts
+const END_DATE = '2025-12-31';
+const BATCH_SIZE = 5; // Process 5 days at a time
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000; // 2 seconds between retries
 const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
@@ -90,8 +90,8 @@ async function processBatch(date: Date, progress: ProcessingProgress): Promise<b
   const formattedDate = format(date, 'yyyy-MM-dd');
   console.log(`\n=== Processing Date: ${formattedDate} ===`);
 
-  // Prefetch difficulty data for the date
-  await prefetchDifficultyData([formattedDate]);
+  // Fetch difficulties once at the start of processing
+  await fetch2024Difficulties();
 
   let batchSuccess = true;
   let retryQueue: { minerModel: string; retryCount: number }[] = [];
@@ -207,7 +207,7 @@ async function processBatch(date: Date, progress: ProcessingProgress): Promise<b
   return batchSuccess;
 }
 
-async function updateHistoricalCalculations() {
+export async function updateHistoricalCalculations() {
   try {
     console.log(`\n=== Starting Historical Calculations Update ===`);
     console.log(`Full Date Range: ${START_DATE} to ${END_DATE}`);
@@ -238,10 +238,10 @@ async function updateHistoricalCalculations() {
 
     while (isBefore(currentDate, endDate)) {
       const success = await processBatch(currentDate, progress);
-      daysProcessed++;
+      daysProcessed += BATCH_SIZE;
 
       if (!success) {
-        console.log(`\nWarning: Incomplete processing for ${format(currentDate, 'yyyy-MM-dd')}`);
+        console.log(`\nWarning: Incomplete processing for batch starting ${format(currentDate, 'yyyy-MM-dd')}`);
       }
 
       const overallProgress = ((daysProcessed / totalDays) * 100).toFixed(1);
@@ -253,7 +253,7 @@ async function updateHistoricalCalculations() {
 
       currentDate = addDays(currentDate, BATCH_SIZE);
 
-      // Add cooldown between days
+      // Add cooldown between batches
       await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
     }
 
@@ -270,9 +270,15 @@ async function updateHistoricalCalculations() {
 
   } catch (error) {
     console.error('Error during historical calculations update:', error);
-    process.exit(1);
+    throw error;
   }
 }
 
-// Start the update process
-updateHistoricalCalculations();
+// Use import.meta.url to check if file is being run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  updateHistoricalCalculations()
+    .catch(error => {
+      console.error('Script failed:', error);
+      process.exit(1);
+    });
+}
