@@ -1,27 +1,68 @@
 import { Router } from 'express';
 import { format, parseISO, isToday, isValid } from 'date-fns';
-import { fetchFromMinerstat, calculateBitcoinMining, processHistoricalCalculations, processSingleDay } from '../services/bitcoinService';
+import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations } from "@db/schema";
 import { and, eq } from "drizzle-orm";
 import { getDifficultyData } from '../services/dynamodbService';
+import axios from 'axios';
 
 const router = Router();
+
+// Minerstat API helper function
+async function fetchFromMinerstat() {
+  try {
+    const response = await axios.get('https://api.minerstat.com/v2/stats/bitcoin');
+    return {
+      difficulty: response.data.difficulty,
+      price: response.data.price
+    };
+  } catch (error) {
+    console.error('Error fetching from Minerstat:', error);
+    throw error;
+  }
+}
+
+// Bitcoin mining calculation helper
+async function calculateBitcoinMining(
+  date: string,
+  minerModel: string,
+  difficulty: number,
+  currentPrice: number,
+  leadParty?: string,
+  farmId?: string
+): Promise<{ totalBitcoin: number }> {
+  const records = await db
+    .select()
+    .from(historicalBitcoinCalculations)
+    .where(
+      and(
+        eq(historicalBitcoinCalculations.settlementDate, date),
+        eq(historicalBitcoinCalculations.minerModel, minerModel),
+        leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
+      )
+    );
+
+  const totalBitcoin = records.reduce(
+    (sum, record) => sum + Number(record.bitcoinMined),
+    0
+  );
+
+  return { totalBitcoin };
+}
 
 // Add historical calculations endpoint
 router.post('/historical-calculations', async (req, res) => {
   try {
     const { startDate, endDate, minerModel = 'S19J_PRO' } = req.body;
 
-    // Validate dates
     if (!startDate || !endDate || !isValid(parseISO(startDate)) || !isValid(parseISO(endDate))) {
       return res.status(400).json({
         error: 'Invalid date format. Please provide dates in YYYY-MM-DD format.'
       });
     }
 
-    // Start processing in the background
     processHistoricalCalculations(startDate, endDate, minerModel)
       .then(() => console.log('Historical calculations completed'))
       .catch(error => console.error('Error in historical calculations:', error));
@@ -46,7 +87,6 @@ router.post('/regenerate-historical', async (req, res) => {
   try {
     const { date, minerModel } = req.body;
 
-    // Validate date
     if (!date || !isValid(parseISO(date))) {
       return res.status(400).json({
         error: 'Invalid date format. Please provide date in YYYY-MM-DD format.'
@@ -55,14 +95,11 @@ router.post('/regenerate-historical', async (req, res) => {
 
     console.log(`Starting regeneration for date: ${date}`);
 
-    // Get historical difficulty data
     const difficulty = await getDifficultyData(date);
     console.log('Retrieved historical difficulty:', difficulty);
 
-    // Process for all supported miner models if no specific model is provided
     const minerModels = minerModel ? [minerModel] : ['S19J_PRO', 'S9', 'M20S'];
 
-    // Delete existing calculations for this date and specified models
     await db.delete(historicalBitcoinCalculations)
       .where(
         and(
@@ -71,7 +108,6 @@ router.post('/regenerate-historical', async (req, res) => {
         )
       );
 
-    // Process each miner model
     for (const model of minerModels) {
       console.log(`Processing model ${model} with difficulty ${difficulty}`);
       await processSingleDay(date, model)
@@ -80,7 +116,6 @@ router.post('/regenerate-historical', async (req, res) => {
         });
     }
 
-    // Verify the regenerated data
     const regeneratedData = await db
       .select()
       .from(historicalBitcoinCalculations)
@@ -104,8 +139,7 @@ router.post('/regenerate-historical', async (req, res) => {
       date,
       minerModels,
       recordCount: regeneratedData.length,
-      difficulty,
-      uniqueDifficulties: [...new Set(regeneratedData.map(r => r.difficulty))]
+      difficulty
     });
 
   } catch (error) {
@@ -117,7 +151,6 @@ router.post('/regenerate-historical', async (req, res) => {
   }
 });
 
-// Add the bitcoin calculation endpoint
 router.get('/mining-potential', async (req, res) => {
   try {
     const requestDate = req.query.date ? parseISO(req.query.date as string) : new Date();
@@ -134,18 +167,14 @@ router.get('/mining-potential', async (req, res) => {
       isToday: isToday(requestDate)
     });
 
-    // Get current price for fiat conversion
-    const { price: currentPrice } = await fetchFromMinerstat();
+    const { price: currentPrice, difficulty: currentDifficulty } = await fetchFromMinerstat();
     let difficulty;
 
-    // For historical dates, get stored calculations
     if (!isToday(requestDate)) {
-      // First try to get historical difficulty
       console.log(`Getting historical difficulty for ${formattedDate}`);
       difficulty = await getDifficultyData(formattedDate);
       console.log(`Using historical difficulty for ${formattedDate}:`, difficulty.toLocaleString());
 
-      // Check for existing historical calculations
       const historicalData = await db
         .select()
         .from(historicalBitcoinCalculations)
@@ -177,13 +206,10 @@ router.get('/mining-potential', async (req, res) => {
         });
       }
     } else {
-      // For today, use current network difficulty
-      const { difficulty: currentDifficulty } = await fetchFromMinerstat();
       difficulty = currentDifficulty;
       console.log(`Using current difficulty for today:`, difficulty.toLocaleString());
     }
 
-    // Calculate using appropriate difficulty
     const result = await calculateBitcoinMining(
       formattedDate,
       minerModel,
