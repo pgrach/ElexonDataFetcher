@@ -2,7 +2,7 @@ import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation, DEFAULT_DI
 import axios from 'axios';
 import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
-import { and, eq, between, sql } from "drizzle-orm";
+import { and, eq, between, sql, inArray } from "drizzle-orm";
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
 import { getDifficultyData } from './dynamodbService';
 import pLimit from 'p-limit';
@@ -20,11 +20,8 @@ const SETTLEMENT_PERIOD_MINUTES = 30;
 const BLOCKS_PER_SETTLEMENT_PERIOD = 3;
 
 // Processing configuration
-const MAX_CONCURRENT_MINERS = 10;
-const BATCH_SIZE = 500;
-const DB_BATCH_SIZE = 1000;
-const DYNAMO_CONCURRENCY = 1; // Single request at a time
-const DYNAMO_BATCH_DELAY = 5000; // 5 seconds between requests
+const MAX_RETRIES = 5;
+const BASE_DELAY = 5000; // 5 seconds base delay
 
 // Cache file path
 const CACHE_FILE = path.join(__dirname, '..', 'data', '2024_difficulties.json');
@@ -32,10 +29,6 @@ const CACHE_FILE = path.join(__dirname, '..', 'data', '2024_difficulties.json');
 // Shared caches
 const DIFFICULTY_CACHE = new Map<string, string>();
 const PROCESSING_LOCK = new Map<string, Promise<void>>();
-
-// Exponential backoff settings
-const MAX_RETRIES = 5;
-const BASE_DELAY = 5000; // 5 seconds base delay
 
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -61,7 +54,6 @@ async function saveDifficultiesToCache(): Promise<void> {
     if (!fs.existsSync(cacheDir)) {
       fs.mkdirSync(cacheDir, { recursive: true });
     }
-
     const data = Object.fromEntries(DIFFICULTY_CACHE.entries());
     fs.writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2));
     console.log('Saved difficulties to cache file');
@@ -72,8 +64,6 @@ async function saveDifficultiesToCache(): Promise<void> {
 
 async function fetch2024Difficulties(): Promise<void> {
   console.log('Fetching 2024 difficulty data...');
-
-  // Load existing cache first
   await loadCachedDifficulties();
 
   const dateRange = eachDayOfInterval({
@@ -90,7 +80,7 @@ async function fetch2024Difficulties(): Promise<void> {
   }
 
   console.log(`Need to fetch ${uncachedDates.length} difficulties`);
-  const limit = pLimit(DYNAMO_CONCURRENCY);
+  const limit = pLimit(1); // Single request at a time
 
   for (const date of uncachedDates) {
     await limit(async () => {
@@ -104,8 +94,6 @@ async function fetch2024Difficulties(): Promise<void> {
           DIFFICULTY_CACHE.set(date, difficulty.toString());
           console.log(`✓ Cached difficulty for ${date}`);
           success = true;
-
-          // Save to cache file after each successful fetch
           await saveDifficultiesToCache();
         } catch (error) {
           retries++;
@@ -115,17 +103,13 @@ async function fetch2024Difficulties(): Promise<void> {
             await saveDifficultiesToCache();
             break;
           }
-
           const delay = BASE_DELAY * Math.pow(2, retries - 1);
-          console.log(`Attempt ${retries} failed, waiting ${delay/1000}s before retry: ${error.message}`);
+          console.log(`Attempt ${retries} failed, waiting ${delay/1000}s before retry`);
           await sleep(delay);
         }
       }
 
-      // Add substantial delay between requests regardless of success
-      const cooldownDelay = success ? DYNAMO_BATCH_DELAY : DYNAMO_BATCH_DELAY * 2;
-      console.log(`Cooling down for ${cooldownDelay/1000}s before next request...`);
-      await sleep(cooldownDelay);
+      await sleep(5000); // 5 second cooldown between requests
     });
   }
 
@@ -145,14 +129,31 @@ async function processSingleDay(
 
   const processingPromise = (async () => {
     try {
-      // Start transaction
       return await db.transaction(async (tx) => {
-        // Check existing records within transaction
-        const existingRecords = await tx
+        // Get all periods with non-zero curtailment volume
+        const curtailmentData = await tx
           .select({
-            count: sql<number>`count(*)::int`
+            periods: sql<number[]>`array_agg(DISTINCT settlement_period)`,
+            farmIds: sql<string[]>`array_agg(DISTINCT farm_id)`
           })
-          .from(historicalBitcoinCalculations)
+          .from(curtailmentRecords)
+          .where(
+            and(
+              eq(curtailmentRecords.settlementDate, date),
+              sql`ABS(volume::numeric) > 0`
+            )
+          );
+
+        if (!curtailmentData[0] || !curtailmentData[0].periods || curtailmentData[0].periods.length === 0) {
+          console.log(`No curtailment records with volume for ${date}`);
+          return;
+        }
+
+        const periods = curtailmentData[0].periods;
+        const farmIds = curtailmentData[0].farmIds;
+
+        // Delete existing records for this date/model combination
+        await tx.delete(historicalBitcoinCalculations)
           .where(
             and(
               eq(historicalBitcoinCalculations.settlementDate, date),
@@ -160,89 +161,84 @@ async function processSingleDay(
             )
           );
 
-        if (existingRecords[0]?.count > 0) {
-          console.log(`Skipping ${date} for ${minerModel} - already processed`);
-          return;
-        }
-
-        // Get curtailment records
+        // Get all curtailment records for the identified periods
         const records = await tx
           .select()
           .from(curtailmentRecords)
-          .where(eq(curtailmentRecords.settlementDate, date));
-
-        if (records.length === 0) {
-          console.log(`No curtailment records found for ${date}`);
-          return;
-        }
+          .where(
+            and(
+              eq(curtailmentRecords.settlementDate, date),
+              inArray(curtailmentRecords.settlementPeriod, periods),
+              sql`ABS(volume::numeric) > 0`
+            )
+          );
 
         const difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
-        console.log(`Using difficulty ${difficulty} for ${date}`);
+        console.log(`Processing ${date} with difficulty ${difficulty}`);
+        console.log(`Found ${records.length} curtailment records across ${periods.length} periods and ${farmIds.length} farms`);
 
-        // Pre-calculate bitcoin values
-        const periodCalculations = new Map<number, number>();
-        const periodGroups = records.reduce((acc, record) => {
-          const periodKey = record.settlementPeriod;
-          if (!acc.has(periodKey)) {
-            acc.set(periodKey, {
+        // Group records by settlement period
+        const periodGroups = new Map<number, { totalVolume: number; farms: Map<string, number> }>();
+
+        for (const record of records) {
+          if (!periodGroups.has(record.settlementPeriod)) {
+            periodGroups.set(record.settlementPeriod, {
               totalVolume: 0,
               farms: new Map<string, number>()
             });
           }
-          const group = acc.get(periodKey)!;
+
+          const group = periodGroups.get(record.settlementPeriod)!;
           const absVolume = Math.abs(Number(record.volume));
           group.totalVolume += absVolume;
           group.farms.set(
             record.farmId,
             (group.farms.get(record.farmId) || 0) + absVolume
           );
-          return acc;
-        }, new Map<number, { totalVolume: number; farms: Map<string, number> }>());
-
-        // Calculate bitcoin for each period
-        for (const [period, data] of periodGroups.entries()) {
-          periodCalculations.set(
-            period,
-            calculateBitcoinForBMU(data.totalVolume, minerModel, parseFloat(difficulty))
-          );
         }
 
-        // Prepare bulk insert data
-        const bulkInsertData = Array.from(periodGroups.entries()).flatMap(([period, data]) => {
-          const periodBitcoin = periodCalculations.get(period)!;
-          return Array.from(data.farms.entries()).map(([farmId, farmVolume]) => ({
-            settlementDate: date,
-            settlementPeriod: period,
-            farmId,
-            minerModel,
-            bitcoinMined: ((periodBitcoin * farmVolume) / data.totalVolume).toFixed(8),
-            difficulty,
-            calculatedAt: new Date()
-          }));
-        });
+        // Calculate and insert records for each period
+        const bulkInsertData: Array<{
+          settlementDate: string;
+          settlementPeriod: number;
+          farmId: string;
+          minerModel: string;
+          bitcoinMined: string;
+          difficulty: string;
+          calculatedAt: Date;
+        }> = [];
 
-        // Perform insert within transaction
+        for (const [period, data] of periodGroups.entries()) {
+          const periodBitcoin = calculateBitcoinForBMU(
+            data.totalVolume,
+            minerModel,
+            parseFloat(difficulty)
+          );
+
+          for (const [farmId, farmVolume] of data.farms.entries()) {
+            const bitcoinShare = (periodBitcoin * farmVolume) / data.totalVolume;
+            bulkInsertData.push({
+              settlementDate: date,
+              settlementPeriod: period,
+              farmId,
+              minerModel,
+              bitcoinMined: bitcoinShare.toFixed(8),
+              difficulty,
+              calculatedAt: new Date()
+            });
+          }
+        }
+
         if (bulkInsertData.length > 0) {
           await tx.insert(historicalBitcoinCalculations)
-            .values(bulkInsertData)
-            .onConflictDoUpdate({
-              target: [
-                historicalBitcoinCalculations.settlementDate,
-                historicalBitcoinCalculations.settlementPeriod,
-                historicalBitcoinCalculations.farmId,
-                historicalBitcoinCalculations.minerModel
-              ],
-              set: {
-                bitcoinMined: sql`EXCLUDED.bitcoin_mined`,
-                difficulty: sql`EXCLUDED.difficulty`,
-                calculatedAt: sql`EXCLUDED.calculated_at`
-              }
-            });
+            .values(bulkInsertData);
 
           console.log(`Inserted ${bulkInsertData.length} records for ${date} ${minerModel}`);
+          console.log(`Processed periods: ${periods.join(', ')}`);
+        } else {
+          console.log(`No records to insert for ${date} ${minerModel}`);
         }
       });
-
     } catch (error) {
       console.error(`Error processing ${date} for ${minerModel}:`, error);
       throw error;
@@ -280,8 +276,8 @@ async function processHistoricalCalculations(
   endDate: string,
   minerModel: string = 'S19J_PRO'
 ): Promise<void> {
-  await fetch2024Difficulties(); // Fetch 2024 difficulties before processing
-  const limit = pLimit(MAX_CONCURRENT_MINERS);
+  await fetch2024Difficulties();
+  const limit = pLimit(10);
   const MINER_MODELS = Object.keys(minerModels);
 
   await Promise.all(
