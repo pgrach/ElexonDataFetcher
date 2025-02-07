@@ -32,7 +32,6 @@ const CACHE_FILE = path.join(__dirname, '..', 'data', '2024_difficulties.json');
 // Shared caches
 const DIFFICULTY_CACHE = new Map<string, string>();
 const PROCESSING_LOCK = new Map<string, Promise<void>>();
-const BULK_INSERT_QUEUE = new Map<string, Array<any>>();
 
 // Exponential backoff settings
 const MAX_RETRIES = 5;
@@ -146,102 +145,107 @@ async function processSingleDay(
 
   const processingPromise = (async () => {
     try {
-      // Check existing records
-      const existingRecords = await db
-        .select({
-          count: sql<number>`count(*)::int`
-        })
-        .from(historicalBitcoinCalculations)
-        .where(
-          and(
-            eq(historicalBitcoinCalculations.settlementDate, date),
-            eq(historicalBitcoinCalculations.minerModel, minerModel)
-          )
-        );
+      // Start transaction
+      return await db.transaction(async (tx) => {
+        // Check existing records within transaction
+        const existingRecords = await tx
+          .select({
+            count: sql<number>`count(*)::int`
+          })
+          .from(historicalBitcoinCalculations)
+          .where(
+            and(
+              eq(historicalBitcoinCalculations.settlementDate, date),
+              eq(historicalBitcoinCalculations.minerModel, minerModel)
+            )
+          );
 
-      if (existingRecords[0]?.count > 0) {
-        return;
-      }
-
-      // Get curtailment records
-      const records = await db
-        .select()
-        .from(curtailmentRecords)
-        .where(eq(curtailmentRecords.settlementDate, date));
-
-      if (records.length === 0) return;
-
-      const difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
-
-      // Pre-calculate bitcoin values
-      const periodCalculations = new Map<number, number>();
-      const periodGroups = records.reduce((acc, record) => {
-        const periodKey = record.settlementPeriod;
-        if (!acc.has(periodKey)) {
-          acc.set(periodKey, {
-            totalVolume: 0,
-            farms: new Map<string, number>()
-          });
+        if (existingRecords[0]?.count > 0) {
+          console.log(`Skipping ${date} for ${minerModel} - already processed`);
+          return;
         }
-        const group = acc.get(periodKey)!;
-        const absVolume = Math.abs(Number(record.volume));
-        group.totalVolume += absVolume;
-        group.farms.set(
-          record.farmId,
-          (group.farms.get(record.farmId) || 0) + absVolume
-        );
-        return acc;
-      }, new Map<number, { totalVolume: number; farms: Map<string, number> }>());
 
-      // Calculate bitcoin for each period
-      for (const [period, data] of periodGroups.entries()) {
-        periodCalculations.set(
-          period,
-          calculateBitcoinForBMU(data.totalVolume, minerModel, parseFloat(difficulty))
-        );
-      }
+        // Get curtailment records
+        const records = await tx
+          .select()
+          .from(curtailmentRecords)
+          .where(eq(curtailmentRecords.settlementDate, date));
 
-      // Prepare bulk insert data
-      const bulkInsertData = Array.from(periodGroups.entries()).flatMap(([period, data]) => {
-        const periodBitcoin = periodCalculations.get(period)!;
-        return Array.from(data.farms.entries()).map(([farmId, farmVolume]) => ({
-          settlementDate: date,
-          settlementPeriod: period,
-          farmId,
-          minerModel,
-          bitcoinMined: ((periodBitcoin * farmVolume) / data.totalVolume).toFixed(8),
-          difficulty
-        }));
+        if (records.length === 0) {
+          console.log(`No curtailment records found for ${date}`);
+          return;
+        }
+
+        const difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
+        console.log(`Using difficulty ${difficulty} for ${date}`);
+
+        // Pre-calculate bitcoin values
+        const periodCalculations = new Map<number, number>();
+        const periodGroups = records.reduce((acc, record) => {
+          const periodKey = record.settlementPeriod;
+          if (!acc.has(periodKey)) {
+            acc.set(periodKey, {
+              totalVolume: 0,
+              farms: new Map<string, number>()
+            });
+          }
+          const group = acc.get(periodKey)!;
+          const absVolume = Math.abs(Number(record.volume));
+          group.totalVolume += absVolume;
+          group.farms.set(
+            record.farmId,
+            (group.farms.get(record.farmId) || 0) + absVolume
+          );
+          return acc;
+        }, new Map<number, { totalVolume: number; farms: Map<string, number> }>());
+
+        // Calculate bitcoin for each period
+        for (const [period, data] of periodGroups.entries()) {
+          periodCalculations.set(
+            period,
+            calculateBitcoinForBMU(data.totalVolume, minerModel, parseFloat(difficulty))
+          );
+        }
+
+        // Prepare bulk insert data
+        const bulkInsertData = Array.from(periodGroups.entries()).flatMap(([period, data]) => {
+          const periodBitcoin = periodCalculations.get(period)!;
+          return Array.from(data.farms.entries()).map(([farmId, farmVolume]) => ({
+            settlementDate: date,
+            settlementPeriod: period,
+            farmId,
+            minerModel,
+            bitcoinMined: ((periodBitcoin * farmVolume) / data.totalVolume).toFixed(8),
+            difficulty,
+            calculatedAt: new Date()
+          }));
+        });
+
+        // Perform insert within transaction
+        if (bulkInsertData.length > 0) {
+          await tx.insert(historicalBitcoinCalculations)
+            .values(bulkInsertData)
+            .onConflictDoUpdate({
+              target: [
+                historicalBitcoinCalculations.settlementDate,
+                historicalBitcoinCalculations.settlementPeriod,
+                historicalBitcoinCalculations.farmId,
+                historicalBitcoinCalculations.minerModel
+              ],
+              set: {
+                bitcoinMined: sql`EXCLUDED.bitcoin_mined`,
+                difficulty: sql`EXCLUDED.difficulty`,
+                calculatedAt: sql`EXCLUDED.calculated_at`
+              }
+            });
+
+          console.log(`Inserted ${bulkInsertData.length} records for ${date} ${minerModel}`);
+        }
       });
 
-      // Queue bulk inserts
-      const queueKey = `${date}_${Math.random()}`;
-      if (!BULK_INSERT_QUEUE.has(queueKey)) {
-        BULK_INSERT_QUEUE.set(queueKey, []);
-      }
-      BULK_INSERT_QUEUE.get(queueKey)!.push(...bulkInsertData);
-
-      // Perform bulk insert if queue is large enough
-      if (BULK_INSERT_QUEUE.get(queueKey)!.length >= DB_BATCH_SIZE) {
-        const batchData = BULK_INSERT_QUEUE.get(queueKey)!;
-        await db.insert(historicalBitcoinCalculations)
-          .values(batchData)
-          .onConflictDoUpdate({
-            target: [
-              historicalBitcoinCalculations.settlementDate,
-              historicalBitcoinCalculations.settlementPeriod,
-              historicalBitcoinCalculations.farmId,
-              historicalBitcoinCalculations.minerModel
-            ],
-            set: {
-              bitcoinMined: sql`EXCLUDED.bitcoin_mined`,
-              difficulty: sql`EXCLUDED.difficulty`,
-              calculatedAt: new Date()
-            }
-          });
-        BULK_INSERT_QUEUE.delete(queueKey);
-      }
-
+    } catch (error) {
+      console.error(`Error processing ${date} for ${minerModel}:`, error);
+      throw error;
     } finally {
       PROCESSING_LOCK.delete(lockKey);
     }
