@@ -279,7 +279,7 @@ export default function Home() {
   };
 
   const formatGBPValue = (bitcoinAmount: number) => {
-    if (!bitcoinPotential?.currentPrice) return 0;
+    if (!bitcoinPotential?.currentPrice || !bitcoinAmount) return 0;
     return bitcoinAmount * bitcoinPotential.currentPrice;
   };
 
@@ -710,7 +710,7 @@ export default function Home() {
                       </div>
                     ) : dailyData ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
-                        £{formatGBPValue(bitcoinPotential.bitcoinMined).toLocaleString(
+                        £{formatGBPValue(bitcoinPotential?.bitcoinMined || 0).toLocaleString(
                           "en-GB",
                           { maximumFractionDigits: 2 },
                         )}
