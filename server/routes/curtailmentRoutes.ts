@@ -254,18 +254,21 @@ router.get('/bitcoin/summary/yearly/:year', async (req, res) => {
 
     const currentPrice = (await fetchFromMinerstat()).price;
 
-    if (historicalData.rows.length > 0) {
-      const summaries = historicalData.rows.map(record => ({
-        minerModel: record.miner_model,
-        bitcoinMined: record.total_bitcoin?.toString() || '0',
-        valueAtMining: (Number(record.total_bitcoin || 0) * currentPrice).toString(),
-        averageDifficulty: record.avg_difficulty?.toString() || '0'
-      }));
-      console.log(`Found yearly data for ${year}:`, summaries);
-      return res.json(summaries);
+    // Always return the aggregated data, even if the current day has no records
+    const summaries = historicalData.rows.map(record => ({
+      minerModel: record.miner_model,
+      bitcoinMined: record.total_bitcoin?.toString() || '0',
+      valueAtMining: (Number(record.total_bitcoin || 0) * currentPrice).toString(),
+      averageDifficulty: record.avg_difficulty?.toString() || '0'
+    }));
+
+    //If we got any data for the year, return it
+    if(summaries.length > 0){
+        console.log(`Found yearly data for ${year}:`, summaries);
+        return res.json(summaries);
     }
 
-    // If no data found, return zero values
+    //Only return zero values if there's no data at all for the year
     const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
       minerModel: model,
       bitcoinMined: '0',
@@ -303,18 +306,21 @@ router.get('/bitcoin/summary/monthly/:yearMonth', async (req, res) => {
 
     const currentPrice = (await fetchFromMinerstat()).price;
 
-    if (historicalData.rows.length > 0) {
-      const summaries = historicalData.rows.map(record => ({
-        minerModel: record.miner_model,
-        bitcoinMined: record.total_bitcoin?.toString() || '0',
-        valueAtMining: (Number(record.total_bitcoin || 0) * currentPrice).toString(),
-        averageDifficulty: record.avg_difficulty?.toString() || '0'
-      }));
-      console.log(`Found monthly data for ${yearMonth}:`, summaries);
-      return res.json(summaries);
+    // Always return the aggregated data, even if the current day has no records
+    const summaries = historicalData.rows.map(record => ({
+      minerModel: record.miner_model,
+      bitcoinMined: record.total_bitcoin?.toString() || '0',
+      valueAtMining: (Number(record.total_bitcoin || 0) * currentPrice).toString(),
+      averageDifficulty: record.avg_difficulty?.toString() || '0'
+    }));
+
+    //If we got any data for the month, return it
+    if(summaries.length > 0){
+        console.log(`Found monthly data for ${yearMonth}:`, summaries);
+        return res.json(summaries);
     }
 
-    // If no data found, return zero values
+    //Only return zero values if there's no data at all for the month
     const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
       minerModel: model,
       bitcoinMined: '0',
