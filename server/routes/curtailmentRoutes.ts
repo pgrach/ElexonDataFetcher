@@ -4,7 +4,7 @@ import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations, bitcoinDailySummaries, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDifficultyData } from '../services/dynamodbService';
 import axios from 'axios';
 
@@ -250,7 +250,30 @@ router.get('/bitcoin/summary/yearly/:year', async (req, res) => {
       .from(bitcoinYearlySummaries)
       .where(eq(bitcoinYearlySummaries.year, year));
 
-    // If no data found, return zero values for all miner models
+    // If no yearly summary exists, calculate it from monthly data
+    if (summaries.length === 0) {
+      const monthlyData = await db.execute(sql`
+        SELECT 
+          miner_model,
+          SUM(bitcoin_mined::numeric) as total_bitcoin,
+          SUM(value_at_mining::numeric) as total_value,
+          AVG(average_difficulty::numeric) as avg_difficulty
+        FROM bitcoin_monthly_summaries
+        WHERE year_month LIKE ${year + '-%'}
+        GROUP BY miner_model
+      `);
+
+      if (monthlyData.rows.length > 0) {
+        return res.json(monthlyData.rows.map(record => ({
+          minerModel: record.miner_model,
+          bitcoinMined: record.total_bitcoin.toString(),
+          valueAtMining: record.total_value.toString(),
+          averageDifficulty: record.avg_difficulty.toString()
+        })));
+      }
+    }
+
+    // If no data found in either yearly or monthly summaries, return zero values
     if (summaries.length === 0) {
       const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
         minerModel: model,
@@ -285,7 +308,30 @@ router.get('/bitcoin/summary/monthly/:yearMonth', async (req, res) => {
       .from(bitcoinMonthlySummaries)
       .where(eq(bitcoinMonthlySummaries.yearMonth, yearMonth));
 
-    // If no data found, return zero values for all miner models
+    // If no monthly summary exists, calculate it from daily data
+    if (summaries.length === 0) {
+      const dailyData = await db.execute(sql`
+        SELECT 
+          miner_model,
+          SUM(bitcoin_mined::numeric) as total_bitcoin,
+          SUM(value_at_mining::numeric) as total_value,
+          AVG(average_difficulty::numeric) as avg_difficulty
+        FROM bitcoin_daily_summaries
+        WHERE TO_CHAR(summary_date, 'YYYY-MM') = ${yearMonth}
+        GROUP BY miner_model
+      `);
+
+      if (dailyData.rows.length > 0) {
+        return res.json(dailyData.rows.map(record => ({
+          minerModel: record.miner_model,
+          bitcoinMined: record.total_bitcoin.toString(),
+          valueAtMining: record.total_value.toString(),
+          averageDifficulty: record.avg_difficulty.toString()
+        })));
+      }
+    }
+
+    // If no data found in either monthly summaries or daily rollup, return zero values
     if (summaries.length === 0) {
       const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
         minerModel: model,
