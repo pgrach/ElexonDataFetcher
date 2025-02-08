@@ -417,8 +417,9 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || yearlyData.totalCurtailedEnergy)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{(((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
+                        (dailyData?.totalCurtailedEnergy || yearlyData.totalCurtailedEnergy)) * 
+                        (bitcoinPotential?.currentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -426,7 +427,7 @@ export default function Home() {
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    Estimated value at current BTC price
+                    Estimated value at current BTC price: £{bitcoinPotential?.currentPrice?.toLocaleString('en-GB') || '0'}
                   </p>
                 </div>
               </div>
@@ -569,8 +570,9 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || monthlyData.totalCurtailedEnergy)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{(((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
+                        (dailyData?.totalCurtailedEnergy || monthlyData.totalCurtailedEnergy)) * 
+                        (bitcoinPotential?.currentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -578,7 +580,7 @@ export default function Home() {
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    Estimated value at current BTC price
+                    Estimated value at current BTC price: £{bitcoinPotential?.currentPrice?.toLocaleString('en-GB') || '0'}
                   </p>
                 </div>
               </div>
