@@ -348,9 +348,12 @@ export default function Home() {
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
                   ) : yearlyError ? (
                     <div className="text-sm text-red-500">Failed to load yearly data</div>
-                  ) : yearlyBitcoinData ? (
+                  ) : yearlyBitcoinData && bitcoinPotential ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{(Number(yearlyBitcoinData.find(m => m.minerModel === selectedMinerModel)?.valueAtMining || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{(
+                        Number(yearlyBitcoinData.find(m => m.minerModel === selectedMinerModel)?.bitcoinMined || 0) * 
+                        (bitcoinPotential?.price || 0)
+                      ).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">No yearly data available</div>
@@ -419,7 +422,7 @@ export default function Home() {
                     <div className="text-sm text-red-500">
                       Failed to load yearly data
                     </div>
-                  ) : yearlyData ? (
+                  ) : yearlyData && bitcoinPotential ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       £{((yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * (bitcoinPotential?.valueAtCurrentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
@@ -515,9 +518,12 @@ export default function Home() {
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
                   ) : monthlyError ? (
                     <div className="text-sm text-red-500">Failed to load monthly data</div>
-                  ) : monthlyBitcoinData ? (
+                  ) : monthlyBitcoinData && bitcoinPotential ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{(Number(monthlyBitcoinData.find(m => m.minerModel === selectedMinerModel)?.valueAtMining || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{(
+                        Number(monthlyBitcoinData.find(m => m.minerModel === selectedMinerModel)?.bitcoinMined || 0) * 
+                        (bitcoinPotential?.price || 0)
+                      ).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">No monthly data available</div>
@@ -586,7 +592,7 @@ export default function Home() {
                     <div className="text-sm text-red-500">
                       Failed to load monthly data
                     </div>
-                  ) : monthlyData ? (
+                  ) : monthlyData && bitcoinPotential ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       £{((monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * (bitcoinPotential?.valueAtCurrentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
@@ -718,7 +724,7 @@ export default function Home() {
                           ? dailyError.message
                           : "Failed to load daily data"}
                       </div>
-                    ) : dailyData ? (
+                    ) : dailyData && bitcoinPotential ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
                         £
                         {(bitcoinPotential?.valueAtCurrentPrice || 0).toLocaleString(
