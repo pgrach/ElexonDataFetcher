@@ -341,8 +341,8 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        Math.max(dailyData?.totalCurtailedEnergy || 1, 1)).toFixed(8)}
+                      ₿{((yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * 
+                        (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -415,8 +415,7 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                        Math.max(dailyData?.totalCurtailedEnergy || 1, 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{((yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * (bitcoinPotential?.valueAtCurrentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -493,8 +492,8 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        Math.max(dailyData?.totalCurtailedEnergy || 1, 1)).toFixed(8)}
+                      ₿{((monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * 
+                        (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -567,8 +566,7 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                        Math.max(dailyData?.totalCurtailedEnergy || 1, 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{((monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * (bitcoinPotential?.valueAtCurrentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
