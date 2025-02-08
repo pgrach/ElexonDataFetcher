@@ -241,9 +241,25 @@ router.get('/bitcoin/summary/yearly/:year', async (req, res) => {
     const { year } = req.params;
 
     const summaries = await db
-      .select()
+      .select({
+        minerModel: bitcoinYearlySummaries.minerModel,
+        bitcoinMined: bitcoinYearlySummaries.bitcoinMined,
+        valueAtMining: bitcoinYearlySummaries.valueAtMining,
+        averageDifficulty: bitcoinYearlySummaries.averageDifficulty
+      })
       .from(bitcoinYearlySummaries)
       .where(eq(bitcoinYearlySummaries.year, year));
+
+    // If no data found, return zero values for all miner models
+    if (summaries.length === 0) {
+      const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
+        minerModel: model,
+        bitcoinMined: '0',
+        valueAtMining: '0',
+        averageDifficulty: '0'
+      }));
+      return res.json(defaultModels);
+    }
 
     res.json(summaries);
   } catch (error) {
@@ -260,9 +276,25 @@ router.get('/bitcoin/summary/monthly/:yearMonth', async (req, res) => {
     const { yearMonth } = req.params;
 
     const summaries = await db
-      .select()
+      .select({
+        minerModel: bitcoinMonthlySummaries.minerModel,
+        bitcoinMined: bitcoinMonthlySummaries.bitcoinMined,
+        valueAtMining: bitcoinMonthlySummaries.valueAtMining,
+        averageDifficulty: bitcoinMonthlySummaries.averageDifficulty
+      })
       .from(bitcoinMonthlySummaries)
       .where(eq(bitcoinMonthlySummaries.yearMonth, yearMonth));
+
+    // If no data found, return zero values for all miner models
+    if (summaries.length === 0) {
+      const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
+        minerModel: model,
+        bitcoinMined: '0',
+        valueAtMining: '0',
+        averageDifficulty: '0'
+      }));
+      return res.json(defaultModels);
+    }
 
     res.json(summaries);
   } catch (error) {
@@ -279,9 +311,25 @@ router.get('/bitcoin/summary/daily/:date', async (req, res) => {
     const { date } = req.params;
 
     const summaries = await db
-      .select()
+      .select({
+        minerModel: bitcoinDailySummaries.minerModel,
+        bitcoinMined: bitcoinDailySummaries.bitcoinMined,
+        valueAtMining: bitcoinDailySummaries.valueAtMining,
+        averageDifficulty: bitcoinDailySummaries.averageDifficulty
+      })
       .from(bitcoinDailySummaries)
       .where(eq(bitcoinDailySummaries.summaryDate, date));
+
+    // If no data found, return zero values for all miner models
+    if (summaries.length === 0) {
+      const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
+        minerModel: model,
+        bitcoinMined: '0',
+        valueAtMining: '0',
+        averageDifficulty: '0'
+      }));
+      return res.json(defaultModels);
+    }
 
     res.json(summaries);
   } catch (error) {

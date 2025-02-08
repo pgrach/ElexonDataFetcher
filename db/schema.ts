@@ -1,4 +1,4 @@
-import { pgTable, text, serial, date, integer, numeric, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, date, integer, numeric, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 export const curtailmentRecords = pgTable("curtailment_records", {
@@ -25,7 +25,9 @@ export const bitcoinDailySummaries = pgTable("bitcoin_daily_summaries", {
   averageDifficulty: numeric("average_difficulty").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
-});
+}, (table) => ({
+  uniqDateModel: uniqueIndex('bitcoin_daily_summaries_date_model_idx').on(table.summaryDate, table.minerModel)
+}));
 
 export const bitcoinMonthlySummaries = pgTable("bitcoin_monthly_summaries", {
   id: serial("id").primaryKey(),
@@ -36,7 +38,9 @@ export const bitcoinMonthlySummaries = pgTable("bitcoin_monthly_summaries", {
   averageDifficulty: numeric("average_difficulty").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
-});
+}, (table) => ({
+  uniqMonthModel: uniqueIndex('bitcoin_monthly_summaries_month_model_idx').on(table.yearMonth, table.minerModel)
+}));
 
 export const bitcoinYearlySummaries = pgTable("bitcoin_yearly_summaries", {
   id: serial("id").primaryKey(),
@@ -47,7 +51,9 @@ export const bitcoinYearlySummaries = pgTable("bitcoin_yearly_summaries", {
   averageDifficulty: numeric("average_difficulty").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
-});
+}, (table) => ({
+  uniqYearModel: uniqueIndex('bitcoin_yearly_summaries_year_model_idx').on(table.year, table.minerModel)
+}));
 
 export const dailySummaries = pgTable("daily_summaries", {
   summaryDate: date("summary_date").primaryKey(),
