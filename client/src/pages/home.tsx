@@ -342,7 +342,7 @@ export default function Home() {
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       ₿{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
+                        Math.max(dailyData?.totalCurtailedEnergy || 1, 1)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -416,7 +416,7 @@ export default function Home() {
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       £{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                        Math.max(dailyData?.totalCurtailedEnergy || 1, 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -494,7 +494,7 @@ export default function Home() {
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       ₿{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
+                        Math.max(dailyData?.totalCurtailedEnergy || 1, 1)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -568,7 +568,7 @@ export default function Home() {
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       £{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                        Math.max(dailyData?.totalCurtailedEnergy || 1, 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
