@@ -414,7 +414,7 @@ export default function Home() {
                       Failed to load yearly data
                     </div>
                   ) : yearlyData ? (
-                     <div className="text-2xl font-bold text-[#F7931A]">
+                    <div className="text-2xl font-bold text-[#F7931A]">
                       £{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
                         (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
@@ -492,7 +492,7 @@ export default function Home() {
                       Failed to load monthly data
                     </div>
                   ) : monthlyData ? (
-                     <div className="text-2xl font-bold text-[#F7931A]">
+                    <div className="text-2xl font-bold text-[#F7931A]">
                       ₿{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
                         (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
                     </div>
@@ -701,10 +701,10 @@ export default function Home() {
                     ) : dailyData ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
                         £
-                        {bitcoinPotential?.valueAtCurrentPrice.toLocaleString(
+                        {(bitcoinPotential?.valueAtCurrentPrice || 0).toLocaleString(
                           "en-GB",
                           { maximumFractionDigits: 2 },
-                        ) || "0.00"}
+                        )}
                       </div>
                     ) : (
                       <div className="text-sm text-muted-foreground">
