@@ -115,7 +115,7 @@ export default function Home() {
       selectedMinerModel,
       dailyData?.totalCurtailedEnergy,
       selectedLeadParty,
-      formattedDate 
+      formattedDate
     ],
     queryFn: async () => {
       console.log("Bitcoin calculation parameters:", {
@@ -273,6 +273,16 @@ export default function Home() {
     return selectedDate > now;
   };
 
+  const calculateBitcoinAmount = (energyAmount: number) => {
+    if (!bitcoinPotential?.bitcoinMined || !dailyData?.totalCurtailedEnergy) return 0;
+    return (energyAmount * bitcoinPotential.bitcoinMined) / dailyData.totalCurtailedEnergy;
+  };
+
+  const formatGBPValue = (bitcoinAmount: number) => {
+    if (!bitcoinPotential?.currentPrice) return 0;
+    return bitcoinAmount * bitcoinPotential.currentPrice;
+  };
+
   return (
     <div className="min-h-screen">
       <FilterBar
@@ -343,8 +353,7 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || yearlyData.totalCurtailedEnergy)).toFixed(8)}
+                      ₿{calculateBitcoinAmount(yearlyData.totalCurtailedEnergy).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -417,9 +426,8 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{(((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || yearlyData.totalCurtailedEnergy)) * 
-                        (bitcoinPotential?.currentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{formatGBPValue(calculateBitcoinAmount(yearlyData.totalCurtailedEnergy))
+                        .toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -496,8 +504,7 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || monthlyData.totalCurtailedEnergy)).toFixed(8)}
+                      ₿{calculateBitcoinAmount(monthlyData.totalCurtailedEnergy).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -570,9 +577,8 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{(((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || monthlyData.totalCurtailedEnergy)) * 
-                        (bitcoinPotential?.currentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{formatGBPValue(calculateBitcoinAmount(monthlyData.totalCurtailedEnergy))
+                        .toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -704,8 +710,7 @@ export default function Home() {
                       </div>
                     ) : dailyData ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
-                        £
-                        {(bitcoinPotential?.valueAtCurrentPrice || 0).toLocaleString(
+                        £{formatGBPValue(bitcoinPotential.bitcoinMined).toLocaleString(
                           "en-GB",
                           { maximumFractionDigits: 2 },
                         )}
@@ -736,9 +741,7 @@ export default function Home() {
                         : hour.curtailedEnergy,
                       bitcoinMined: isHourInFuture(hour.hour)
                         ? 0
-                        : (hour.curtailedEnergy *
-                            (bitcoinPotential?.bitcoinMined || 0)) /
-                          (dailyData?.totalCurtailedEnergy || 1),
+                        : calculateBitcoinAmount(hour.curtailedEnergy),
                     }))}
                     chartConfig={{
                       leftAxis: {
