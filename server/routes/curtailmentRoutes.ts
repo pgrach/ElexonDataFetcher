@@ -158,9 +158,13 @@ router.get('/mining-potential', async (req, res) => {
     const leadParty = req.query.leadParty as string;
     const farmId = req.query.farmId as string;
     const formattedDate = format(requestDate, 'yyyy-MM-dd');
+    const yearMonth = format(requestDate, 'yyyy-MM');
+    const year = format(requestDate, 'yyyy');
 
     console.log('Mining potential request:', {
       date: formattedDate,
+      yearMonth,
+      year,
       minerModel,
       leadParty,
       farmId,
@@ -168,8 +172,71 @@ router.get('/mining-potential', async (req, res) => {
     });
 
     const { price: currentPrice, difficulty: currentDifficulty } = await fetchFromMinerstat();
-    let difficulty;
 
+    // First try to get daily data
+    const dailyData = await db
+      .select()
+      .from(bitcoinDailySummaries)
+      .where(
+        and(
+          eq(bitcoinDailySummaries.summaryDate, formattedDate),
+          eq(bitcoinDailySummaries.minerModel, minerModel)
+        )
+      );
+
+    if (dailyData.length > 0) {
+      return res.json({
+        bitcoinMined: Number(dailyData[0].bitcoinMined),
+        valueAtCurrentPrice: Number(dailyData[0].bitcoinMined) * currentPrice,
+        difficulty: Number(dailyData[0].averageDifficulty),
+        currentPrice
+      });
+    }
+
+    // If no daily data, try monthly data
+    const monthlyData = await db
+      .select()
+      .from(bitcoinMonthlySummaries)
+      .where(
+        and(
+          eq(bitcoinMonthlySummaries.yearMonth, yearMonth),
+          eq(bitcoinMonthlySummaries.minerModel, minerModel)
+        )
+      );
+
+    if (monthlyData.length > 0) {
+      console.log(`No daily data for ${formattedDate}, using monthly data for ${yearMonth}`);
+      return res.json({
+        bitcoinMined: Number(monthlyData[0].bitcoinMined),
+        valueAtCurrentPrice: Number(monthlyData[0].bitcoinMined) * currentPrice,
+        difficulty: Number(monthlyData[0].averageDifficulty),
+        currentPrice
+      });
+    }
+
+    // If no monthly data, try yearly data
+    const yearlyData = await db
+      .select()
+      .from(bitcoinYearlySummaries)
+      .where(
+        and(
+          eq(bitcoinYearlySummaries.year, year),
+          eq(bitcoinYearlySummaries.minerModel, minerModel)
+        )
+      );
+
+    if (yearlyData.length > 0) {
+      console.log(`No monthly data for ${yearMonth}, using yearly data for ${year}`);
+      return res.json({
+        bitcoinMined: Number(yearlyData[0].bitcoinMined),
+        valueAtCurrentPrice: Number(yearlyData[0].bitcoinMined) * currentPrice,
+        difficulty: Number(yearlyData[0].averageDifficulty),
+        currentPrice
+      });
+    }
+
+    // If no data found at any level, calculate from historical records if they exist
+    let difficulty;
     if (!isToday(requestDate)) {
       console.log(`Getting historical difficulty for ${formattedDate}`);
       difficulty = await getDifficultyData(formattedDate);
@@ -185,13 +252,6 @@ router.get('/mining-potential', async (req, res) => {
           )
         );
 
-      console.log('Historical data from DB:', {
-        found: historicalData.length > 0,
-        date: formattedDate,
-        firstRecord: historicalData[0],
-        difficulty: difficulty.toLocaleString()
-      });
-
       if (historicalData && historicalData.length > 0) {
         const totalBitcoin = historicalData.reduce(
           (sum, record) => sum + Number(record.bitcoinMined),
@@ -205,10 +265,11 @@ router.get('/mining-potential', async (req, res) => {
           currentPrice
         });
       }
-    } else {
-      difficulty = currentDifficulty;
-      console.log(`Using current difficulty for today:`, difficulty.toLocaleString());
     }
+
+    // If still no data, calculate with current difficulty
+    difficulty = difficulty || currentDifficulty;
+    console.log(`Using difficulty for calculation:`, difficulty.toLocaleString());
 
     const result = await calculateBitcoinMining(
       formattedDate,
