@@ -265,3 +265,59 @@ export async function reprocessDay(dateStr: string) {
     throw error;
   }
 }
+
+// Add after the reprocessDay function at the end of the file
+export async function reprocessMonthSummaries(startDate: string, endDate: string) {
+  try {
+    console.log(`\n=== Starting Monthly Summaries Re-processing for ${startDate} to ${endDate} ===`);
+
+    // Get all unique months in the date range
+    const months = await db
+      .select({
+        yearMonth: sql<string>`DISTINCT TO_CHAR(settlement_date::date, 'YYYY-MM')`
+      })
+      .from(curtailmentRecords)
+      .where(sql`settlement_date::date >= ${startDate}::date AND settlement_date::date <= ${endDate}::date`)
+      .orderBy(sql`yearMonth`);
+
+    for (const { yearMonth } of months) {
+      console.log(`Processing month: ${yearMonth}`);
+
+      // Calculate monthly totals from daily_summaries
+      const monthlyTotals = await db
+        .select({
+          totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
+          totalPayment: sql<string>`SUM(ABS(${dailySummaries.totalPayment}::numeric))`
+        })
+        .from(dailySummaries)
+        .where(sql`TO_CHAR(summary_date::date, 'YYYY-MM') = ${yearMonth}`);
+
+      if (monthlyTotals[0].totalCurtailedEnergy && monthlyTotals[0].totalPayment) {
+        // Update monthly summary
+        await db.insert(monthlySummaries).values({
+          yearMonth,
+          totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
+          totalPayment: monthlyTotals[0].totalPayment,
+          updatedAt: new Date()
+        }).onConflictDoUpdate({
+          target: [monthlySummaries.yearMonth],
+          set: {
+            totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
+            totalPayment: monthlyTotals[0].totalPayment,
+            updatedAt: new Date()
+          }
+        });
+
+        console.log(`Updated ${yearMonth}:`, {
+          energy: Number(monthlyTotals[0].totalCurtailedEnergy).toFixed(2),
+          payment: Number(monthlyTotals[0].totalPayment).toFixed(2)
+        });
+      }
+    }
+
+    console.log(`\n=== Monthly Summaries Re-processing Complete ===\n`);
+  } catch (error) {
+    console.error('Error during monthly summaries re-processing:', error);
+    throw error;
+  }
+}
