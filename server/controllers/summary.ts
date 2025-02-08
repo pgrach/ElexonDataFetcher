@@ -275,14 +275,12 @@ export async function getYearlySummary(req: Request, res: Response) {
       });
     }
 
-    console.log(`Fetching yearly summary for ${year}${leadParty ? ` (Lead Party: ${leadParty})` : ''}`);
-
     // If leadParty is specified, calculate from curtailment_records
     if (leadParty) {
       const farmTotals = await db
         .select({
           totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-          totalPayment: sql<string>`SUM(ABS(${curtailmentRecords.payment}::numeric))`
+          totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
         })
         .from(curtailmentRecords)
         .where(
@@ -319,7 +317,7 @@ export async function getYearlySummary(req: Request, res: Response) {
     res.json({
       year,
       totalCurtailedEnergy: Number(yearSummary.totalCurtailedEnergy),
-      totalPayment: Math.abs(Number(yearSummary.totalPayment))
+      totalPayment: Number(yearSummary.totalPayment)
     });
 
   } catch (error) {
