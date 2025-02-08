@@ -348,15 +348,13 @@ export default function Home() {
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
                   ) : yearlyError ? (
                     <div className="text-sm text-red-500">Failed to load yearly data</div>
-                  ) : yearlyBitcoinData && bitcoinPotential ? (
+                  ) : (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       £{(
-                        Number(yearlyBitcoinData.find(m => m.minerModel === selectedMinerModel)?.bitcoinMined || 0) * 
+                        Number(yearlyBitcoinData?.find(m => m.minerModel === selectedMinerModel)?.bitcoinMined || 0) * 
                         (bitcoinPotential?.price || 0)
                       ).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No yearly data available</div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
                     Estimated value at current BTC price
@@ -518,15 +516,13 @@ export default function Home() {
                     <div className="text-2xl font-bold animate-pulse">Loading...</div>
                   ) : monthlyError ? (
                     <div className="text-sm text-red-500">Failed to load monthly data</div>
-                  ) : monthlyBitcoinData && bitcoinPotential ? (
+                  ) : (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       £{(
-                        Number(monthlyBitcoinData.find(m => m.minerModel === selectedMinerModel)?.bitcoinMined || 0) * 
+                        Number(monthlyBitcoinData?.find(m => m.minerModel === selectedMinerModel)?.bitcoinMined || 0) * 
                         (bitcoinPotential?.price || 0)
                       ).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">No monthly data available</div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
                     Estimated value at current BTC price
