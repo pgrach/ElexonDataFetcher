@@ -309,8 +309,11 @@ router.get('/bitcoin/summary/monthly/:yearMonth', async (req, res) => {
 router.get('/bitcoin/summary/daily/:date', async (req, res) => {
   try {
     const { date } = req.params;
+    const yearMonth = date.substring(0, 7);
+    const year = date.substring(0, 4);
 
-    const summaries = await db
+    // First try to get daily data
+    const dailySummaries = await db
       .select({
         minerModel: bitcoinDailySummaries.minerModel,
         bitcoinMined: bitcoinDailySummaries.bitcoinMined,
@@ -320,18 +323,55 @@ router.get('/bitcoin/summary/daily/:date', async (req, res) => {
       .from(bitcoinDailySummaries)
       .where(eq(bitcoinDailySummaries.summaryDate, date));
 
-    // If no data found, return zero values for all miner models
-    if (summaries.length === 0) {
-      const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
-        minerModel: model,
-        bitcoinMined: '0',
-        valueAtMining: '0',
-        averageDifficulty: '0'
-      }));
-      return res.json(defaultModels);
+    // If daily data exists, return it
+    if (dailySummaries.length > 0) {
+      return res.json(dailySummaries);
     }
 
-    res.json(summaries);
+    // If no daily data, try to get monthly data
+    const monthlySummaries = await db
+      .select({
+        minerModel: bitcoinMonthlySummaries.minerModel,
+        bitcoinMined: bitcoinMonthlySummaries.bitcoinMined,
+        valueAtMining: bitcoinMonthlySummaries.valueAtMining,
+        averageDifficulty: bitcoinMonthlySummaries.averageDifficulty
+      })
+      .from(bitcoinMonthlySummaries)
+      .where(eq(bitcoinMonthlySummaries.yearMonth, yearMonth));
+
+    // If monthly data exists, return it
+    if (monthlySummaries.length > 0) {
+      console.log(`No daily data for ${date}, returning monthly summaries for ${yearMonth}`);
+      return res.json(monthlySummaries);
+    }
+
+    // If no monthly data, try to get yearly data
+    const yearlySummaries = await db
+      .select({
+        minerModel: bitcoinYearlySummaries.minerModel,
+        bitcoinMined: bitcoinYearlySummaries.bitcoinMined,
+        valueAtMining: bitcoinYearlySummaries.valueAtMining,
+        averageDifficulty: bitcoinYearlySummaries.averageDifficulty
+      })
+      .from(bitcoinYearlySummaries)
+      .where(eq(bitcoinYearlySummaries.year, year));
+
+    // If yearly data exists, return it
+    if (yearlySummaries.length > 0) {
+      console.log(`No monthly data for ${yearMonth}, returning yearly summaries for ${year}`);
+      return res.json(yearlySummaries);
+    }
+
+    // If no data found at any level, return zero values for all miner models
+    console.log(`No data found at any level for ${date}, returning zeros`);
+    const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
+      minerModel: model,
+      bitcoinMined: '0',
+      valueAtMining: '0',
+      averageDifficulty: '0'
+    }));
+    return res.json(defaultModels);
+
   } catch (error) {
     console.error('Error fetching daily Bitcoin summaries:', error);
     res.status(500).json({ 
