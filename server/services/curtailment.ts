@@ -86,7 +86,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
                   farmId: record.id,
                   leadPartyName: bmuLeadPartyMap?.get(record.id) || 'Unknown',
                   volume: record.volume.toString(), // Keep the original negative value
-                  payment: payment.toString(), // Keep the original payment calculation
+                  payment: payment.toString(),
                   originalPrice: record.originalPrice.toString(),
                   finalPrice: record.finalPrice.toString(),
                   soFlag: record.soFlag,
@@ -130,7 +130,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
   }
 
   try {
-    // Update daily summary with absolute payment values
+    // Update daily summary
     await db.insert(dailySummaries).values({
       summaryDate: date,
       totalCurtailedEnergy: totalVolume.toString(),
