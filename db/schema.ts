@@ -14,13 +14,7 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   soFlag: boolean("so_flag"),
   cadlFlag: boolean("cadl_flag"),
   createdAt: timestamp("created_at").defaultNow(),
-}, (table) => ({
-  uniqRecord: uniqueIndex('curtailment_records_unique_idx').on(
-    table.settlementDate,
-    table.settlementPeriod,
-    table.farmId
-  )
-}));
+});
 
 export const bitcoinDailySummaries = pgTable("bitcoin_daily_summaries", {
   id: serial("id").primaryKey(),
