@@ -39,32 +39,12 @@ async function loadCachedDifficulties(): Promise<void> {
     if (fs.existsSync(CACHE_FILE)) {
       const data = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
       Object.entries(data).forEach(([date, difficulty]) => {
-        if (difficulty && typeof difficulty === 'string') {
-          DIFFICULTY_CACHE.set(date, difficulty);
-        }
+        DIFFICULTY_CACHE.set(date, difficulty.toString());
       });
       console.log(`Loaded ${DIFFICULTY_CACHE.size} difficulties from cache`);
     }
   } catch (error) {
     console.error('Error loading cached difficulties:', error);
-  }
-}
-
-// Add helper function for fetching Minerstat data
-async function fetchFromMinerstat() {
-  try {
-    const response = await axios.get('https://api.minerstat.com/v2/stats/bitcoin');
-    if (!response.data || !response.data.difficulty || !response.data.price) {
-      console.error('Invalid Minerstat response:', response.data);
-      throw new Error('Invalid Minerstat response structure');
-    }
-    return {
-      difficulty: response.data.difficulty,
-      price: response.data.price
-    };
-  } catch (error) {
-    console.error('Error fetching from Minerstat:', error);
-    throw error;
   }
 }
 
@@ -376,52 +356,38 @@ async function processSingleDay(
   await processingPromise;
 }
 
+// Add helper function for fetching Minerstat data
+async function fetchFromMinerstat() {
+  try {
+    const response = await axios.get('https://api.minerstat.com/v2/stats/bitcoin');
+    return {
+      difficulty: response.data.difficulty,
+      price: response.data.price
+    };
+  } catch (error) {
+    console.error('Error fetching from Minerstat:', error);
+    throw error;
+  }
+}
+
 function calculateBitcoinForBMU(
   curtailedMwh: number,
   minerModel: string,
   difficulty: number
 ): number {
-  console.log('Calculating Bitcoin for BMU:', { curtailedMwh, minerModel, difficulty });
-
   const miner = minerModels[minerModel];
-  if (!miner) {
-    console.error(`Invalid miner model: ${minerModel}`);
-    throw new Error(`Invalid miner model: ${minerModel}`);
-  }
-
-  if (!difficulty || difficulty <= 0) {
-    console.error(`Invalid difficulty value: ${difficulty}`);
-    throw new Error(`Invalid difficulty value: ${difficulty}`);
-  }
+  if (!miner) throw new Error(`Invalid miner model: ${minerModel}`);
 
   const curtailedKwh = curtailedMwh * 1000;
   const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
   const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
-
-  console.log('Calculation parameters:', {
-    curtailedKwh,
-    minerConsumptionKwh,
-    potentialMiners,
-    minerHashrate: miner.hashrate
-  });
-
   const difficultyNum = typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty;
   const hashesPerBlock = difficultyNum * Math.pow(2, 32);
   const networkHashRate = hashesPerBlock / 600;
   const networkHashRateTH = networkHashRate / 1e12;
   const totalHashPower = potentialMiners * miner.hashrate;
   const ourNetworkShare = totalHashPower / networkHashRateTH;
-
-  const bitcoinMined = Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
-
-  console.log('Mining result:', {
-    networkHashRateTH: networkHashRateTH.toExponential(),
-    totalHashPower: totalHashPower.toExponential(),
-    ourNetworkShare,
-    bitcoinMined
-  });
-
-  return bitcoinMined;
+  return Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
 }
 
 async function processHistoricalCalculations(
@@ -451,6 +417,5 @@ export {
   calculateBitcoinForBMU,
   processHistoricalCalculations,
   processSingleDay,
-  fetch2024Difficulties,
-  fetchFromMinerstat
+  fetch2024Difficulties
 };

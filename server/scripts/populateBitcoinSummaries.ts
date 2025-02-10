@@ -21,9 +21,6 @@ interface SummaryRecord {
 async function fetchCurrentBitcoinPrice(): Promise<number> {
   try {
     const response = await axios.get('https://api.minerstat.com/v2/stats/bitcoin');
-    if (!response.data || typeof response.data.price !== 'number') {
-      throw new Error('Invalid price data from Minerstat');
-    }
     return response.data.price;
   } catch (error) {
     console.error('Error fetching Bitcoin price:', error);
@@ -38,17 +35,16 @@ async function populateDailySummaries() {
 
     const result = await db.execute(sql`
       SELECT 
-        settlement_date::text,
+        settlement_date,
         miner_model,
-        SUM(bitcoin_mined::numeric)::text as total_bitcoin,
-        AVG(difficulty::numeric)::text as avg_difficulty
+        SUM(bitcoin_mined::numeric) as total_bitcoin,
+        AVG(difficulty::numeric) as avg_difficulty
       FROM historical_bitcoin_calculations
       GROUP BY settlement_date, miner_model
       ORDER BY settlement_date DESC
     `);
 
-    const dailyData = result.rows as unknown as SummaryRecord[];
-    console.log(`Processing ${dailyData.length} daily records`);
+    const dailyData = result.rows as SummaryRecord[];
 
     for (const record of dailyData) {
       if (!record.settlement_date) continue;
@@ -191,6 +187,7 @@ async function populateAllSummaries() {
   }
 }
 
+// Run the population script
 if (import.meta.url === `file://${process.argv[1]}`) {
   populateAllSummaries();
 }
