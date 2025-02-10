@@ -90,42 +90,49 @@ async function hasDataChanged(records: ElexonBidOffer[], date: string, period: n
 }
 
 async function upsertRecords(records: ElexonBidOffer[], date: string, period: number): Promise<void> {
-  for (const record of records) {
-    const volume = Math.abs(record.volume);
-    const payment = volume * record.originalPrice;
+  try {
+    // Process records in a single transaction to ensure atomicity
+    await db.transaction(async (tx) => {
+      for (const record of records) {
+        const volume = Math.abs(record.volume);
+        const payment = volume * record.originalPrice;
 
-    try {
-      await db.insert(curtailmentRecords)
-        .values({
-          settlementDate: date,
-          settlementPeriod: period,
-          farmId: record.id,
-          leadPartyName: record.leadPartyName || 'Unknown',
-          volume: record.volume.toString(),
-          payment: payment.toString(),
-          originalPrice: record.originalPrice.toString(),
-          finalPrice: record.finalPrice.toString(),
-          soFlag: record.soFlag,
-          cadlFlag: record.cadlFlag
-        })
-        .onConflictDoUpdate({
-          target: [
-            curtailmentRecords.settlementDate,
-            curtailmentRecords.settlementPeriod,
-            curtailmentRecords.farmId
-          ],
-          set: {
+        await tx
+          .insert(curtailmentRecords)
+          .values({
+            settlementDate: date,
+            settlementPeriod: period,
+            farmId: record.id,
+            leadPartyName: record.leadPartyName || 'Unknown',
             volume: record.volume.toString(),
             payment: payment.toString(),
             originalPrice: record.originalPrice.toString(),
             finalPrice: record.finalPrice.toString(),
             soFlag: record.soFlag,
             cadlFlag: record.cadlFlag
-          }
-        });
-    } catch (error) {
-      console.error(`Error upserting record for ${record.id}:`, error);
-    }
+          })
+          .onConflictDoUpdate({
+            target: [
+              curtailmentRecords.settlementDate,
+              curtailmentRecords.settlementPeriod,
+              curtailmentRecords.farmId
+            ],
+            set: {
+              volume: record.volume.toString(),
+              payment: payment.toString(),
+              originalPrice: record.originalPrice.toString(),
+              finalPrice: record.finalPrice.toString(),
+              soFlag: record.soFlag,
+              cadlFlag: record.cadlFlag
+            }
+          });
+      }
+    });
+
+    console.log(`Successfully upserted ${records.length} records for ${date} P${period}`);
+  } catch (error) {
+    console.error(`Error in upsertRecords for ${date} P${period}:`, error);
+    throw error;
   }
 }
 
