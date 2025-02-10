@@ -25,38 +25,32 @@ async function populateDailySummaries() {
     const currentPrice = await fetchCurrentBitcoinPrice();
 
     const dailyData = await db.execute(sql`
-      WITH daily_totals AS (
-        SELECT 
-          settlement_date,
-          miner_model,
-          COALESCE(SUM(CAST(bitcoin_mined AS numeric)), 0) as total_bitcoin,
-          COALESCE(AVG(CAST(difficulty AS numeric)), 0) as avg_difficulty
-        FROM historical_bitcoin_calculations
-        GROUP BY settlement_date, miner_model
-      )
-      SELECT * FROM daily_totals
+      SELECT 
+        settlement_date,
+        miner_model,
+        SUM(bitcoin_mined::numeric) as total_bitcoin,
+        AVG(difficulty::numeric) as avg_difficulty
+      FROM historical_bitcoin_calculations
+      GROUP BY settlement_date, miner_model
       ORDER BY settlement_date DESC
     `);
 
     for (const record of dailyData.rows) {
-      const bitcoinMined = parseFloat(record.total_bitcoin as string) || 0;
-      const avgDifficulty = parseFloat(record.avg_difficulty as string) || 0;
-
       await db.insert(bitcoinDailySummaries)
         .values({
-          summaryDate: record.settlement_date as string,
-          minerModel: record.miner_model as string,
-          bitcoinMined: bitcoinMined.toString(),
-          valueAtMining: (bitcoinMined * currentPrice).toString(),
-          averageDifficulty: avgDifficulty.toString(),
+          summaryDate: record.settlement_date,
+          minerModel: record.miner_model,
+          bitcoinMined: record.total_bitcoin.toString(),
+          valueAtMining: (Number(record.total_bitcoin) * currentPrice).toString(),
+          averageDifficulty: record.avg_difficulty.toString(),
           updatedAt: new Date()
         })
         .onConflictDoUpdate({
           target: [bitcoinDailySummaries.summaryDate, bitcoinDailySummaries.minerModel],
           set: {
-            bitcoinMined: bitcoinMined.toString(),
-            valueAtMining: (bitcoinMined * currentPrice).toString(),
-            averageDifficulty: avgDifficulty.toString(),
+            bitcoinMined: record.total_bitcoin.toString(),
+            valueAtMining: (Number(record.total_bitcoin) * currentPrice).toString(),
+            averageDifficulty: record.avg_difficulty.toString(),
             updatedAt: new Date()
           }
         });
@@ -75,38 +69,32 @@ async function populateMonthlySummaries() {
     const currentPrice = await fetchCurrentBitcoinPrice();
 
     const monthlyData = await db.execute(sql`
-      WITH monthly_totals AS (
-        SELECT 
-          TO_CHAR(settlement_date, 'YYYY-MM') as year_month,
-          miner_model,
-          COALESCE(SUM(CAST(bitcoin_mined AS numeric)), 0) as total_bitcoin,
-          COALESCE(AVG(CAST(difficulty AS numeric)), 0) as avg_difficulty
-        FROM historical_bitcoin_calculations
-        GROUP BY TO_CHAR(settlement_date, 'YYYY-MM'), miner_model
-      )
-      SELECT * FROM monthly_totals
+      SELECT 
+        TO_CHAR(summary_date, 'YYYY-MM') as year_month,
+        miner_model,
+        SUM(bitcoin_mined::numeric) as total_bitcoin,
+        AVG(average_difficulty::numeric) as avg_difficulty
+      FROM bitcoin_daily_summaries
+      GROUP BY TO_CHAR(summary_date, 'YYYY-MM'), miner_model
       ORDER BY year_month DESC
     `);
 
     for (const record of monthlyData.rows) {
-      const bitcoinMined = parseFloat(record.total_bitcoin as string) || 0;
-      const avgDifficulty = parseFloat(record.avg_difficulty as string) || 0;
-
       await db.insert(bitcoinMonthlySummaries)
         .values({
-          yearMonth: record.year_month as string,
-          minerModel: record.miner_model as string,
-          bitcoinMined: bitcoinMined.toString(),
-          valueAtMining: (bitcoinMined * currentPrice).toString(),
-          averageDifficulty: avgDifficulty.toString(),
+          yearMonth: record.year_month,
+          minerModel: record.miner_model,
+          bitcoinMined: record.total_bitcoin.toString(),
+          valueAtMining: (Number(record.total_bitcoin) * currentPrice).toString(),
+          averageDifficulty: record.avg_difficulty.toString(),
           updatedAt: new Date()
         })
         .onConflictDoUpdate({
           target: [bitcoinMonthlySummaries.yearMonth, bitcoinMonthlySummaries.minerModel],
           set: {
-            bitcoinMined: bitcoinMined.toString(),
-            valueAtMining: (bitcoinMined * currentPrice).toString(),
-            averageDifficulty: avgDifficulty.toString(),
+            bitcoinMined: record.total_bitcoin.toString(),
+            valueAtMining: (Number(record.total_bitcoin) * currentPrice).toString(),
+            averageDifficulty: record.avg_difficulty.toString(),
             updatedAt: new Date()
           }
         });
@@ -125,38 +113,32 @@ async function populateYearlySummaries() {
     const currentPrice = await fetchCurrentBitcoinPrice();
 
     const yearlyData = await db.execute(sql`
-      WITH yearly_totals AS (
-        SELECT 
-          TO_CHAR(settlement_date, 'YYYY') as year,
-          miner_model,
-          COALESCE(SUM(CAST(bitcoin_mined AS numeric)), 0) as total_bitcoin,
-          COALESCE(AVG(CAST(difficulty AS numeric)), 0) as avg_difficulty
-        FROM historical_bitcoin_calculations
-        GROUP BY TO_CHAR(settlement_date, 'YYYY'), miner_model
-      )
-      SELECT * FROM yearly_totals
+      SELECT 
+        TO_CHAR(summary_date, 'YYYY') as year,
+        miner_model,
+        SUM(bitcoin_mined::numeric) as total_bitcoin,
+        AVG(average_difficulty::numeric) as avg_difficulty
+      FROM bitcoin_daily_summaries
+      GROUP BY TO_CHAR(summary_date, 'YYYY'), miner_model
       ORDER BY year DESC
     `);
 
     for (const record of yearlyData.rows) {
-      const bitcoinMined = parseFloat(record.total_bitcoin as string) || 0;
-      const avgDifficulty = parseFloat(record.avg_difficulty as string) || 0;
-
       await db.insert(bitcoinYearlySummaries)
         .values({
-          year: record.year as string,
-          minerModel: record.miner_model as string,
-          bitcoinMined: bitcoinMined.toString(),
-          valueAtMining: (bitcoinMined * currentPrice).toString(),
-          averageDifficulty: avgDifficulty.toString(),
+          year: record.year,
+          minerModel: record.miner_model,
+          bitcoinMined: record.total_bitcoin.toString(),
+          valueAtMining: (Number(record.total_bitcoin) * currentPrice).toString(),
+          averageDifficulty: record.avg_difficulty.toString(),
           updatedAt: new Date()
         })
         .onConflictDoUpdate({
           target: [bitcoinYearlySummaries.year, bitcoinYearlySummaries.minerModel],
           set: {
-            bitcoinMined: bitcoinMined.toString(),
-            valueAtMining: (bitcoinMined * currentPrice).toString(),
-            averageDifficulty: avgDifficulty.toString(),
+            bitcoinMined: record.total_bitcoin.toString(),
+            valueAtMining: (Number(record.total_bitcoin) * currentPrice).toString(),
+            averageDifficulty: record.avg_difficulty.toString(),
             updatedAt: new Date()
           }
         });
@@ -172,11 +154,11 @@ async function populateYearlySummaries() {
 async function populateAllSummaries() {
   try {
     console.log('\n=== Starting Bitcoin Summary Population ===\n');
-
+    
     await populateDailySummaries();
     await populateMonthlySummaries();
     await populateYearlySummaries();
-
+    
     console.log('\n=== Bitcoin Summary Population Complete ===\n');
   } catch (error) {
     console.error('Error in summary population:', error);

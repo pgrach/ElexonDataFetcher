@@ -4,7 +4,7 @@ import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations, bitcoinDailySummaries, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDifficultyData } from '../services/dynamodbService';
 import axios from 'axios';
 
@@ -239,44 +239,29 @@ router.get('/mining-potential', async (req, res) => {
 router.get('/bitcoin/summary/yearly/:year', async (req, res) => {
   try {
     const { year } = req.params;
-    console.log(`Fetching yearly summary for ${year}`);
 
-    // Query historical calculations directly for the year
-    const historicalData = await db.execute(sql`
-      SELECT 
-        miner_model,
-        COALESCE(SUM(CAST(bitcoin_mined AS numeric)), 0) as total_bitcoin,
-        AVG(CAST(difficulty AS numeric)) as avg_difficulty
-      FROM historical_bitcoin_calculations
-      WHERE EXTRACT(YEAR FROM settlement_date::date) = ${parseInt(year)}
-      GROUP BY miner_model
-    `);
+    const summaries = await db
+      .select({
+        minerModel: bitcoinYearlySummaries.minerModel,
+        bitcoinMined: bitcoinYearlySummaries.bitcoinMined,
+        valueAtMining: bitcoinYearlySummaries.valueAtMining,
+        averageDifficulty: bitcoinYearlySummaries.averageDifficulty
+      })
+      .from(bitcoinYearlySummaries)
+      .where(eq(bitcoinYearlySummaries.year, year));
 
-    const currentPrice = (await fetchFromMinerstat()).price;
-
-    // Always return the aggregated data, even if the current day has no records
-    const summaries = historicalData.rows.map(record => ({
-      minerModel: record.miner_model,
-      bitcoinMined: record.total_bitcoin?.toString() || '0',
-      valueAtMining: (Number(record.total_bitcoin || 0) * currentPrice).toString(),
-      averageDifficulty: record.avg_difficulty?.toString() || '0'
-    }));
-
-    //If we got any data for the year, return it
-    if(summaries.length > 0){
-        console.log(`Found yearly data for ${year}:`, summaries);
-        return res.json(summaries);
+    // If no data found, return zero values for all miner models
+    if (summaries.length === 0) {
+      const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
+        minerModel: model,
+        bitcoinMined: '0',
+        valueAtMining: '0',
+        averageDifficulty: '0'
+      }));
+      return res.json(defaultModels);
     }
 
-    //Only return zero values if there's no data at all for the year
-    const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
-      minerModel: model,
-      bitcoinMined: '0',
-      valueAtMining: '0',
-      averageDifficulty: '0'
-    }));
-    return res.json(defaultModels);
-
+    res.json(summaries);
   } catch (error) {
     console.error('Error fetching yearly Bitcoin summaries:', error);
     res.status(500).json({ 
@@ -289,46 +274,29 @@ router.get('/bitcoin/summary/yearly/:year', async (req, res) => {
 router.get('/bitcoin/summary/monthly/:yearMonth', async (req, res) => {
   try {
     const { yearMonth } = req.params;
-    const [year, month] = yearMonth.split('-');
-    console.log(`Fetching monthly summary for ${yearMonth}`);
 
-    // Query historical calculations directly for the month
-    const historicalData = await db.execute(sql`
-      SELECT 
-        miner_model,
-        COALESCE(SUM(CAST(bitcoin_mined AS numeric)), 0) as total_bitcoin,
-        AVG(CAST(difficulty AS numeric)) as avg_difficulty
-      FROM historical_bitcoin_calculations
-      WHERE EXTRACT(YEAR FROM settlement_date::date) = ${parseInt(year)}
-      AND EXTRACT(MONTH FROM settlement_date::date) = ${parseInt(month)}
-      GROUP BY miner_model
-    `);
+    const summaries = await db
+      .select({
+        minerModel: bitcoinMonthlySummaries.minerModel,
+        bitcoinMined: bitcoinMonthlySummaries.bitcoinMined,
+        valueAtMining: bitcoinMonthlySummaries.valueAtMining,
+        averageDifficulty: bitcoinMonthlySummaries.averageDifficulty
+      })
+      .from(bitcoinMonthlySummaries)
+      .where(eq(bitcoinMonthlySummaries.yearMonth, yearMonth));
 
-    const currentPrice = (await fetchFromMinerstat()).price;
-
-    // Always return the aggregated data, even if the current day has no records
-    const summaries = historicalData.rows.map(record => ({
-      minerModel: record.miner_model,
-      bitcoinMined: record.total_bitcoin?.toString() || '0',
-      valueAtMining: (Number(record.total_bitcoin || 0) * currentPrice).toString(),
-      averageDifficulty: record.avg_difficulty?.toString() || '0'
-    }));
-
-    //If we got any data for the month, return it
-    if(summaries.length > 0){
-        console.log(`Found monthly data for ${yearMonth}:`, summaries);
-        return res.json(summaries);
+    // If no data found, return zero values for all miner models
+    if (summaries.length === 0) {
+      const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
+        minerModel: model,
+        bitcoinMined: '0',
+        valueAtMining: '0',
+        averageDifficulty: '0'
+      }));
+      return res.json(defaultModels);
     }
 
-    //Only return zero values if there's no data at all for the month
-    const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
-      minerModel: model,
-      bitcoinMined: '0',
-      valueAtMining: '0',
-      averageDifficulty: '0'
-    }));
-    return res.json(defaultModels);
-
+    res.json(summaries);
   } catch (error) {
     console.error('Error fetching monthly Bitcoin summaries:', error);
     res.status(500).json({ 
@@ -338,7 +306,6 @@ router.get('/bitcoin/summary/monthly/:yearMonth', async (req, res) => {
   }
 });
 
-// Daily summary endpoint remains unchanged as it correctly handles individual days
 router.get('/bitcoin/summary/daily/:date', async (req, res) => {
   try {
     const { date } = req.params;
