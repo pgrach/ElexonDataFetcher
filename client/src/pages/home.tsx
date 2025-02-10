@@ -23,6 +23,7 @@ interface BitcoinCalculation {
   bitcoinMined: number;
   valueAtCurrentPrice: number;
   difficulty: number;
+  currentPrice: number;
   price: number;
 }
 
@@ -114,7 +115,10 @@ export default function Home() {
     enabled: !!formattedDate && isValid(date),
   });
 
-  const { data: bitcoinPotential } = useQuery<BitcoinCalculation>({
+  const {
+    data: bitcoinPotential,
+    isLoading: isBitcoinLoading
+  } = useQuery<BitcoinCalculation>({
     queryKey: [
       `/api/curtailment/mining-potential`,
       selectedMinerModel,
@@ -130,16 +134,14 @@ export default function Home() {
         leadParty: selectedLeadParty,
       });
 
-      if (!isValid(date) || !dailyData?.totalCurtailedEnergy) {
-        console.log("Skipping Bitcoin calculation:", {
-          isValidDate: isValid(date),
-          hasCurtailedEnergy: !!dailyData?.totalCurtailedEnergy,
-        });
+      if (!isValid(date)) {
+        console.log("Invalid date, skipping Bitcoin calculation");
         return {
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
           difficulty: 0,
-          price: 0,
+          currentPrice: 0,
+          price: 0
         };
       }
 
@@ -149,7 +151,6 @@ export default function Home() {
       );
       url.searchParams.set("date", formattedDate);
       url.searchParams.set("minerModel", selectedMinerModel);
-      url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
       if (selectedLeadParty) {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
@@ -165,10 +166,7 @@ export default function Home() {
       console.log("Bitcoin calculation result:", result);
       return result;
     },
-    enabled:
-      !!formattedDate &&
-      isValid(date) &&
-      !!dailyData?.totalCurtailedEnergy,
+    enabled: !!formattedDate && isValid(date)
   });
 
   const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
@@ -629,41 +627,26 @@ export default function Home() {
                           ? dailyError.message
                           : "Failed to load daily data"}
                       </div>
-                    ) : dailyData ? (
-                      <div className="text-3xl font-bold">
-                        {Number(
-                          dailyData.totalCurtailedEnergy,
-                        ).toLocaleString()}{" "}
-                        MWh
-                      </div>
                     ) : (
-                      <div className="text-sm text-muted-foreground">
-                        No daily data available
+                      <div className="text-3xl font-bold">
+                        {Number(dailyData?.totalCurtailedEnergy || 0).toLocaleString()} MWh
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <div className="text-sm text-muted-foreground mb-1">
-                      Payment
-                    </div>
+                    <div className="text-sm text-muted-foreground mb-1">Payment</div>
                     {isDailyLoading ? (
-                      <div className="text-3xl font-bold animate-pulse">
-                        Loading...
-                      </div>
+                      <div className="text-3xl font-bold animate-pulse">Loading...</div>
                     ) : dailyError ? (
                       <div className="text-sm text-red-500">
                         {dailyError instanceof Error
                           ? dailyError.message
                           : "Failed to load daily data"}
                       </div>
-                    ) : dailyData ? (
-                      <div className="text-3xl font-bold">
-                        £{Number(dailyData.totalPayment).toLocaleString()}
-                      </div>
                     ) : (
-                      <div className="text-sm text-muted-foreground">
-                        No daily data available
+                      <div className="text-3xl font-bold">
+                        £{Number(dailyData?.totalPayment || 0).toLocaleString()}
                       </div>
                     )}
                   </div>
@@ -681,23 +664,17 @@ export default function Home() {
                         </Tooltip>
                       </TooltipProvider>
                     </div>
-                    {isDailyLoading ? (
-                      <div className="text-3xl font-bold animate-pulse">
-                        Loading...
-                      </div>
+                    {isBitcoinLoading ? (
+                      <div className="text-3xl font-bold animate-pulse">Loading...</div>
                     ) : dailyError ? (
                       <div className="text-sm text-red-500">
                         {dailyError instanceof Error
                           ? dailyError.message
                           : "Failed to load daily data"}
                       </div>
-                    ) : dailyData ? (
-                      <div className="text-3xl font-bold text-[#F7931A]">
-                        ₿{bitcoinPotential?.bitcoinMined.toFixed(8) || "0.00"}
-                      </div>
                     ) : (
-                      <div className="text-sm text-muted-foreground">
-                        No daily data available
+                      <div className="text-3xl font-bold text-[#F7931A]">
+                        ₿{(bitcoinPotential?.bitcoinMined || 0).toFixed(8)}
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground mt-1">
@@ -710,27 +687,17 @@ export default function Home() {
                     <div className="text-sm text-muted-foreground mb-1">
                       Value if Bitcoin was mined
                     </div>
-                    {isDailyLoading ? (
-                      <div className="text-3xl font-bold animate-pulse">
-                        Loading...
-                      </div>
+                    {isBitcoinLoading ? (
+                      <div className="text-3xl font-bold animate-pulse">Loading...</div>
                     ) : dailyError ? (
                       <div className="text-sm text-red-500">
                         {dailyError instanceof Error
                           ? dailyError.message
                           : "Failed to load daily data"}
                       </div>
-                    ) : dailyData && bitcoinPotential ? (
-                      <div className="text-3xl font-bold text-[#F7931A]">
-                        £
-                        {(bitcoinPotential?.valueAtCurrentPrice || 0).toLocaleString(
-                          "en-GB",
-                          { maximumFractionDigits: 2 },
-                        )}
-                      </div>
                     ) : (
-                      <div className="text-sm text-muted-foreground">
-                        No daily data available
+                      <div className="text-3xl font-bold text-[#F7931A]">
+                        £{((bitcoinPotential?.bitcoinMined || 0) * (bitcoinPotential?.price || 0)).toLocaleString("en-GB", { maximumFractionDigits: 2 })}
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground mt-1">
@@ -754,9 +721,8 @@ export default function Home() {
                         : hour.curtailedEnergy,
                       bitcoinMined: isHourInFuture(hour.hour)
                         ? 0
-                        : (hour.curtailedEnergy *
-                            (bitcoinPotential?.bitcoinMined || 0)) /
-                          (dailyData?.totalCurtailedEnergy || 1),
+                        : (hour.curtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) *
+                          (bitcoinPotential?.bitcoinMined || 0),
                     }))}
                     chartConfig={{
                       leftAxis: {

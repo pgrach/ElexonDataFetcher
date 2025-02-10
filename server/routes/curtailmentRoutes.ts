@@ -181,7 +181,8 @@ router.get('/mining-potential', async (req, res) => {
         .where(
           and(
             eq(historicalBitcoinCalculations.settlementDate, formattedDate),
-            eq(historicalBitcoinCalculations.minerModel, minerModel)
+            eq(historicalBitcoinCalculations.minerModel, minerModel),
+            leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
           )
         );
 
@@ -202,7 +203,8 @@ router.get('/mining-potential', async (req, res) => {
           bitcoinMined: totalBitcoin,
           valueAtCurrentPrice: totalBitcoin * currentPrice,
           difficulty: Number(historicalData[0].difficulty),
-          currentPrice
+          currentPrice,
+          price: currentPrice 
         });
       }
     } else {
@@ -223,7 +225,8 @@ router.get('/mining-potential', async (req, res) => {
       bitcoinMined: result.totalBitcoin,
       valueAtCurrentPrice: result.totalBitcoin * currentPrice,
       difficulty,
-      currentPrice
+      currentPrice,
+      price: currentPrice 
     });
 
   } catch (error) {
