@@ -108,18 +108,27 @@ export default function Home() {
     enabled: !!formattedDate && isValid(date),
   });
 
-  const {
-    data: bitcoinPotential,
-    isLoading: isBitcoinLoading,
-  } = useQuery<BitcoinCalculation>({
+  const { data: bitcoinPotential } = useQuery<BitcoinCalculation>({
     queryKey: [
       `/api/curtailment/mining-potential`,
-      formattedDate,
       selectedMinerModel,
-      selectedLeadParty
+      dailyData?.totalCurtailedEnergy,
+      selectedLeadParty,
+      formattedDate 
     ],
     queryFn: async () => {
-      if (!isValid(date)) {
+      console.log("Bitcoin calculation parameters:", {
+        date: formattedDate,
+        minerModel: selectedMinerModel,
+        curtailedEnergy: dailyData?.totalCurtailedEnergy,
+        leadParty: selectedLeadParty,
+      });
+
+      if (!isValid(date) || !dailyData?.totalCurtailedEnergy) {
+        console.log("Skipping Bitcoin calculation:", {
+          isValidDate: isValid(date),
+          hasCurtailedEnergy: !!dailyData?.totalCurtailedEnergy,
+        });
         return {
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
@@ -134,18 +143,26 @@ export default function Home() {
       );
       url.searchParams.set("date", formattedDate);
       url.searchParams.set("minerModel", selectedMinerModel);
+      url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
       if (selectedLeadParty) {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
+
+      console.log("Fetching from URL:", url.toString());
 
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error("Failed to fetch mining potential");
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log("Bitcoin calculation result:", result);
+      return result;
     },
-    enabled: !!formattedDate && isValid(date),
+    enabled:
+      !!formattedDate &&
+      isValid(date) &&
+      !!dailyData?.totalCurtailedEnergy,
   });
 
   const {
@@ -254,63 +271,6 @@ export default function Home() {
     return selectedDate > now;
   };
 
-  // Daily Bitcoin section rendering
-  const renderDailyBitcoin = () => {
-    if (isDailyLoading || isBitcoinLoading) {
-      return <div className="text-2xl font-bold animate-pulse">Loading...</div>;
-    }
-    if (dailyError) {
-      return <div className="text-sm text-red-500">Failed to load daily data</div>;
-    }
-    if (dailyData && bitcoinPotential) {
-      return (
-        <div className="text-2xl font-bold text-[#F7931A]">
-          ₿{(bitcoinPotential?.bitcoinMined || 0).toFixed(8)}
-        </div>
-      );
-    }
-    return <div className="text-sm text-muted-foreground">Loading Bitcoin data...</div>;
-  };
-
-  // Monthly Bitcoin section rendering
-  const renderMonthlyBitcoin = () => {
-    if (isMonthlyLoading || isBitcoinLoading) {
-      return <div className="text-2xl font-bold animate-pulse">Loading...</div>;
-    }
-    if (monthlyError) {
-      return <div className="text-sm text-red-500">Failed to load monthly data</div>;
-    }
-    if (monthlyData && bitcoinPotential) {
-      return (
-        <div className="text-2xl font-bold text-[#F7931A]">
-          ₿{((monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) *
-            (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
-        </div>
-      );
-    }
-    return <div className="text-sm text-muted-foreground">Loading Bitcoin data...</div>;
-  };
-
-  // Yearly Bitcoin section rendering
-  const renderYearlyBitcoin = () => {
-    if (isYearlyLoading || isBitcoinLoading) {
-      return <div className="text-2xl font-bold animate-pulse">Loading...</div>;
-    }
-    if (yearlyError) {
-      return <div className="text-sm text-red-500">Failed to load yearly data</div>;
-    }
-    if (yearlyData && bitcoinPotential) {
-      return (
-        <div className="text-2xl font-bold text-[#F7931A]">
-          ₿{((yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) *
-            (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
-        </div>
-      );
-    }
-    return <div className="text-sm text-muted-foreground">Loading Bitcoin data...</div>;
-  };
-
-
   return (
     <div className="min-h-screen">
       <FilterBar
@@ -371,7 +331,24 @@ export default function Home() {
                   <div className="text-sm font-medium">
                     Bitcoin could be mined
                   </div>
-                  {renderYearlyBitcoin()}
+                  {isYearlyLoading ? (
+                    <div className="text-2xl font-bold animate-pulse">
+                      Loading...
+                    </div>
+                  ) : yearlyError ? (
+                    <div className="text-sm text-red-500">
+                      Failed to load yearly data
+                    </div>
+                  ) : yearlyData ? (
+                    <div className="text-2xl font-bold text-[#F7931A]">
+                      ₿{((yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * 
+                        (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      No yearly data available
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground mt-1">
                     With {selectedMinerModel.replace("_", " ")} miners
                   </p>
@@ -428,7 +405,7 @@ export default function Home() {
                   <div className="text-sm font-medium">
                     Value if Bitcoin was mined
                   </div>
-                  {yearlyData && (isYearlyLoading || isBitcoinLoading) ? (
+                  {isYearlyLoading ? (
                     <div className="text-2xl font-bold animate-pulse">
                       Loading...
                     </div>
@@ -436,13 +413,13 @@ export default function Home() {
                     <div className="text-sm text-red-500">
                       Failed to load yearly data
                     </div>
-                  ) : yearlyData && bitcoinPotential ? (
+                  ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       £{((yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * (bitcoinPotential?.valueAtCurrentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
-                      Loading Bitcoin data...
+                      No yearly data available
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
@@ -505,7 +482,24 @@ export default function Home() {
                   <div className="text-sm font-medium">
                     Bitcoin could be mined
                   </div>
-                  {renderMonthlyBitcoin()}
+                  {isMonthlyLoading ? (
+                    <div className="text-2xl font-bold animate-pulse">
+                      Loading...
+                    </div>
+                  ) : monthlyError ? (
+                    <div className="text-sm text-red-500">
+                      Failed to load monthly data
+                    </div>
+                  ) : monthlyData ? (
+                    <div className="text-2xl font-bold text-[#F7931A]">
+                      ₿{((monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * 
+                        (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      No monthly data available
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground mt-1">
                     With {selectedMinerModel.replace("_", " ")} miners
                   </p>
@@ -562,7 +556,7 @@ export default function Home() {
                   <div className="text-sm font-medium">
                     Value if Bitcoin was mined
                   </div>
-                  {monthlyData && (isMonthlyLoading || isBitcoinLoading) ? (
+                  {isMonthlyLoading ? (
                     <div className="text-2xl font-bold animate-pulse">
                       Loading...
                     </div>
@@ -570,13 +564,13 @@ export default function Home() {
                     <div className="text-sm text-red-500">
                       Failed to load monthly data
                     </div>
-                  ) : monthlyData && bitcoinPotential ? (
+                  ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
                       £{((monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * (bitcoinPotential?.valueAtCurrentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
-                      Loading Bitcoin data...
+                      No monthly data available
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
@@ -658,12 +652,30 @@ export default function Home() {
                             Mining Opportunity Loss
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Network Difficulty: {(bitcoinPotential?.difficulty || 0).toLocaleString()}</p>
+                            <p>Network Difficulty: {bitcoinPotential?.difficulty.toLocaleString()}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     </div>
-                    {renderDailyBitcoin()}
+                    {isDailyLoading ? (
+                      <div className="text-3xl font-bold animate-pulse">
+                        Loading...
+                      </div>
+                    ) : dailyError ? (
+                      <div className="text-sm text-red-500">
+                        {dailyError instanceof Error
+                          ? dailyError.message
+                          : "Failed to load daily data"}
+                      </div>
+                    ) : dailyData ? (
+                      <div className="text-3xl font-bold text-[#F7931A]">
+                        ₿{bitcoinPotential?.bitcoinMined.toFixed(8) || "0.00"}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        No daily data available
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground mt-1">
                       Potential mining with{" "}
                       {selectedMinerModel.replace("_", " ")} miners
@@ -674,7 +686,7 @@ export default function Home() {
                     <div className="text-sm text-muted-foreground mb-1">
                       Value if Bitcoin was mined
                     </div>
-                    {isDailyLoading || isBitcoinLoading ? (
+                    {isDailyLoading ? (
                       <div className="text-3xl font-bold animate-pulse">
                         Loading...
                       </div>
@@ -684,7 +696,7 @@ export default function Home() {
                           ? dailyError.message
                           : "Failed to load daily data"}
                       </div>
-                    ) : dailyData && bitcoinPotential ? (
+                    ) : dailyData ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
                         £
                         {(bitcoinPotential?.valueAtCurrentPrice || 0).toLocaleString(
@@ -694,7 +706,7 @@ export default function Home() {
                       </div>
                     ) : (
                       <div className="text-sm text-muted-foreground">
-                        Loading Bitcoin data...
+                        No daily data available
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground mt-1">

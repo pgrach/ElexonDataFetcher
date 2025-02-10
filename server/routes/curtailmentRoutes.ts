@@ -3,7 +3,7 @@ import { format, parseISO, isToday, isValid } from 'date-fns';
 import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
-import { historicalBitcoinCalculations, bitcoinDailySummaries, bitcoinMonthlySummaries, bitcoinYearlySummaries, curtailmentRecords } from "@db/schema";
+import { historicalBitcoinCalculations, bitcoinDailySummaries, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
 import { and, eq } from "drizzle-orm";
 import { getDifficultyData } from '../services/dynamodbService';
 import axios from 'axios';
@@ -168,54 +168,9 @@ router.get('/mining-potential', async (req, res) => {
     });
 
     const { price: currentPrice, difficulty: currentDifficulty } = await fetchFromMinerstat();
-    console.log('Current market data:', { currentPrice, currentDifficulty });
+    let difficulty;
 
-    let difficulty: number;
-    let result;
-
-    if (isToday(requestDate)) {
-      console.log(`Using current difficulty for today:`, currentDifficulty.toLocaleString());
-      difficulty = currentDifficulty;
-
-      // For current day, calculate directly using current difficulty
-      const records = await db
-        .select()
-        .from(curtailmentRecords)
-        .where(
-          and(
-            eq(curtailmentRecords.settlementDate, formattedDate),
-            leadParty ? eq(curtailmentRecords.leadPartyName, leadParty) : undefined,
-            farmId ? eq(curtailmentRecords.farmId, farmId) : undefined
-          )
-        );
-
-      console.log(`Found ${records.length} curtailment records for today`);
-
-      if (records.length > 0) {
-        // Calculate total curtailed volume
-        const totalVolume = records.reduce(
-          (sum, record) => sum + Math.abs(Number(record.volume)),
-          0
-        );
-
-        console.log('Total curtailed volume:', totalVolume);
-
-        result = calculateBitcoinForBMU(
-          totalVolume,
-          minerModel,
-          difficulty
-        );
-
-        console.log('Current day calculation:', {
-          totalVolume,
-          bitcoinMined: result,
-          difficulty
-        });
-      } else {
-        result = 0;
-        console.log('No curtailment records found for today');
-      }
-    } else {
+    if (!isToday(requestDate)) {
       console.log(`Getting historical difficulty for ${formattedDate}`);
       difficulty = await getDifficultyData(formattedDate);
       console.log(`Using historical difficulty for ${formattedDate}:`, difficulty.toLocaleString());
@@ -226,38 +181,50 @@ router.get('/mining-potential', async (req, res) => {
         .where(
           and(
             eq(historicalBitcoinCalculations.settlementDate, formattedDate),
-            eq(historicalBitcoinCalculations.minerModel, minerModel),
-            leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
+            eq(historicalBitcoinCalculations.minerModel, minerModel)
           )
         );
 
+      console.log('Historical data from DB:', {
+        found: historicalData.length > 0,
+        date: formattedDate,
+        firstRecord: historicalData[0],
+        difficulty: difficulty.toLocaleString()
+      });
+
       if (historicalData && historicalData.length > 0) {
-        result = historicalData.reduce(
+        const totalBitcoin = historicalData.reduce(
           (sum, record) => sum + Number(record.bitcoinMined),
           0
         );
-      } else {
-        const calculationResult = await calculateBitcoinMining(
-          formattedDate,
-          minerModel,
-          difficulty,
-          currentPrice,
-          leadParty,
-          farmId
-        );
-        result = calculationResult.totalBitcoin;
+
+        return res.json({
+          bitcoinMined: totalBitcoin,
+          valueAtCurrentPrice: totalBitcoin * currentPrice,
+          difficulty: Number(historicalData[0].difficulty),
+          currentPrice
+        });
       }
+    } else {
+      difficulty = currentDifficulty;
+      console.log(`Using current difficulty for today:`, difficulty.toLocaleString());
     }
 
-    const response = {
-      bitcoinMined: result,
-      valueAtCurrentPrice: result * currentPrice,
+    const result = await calculateBitcoinMining(
+      formattedDate,
+      minerModel,
+      difficulty,
+      currentPrice,
+      leadParty,
+      farmId
+    );
+
+    res.json({
+      bitcoinMined: result.totalBitcoin,
+      valueAtCurrentPrice: result.totalBitcoin * currentPrice,
       difficulty,
       currentPrice
-    };
-
-    console.log('Sending response:', response);
-    res.json(response);
+    });
 
   } catch (error) {
     console.error('Error in mining-potential endpoint:', error);
