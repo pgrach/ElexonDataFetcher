@@ -121,18 +121,21 @@ function setupGracefulShutdown(server: any) {
 
     // Start the real-time data update service with error handling
     // Add DISABLE_DATA_SERVICE env var for debugging
-    if (!dataUpdateServiceStarted && !process.env.DISABLE_DATA_SERVICE) {
+    if (!dataUpdateServiceStarted && !process.env.DISABLE_DATA_SERVICE && process.env.NODE_ENV === 'production') {
       try {
         log("Initializing data update service...");
         updateServiceInterval = startDataUpdateService();
         dataUpdateServiceStarted = true;
         log("Data update service started successfully");
       } catch (error) {
-        log("Failed to start data update service:", error);
+        log(`Failed to start data update service: ${error instanceof Error ? error.message : 'Unknown error'}`);
         // Continue running the server even if the update service fails
       }
+    } else {
+      log("Data update service disabled - running in development mode");
     }
 
+    // Global error handler
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
