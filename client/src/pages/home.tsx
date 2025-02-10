@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, isValid, isToday } from "date-fns";
 import { FilterBar } from "@/components/ui/filter-bar";
@@ -124,26 +124,16 @@ export default function Home() {
         leadParty: selectedLeadParty,
       });
 
-      if (!isValid(date) || !dailyData?.totalCurtailedEnergy) {
-        console.log("Skipping Bitcoin calculation:", {
-          isValidDate: isValid(date),
-          hasCurtailedEnergy: !!dailyData?.totalCurtailedEnergy,
-        });
-        return {
-          bitcoinMined: 0,
-          valueAtCurrentPrice: 0,
-          difficulty: 0,
-          price: 0,
-        };
-      }
-
+      // Always fetch mining potential for today or historical dates
       const url = new URL(
         "/api/curtailment/mining-potential",
         window.location.origin,
       );
       url.searchParams.set("date", formattedDate);
       url.searchParams.set("minerModel", selectedMinerModel);
-      url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
+      if (dailyData?.totalCurtailedEnergy) {
+        url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
+      }
       if (selectedLeadParty) {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
@@ -159,10 +149,7 @@ export default function Home() {
       console.log("Bitcoin calculation result:", result);
       return result;
     },
-    enabled:
-      !!formattedDate &&
-      isValid(date) &&
-      !!dailyData?.totalCurtailedEnergy,
+    enabled: !!formattedDate && isValid(date),
   });
 
   const {
@@ -271,6 +258,56 @@ export default function Home() {
     return selectedDate > now;
   };
 
+  // Update the yearly bitcoin display section
+  const yearlyBitcoinDisplay = useMemo(() => {
+    if (isYearlyLoading) return <div className="text-2xl font-bold animate-pulse">Loading...</div>;
+    if (yearlyError) return <div className="text-sm text-red-500">Failed to load yearly data</div>;
+    if (!yearlyData) return <div className="text-sm text-muted-foreground">No yearly data available</div>;
+
+    const bitcoinValue = bitcoinPotential?.bitcoinMined || 0;
+    const yearlyBitcoin = (yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * bitcoinValue;
+
+    return (
+      <div className="text-2xl font-bold text-[#F7931A]">
+        ₿{yearlyBitcoin.toFixed(8)}
+      </div>
+    );
+  }, [yearlyData, bitcoinPotential, dailyData, isYearlyLoading, yearlyError]);
+
+  // Update the monthly bitcoin display section
+  const monthlyBitcoinDisplay = useMemo(() => {
+    if (isMonthlyLoading) return <div className="text-2xl font-bold animate-pulse">Loading...</div>;
+    if (monthlyError) return <div className="text-sm text-red-500">Failed to load monthly data</div>;
+    if (!monthlyData) return <div className="text-sm text-muted-foreground">No monthly data available</div>;
+
+    const bitcoinValue = bitcoinPotential?.bitcoinMined || 0;
+    const monthlyBitcoin = (monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * bitcoinValue;
+
+    return (
+      <div className="text-2xl font-bold text-[#F7931A]">
+        ₿{monthlyBitcoin.toFixed(8)}
+      </div>
+    );
+  }, [monthlyData, bitcoinPotential, dailyData, isMonthlyLoading, monthlyError]);
+
+  // Update the daily bitcoin display section
+  const dailyBitcoinDisplay = useMemo(() => {
+    if (isDailyLoading) return <div className="text-3xl font-bold animate-pulse">Loading...</div>;
+    if (dailyError) return (
+      <div className="text-sm text-red-500">
+        {dailyError instanceof Error ? dailyError.message : "Failed to load daily data"}
+      </div>
+    );
+    if (!dailyData) return <div className="text-sm text-muted-foreground">No daily data available</div>;
+
+    return (
+      <div className="text-3xl font-bold text-[#F7931A]">
+        ₿{(bitcoinPotential?.bitcoinMined || 0).toFixed(8)}
+      </div>
+    );
+  }, [dailyData, bitcoinPotential, isDailyLoading, dailyError]);
+
+
   return (
     <div className="min-h-screen">
       <FilterBar
@@ -331,24 +368,7 @@ export default function Home() {
                   <div className="text-sm font-medium">
                     Bitcoin could be mined
                   </div>
-                  {isYearlyLoading ? (
-                    <div className="text-2xl font-bold animate-pulse">
-                      Loading...
-                    </div>
-                  ) : yearlyError ? (
-                    <div className="text-sm text-red-500">
-                      Failed to load yearly data
-                    </div>
-                  ) : yearlyData ? (
-                    <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * 
-                        (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      No yearly data available
-                    </div>
-                  )}
+                  {yearlyBitcoinDisplay}
                   <p className="text-xs text-muted-foreground mt-1">
                     With {selectedMinerModel.replace("_", " ")} miners
                   </p>
@@ -482,24 +502,7 @@ export default function Home() {
                   <div className="text-sm font-medium">
                     Bitcoin could be mined
                   </div>
-                  {isMonthlyLoading ? (
-                    <div className="text-2xl font-bold animate-pulse">
-                      Loading...
-                    </div>
-                  ) : monthlyError ? (
-                    <div className="text-sm text-red-500">
-                      Failed to load monthly data
-                    </div>
-                  ) : monthlyData ? (
-                    <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * 
-                        (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      No monthly data available
-                    </div>
-                  )}
+                  {monthlyBitcoinDisplay}
                   <p className="text-xs text-muted-foreground mt-1">
                     With {selectedMinerModel.replace("_", " ")} miners
                   </p>
@@ -657,25 +660,7 @@ export default function Home() {
                         </Tooltip>
                       </TooltipProvider>
                     </div>
-                    {isDailyLoading ? (
-                      <div className="text-3xl font-bold animate-pulse">
-                        Loading...
-                      </div>
-                    ) : dailyError ? (
-                      <div className="text-sm text-red-500">
-                        {dailyError instanceof Error
-                          ? dailyError.message
-                          : "Failed to load daily data"}
-                      </div>
-                    ) : dailyData ? (
-                      <div className="text-3xl font-bold text-[#F7931A]">
-                        ₿{bitcoinPotential?.bitcoinMined.toFixed(8) || "0.00"}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-muted-foreground">
-                        No daily data available
-                      </div>
-                    )}
+                    {dailyBitcoinDisplay}
                     <p className="text-xs text-muted-foreground mt-1">
                       Potential mining with{" "}
                       {selectedMinerModel.replace("_", " ")} miners
