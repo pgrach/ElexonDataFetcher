@@ -112,28 +112,23 @@ export default function Home() {
     queryKey: [
       `/api/curtailment/mining-potential`,
       selectedMinerModel,
-      dailyData?.totalCurtailedEnergy,
-      selectedLeadParty,
-      formattedDate 
+      formattedDate,
+      selectedLeadParty
     ],
     queryFn: async () => {
       console.log("Bitcoin calculation parameters:", {
         date: formattedDate,
         minerModel: selectedMinerModel,
-        curtailedEnergy: dailyData?.totalCurtailedEnergy,
         leadParty: selectedLeadParty,
       });
 
-      // Always fetch mining potential for today or historical dates
+      // Always fetch mining potential
       const url = new URL(
         "/api/curtailment/mining-potential",
         window.location.origin,
       );
       url.searchParams.set("date", formattedDate);
       url.searchParams.set("minerModel", selectedMinerModel);
-      if (dailyData?.totalCurtailedEnergy) {
-        url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
-      }
       if (selectedLeadParty) {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
@@ -264,8 +259,8 @@ export default function Home() {
     if (yearlyError) return <div className="text-sm text-red-500">Failed to load yearly data</div>;
     if (!yearlyData) return <div className="text-sm text-muted-foreground">No yearly data available</div>;
 
-    const bitcoinValue = bitcoinPotential?.bitcoinMined || 0;
-    const yearlyBitcoin = (yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * bitcoinValue;
+    const bitcoinPerMWh = (bitcoinPotential?.bitcoinMined || 0) / (dailyData?.totalCurtailedEnergy || 1);
+    const yearlyBitcoin = yearlyData.totalCurtailedEnergy * bitcoinPerMWh;
 
     return (
       <div className="text-2xl font-bold text-[#F7931A]">
@@ -280,8 +275,8 @@ export default function Home() {
     if (monthlyError) return <div className="text-sm text-red-500">Failed to load monthly data</div>;
     if (!monthlyData) return <div className="text-sm text-muted-foreground">No monthly data available</div>;
 
-    const bitcoinValue = bitcoinPotential?.bitcoinMined || 0;
-    const monthlyBitcoin = (monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * bitcoinValue;
+    const bitcoinPerMWh = (bitcoinPotential?.bitcoinMined || 0) / (dailyData?.totalCurtailedEnergy || 1);
+    const monthlyBitcoin = monthlyData.totalCurtailedEnergy * bitcoinPerMWh;
 
     return (
       <div className="text-2xl font-bold text-[#F7931A]">
@@ -298,14 +293,13 @@ export default function Home() {
         {dailyError instanceof Error ? dailyError.message : "Failed to load daily data"}
       </div>
     );
-    if (!dailyData) return <div className="text-sm text-muted-foreground">No daily data available</div>;
 
     return (
       <div className="text-3xl font-bold text-[#F7931A]">
         ₿{(bitcoinPotential?.bitcoinMined || 0).toFixed(8)}
       </div>
     );
-  }, [dailyData, bitcoinPotential, isDailyLoading, dailyError]);
+  }, [bitcoinPotential, isDailyLoading, dailyError]);
 
 
   return (
