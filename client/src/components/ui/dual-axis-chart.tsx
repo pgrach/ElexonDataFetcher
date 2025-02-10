@@ -91,7 +91,7 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
           shape={(props: any) => {
             const { cx, cy, fill } = props;
             const value = props.payload[chartConfig.rightAxis.dataKey];
-            if (value === 0) return <></>;
+            if (value === 0) return null;
 
             return (
               <g transform={`translate(${cx - 8}, ${cy - 8})`}>
