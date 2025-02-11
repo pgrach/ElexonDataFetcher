@@ -654,7 +654,7 @@ export default function Home() {
                             Mining Opportunity Loss
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Network Difficulty: {bitcoinPotential?.difficulty.toLocaleString()}</p>
+                            <p>Network Difficulty: {(bitcoinPotential?.difficulty || 0).toLocaleString()}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -671,7 +671,7 @@ export default function Home() {
                       </div>
                     ) : dailyData ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
-                        ₿{bitcoinPotential?.bitcoinMined.toFixed(8) || "0.00"}
+                        ₿{(bitcoinPotential?.bitcoinMined || 0).toFixed(8)}
                       </div>
                     ) : (
                       <div className="text-sm text-muted-foreground">
