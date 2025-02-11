@@ -6,6 +6,7 @@ import { fetchBidsOffers } from "./elexon";
 import { curtailmentRecords } from "@db/schema";
 import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
+import { processSingleDay } from "./bitcoinService";
 
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const STARTUP_DELAY = 5000; // 5 second delay before starting data updates
@@ -54,7 +55,7 @@ async function updateLatestData() {
       console.log(`Cleared existing records for ${date}`);
     } catch (error) {
       console.error(`Error clearing existing records for ${date}:`, error);
-      throw error; // Re-throw to halt the update if we can't clear existing records
+      throw error;
     }
 
     // Fetch all periods up to current for today
@@ -93,7 +94,7 @@ async function updateLatestData() {
             } catch (error) {
               console.error(`Error inserting record for ${record.id}:`, error);
               console.error('Record data:', JSON.stringify(record, null, 2));
-              throw error; // Re-throw to ensure we catch data insertion failures
+              throw error;
             }
           }
 
@@ -115,13 +116,28 @@ async function updateLatestData() {
         }
       } catch (error) {
         console.error(`Error processing period ${period}:`, error);
-        throw error; // Re-throw to ensure we catch period processing failures
+        throw error;
       }
     }
 
     if (dataChanged) {
       console.log(`\nRe-running daily aggregation for ${date}`);
       await processDailyCurtailment(date);
+
+      // Update Bitcoin calculations for all miner models
+      console.log(`\nUpdating Bitcoin calculations for ${date}`);
+      const minerModels = ['S19J_PRO', 'S9', 'M20S'];
+
+      for (const minerModel of minerModels) {
+        try {
+          await processSingleDay(date, minerModel);
+          console.log(`[${date}] Completed Bitcoin calculations for ${minerModel}`);
+        } catch (error) {
+          console.error(`Error processing Bitcoin calculations for ${minerModel}:`, error);
+          // Continue with other models even if one fails
+        }
+      }
+
       lastUpdateTime = new Date();
     }
 
@@ -148,7 +164,7 @@ async function updateLatestData() {
 
   } catch (error) {
     console.error("Error updating latest data:", error);
-    throw error; // Re-throw to ensure the error is logged and handled properly
+    throw error;
   } finally {
     isUpdating = false;
   }
