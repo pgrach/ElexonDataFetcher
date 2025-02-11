@@ -22,9 +22,9 @@ import {
 interface BitcoinCalculation {
   bitcoinMined: number;
   valueAtCurrentPrice: number;
-  difficulty: number | null; // Added null type
+  difficulty: number | null;
   price: number;
-  currentPrice: number; // Added currentPrice
+  currentPrice: number;
 }
 
 interface DailySummary {
@@ -135,7 +135,7 @@ export default function Home() {
           valueAtCurrentPrice: 0,
           difficulty: 0,
           price: 0,
-          currentPrice: 0, // Added currentPrice
+          currentPrice: 0, 
         };
       }
 
@@ -343,8 +343,8 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
+                      ₿{(((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined ?? 0)) / 
+                        (dailyData?.totalCurtailedEnergy ?? 1))).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -417,8 +417,8 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{(((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice ?? 0)) / 
+                        (dailyData?.totalCurtailedEnergy ?? 1))).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -495,8 +495,8 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
+                      ₿{(((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined ?? 0)) / 
+                        (dailyData?.totalCurtailedEnergy ?? 1))).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -569,8 +569,8 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
-                        (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{(((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice ?? 0)) / 
+                        (dailyData?.totalCurtailedEnergy ?? 1))).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -673,7 +673,7 @@ export default function Home() {
                       </div>
                     ) : dailyData ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
-                        ₿{bitcoinPotential?.bitcoinMined.toFixed(8) || "0.00"}
+                        ₿{(bitcoinPotential?.bitcoinMined ?? 0).toFixed(8)}
                       </div>
                     ) : (
                       <div className="text-sm text-muted-foreground">
@@ -693,7 +693,7 @@ export default function Home() {
                             Value if Bitcoin was mined
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Current price: £{(bitcoinPotential?.currentPrice || 0).toLocaleString()}</p>
+                            <p>Current price: £{(bitcoinPotential?.currentPrice ?? 0).toLocaleString()}</p>
                             <p>USD/GBP Rate: 0.79</p>
                           </TooltipContent>
                         </Tooltip>
@@ -711,7 +711,7 @@ export default function Home() {
                       </div>
                     ) : dailyData ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
-                        £{(bitcoinPotential?.valueAtCurrentPrice || 0).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                        £{(bitcoinPotential?.valueAtCurrentPrice ?? 0).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                       </div>
                     ) : (
                       <div className="text-sm text-muted-foreground">
@@ -740,8 +740,8 @@ export default function Home() {
                       bitcoinMined: isHourInFuture(hour.hour)
                         ? 0
                         : (hour.curtailedEnergy *
-                            (bitcoinPotential?.bitcoinMined || 0)) /
-                          (dailyData?.totalCurtailedEnergy || 1),
+                            (bitcoinPotential?.bitcoinMined ?? 0)) /
+                          (dailyData?.totalCurtailedEnergy ?? 1),
                     }))}
                     chartConfig={{
                       leftAxis: {
