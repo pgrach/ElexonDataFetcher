@@ -7,7 +7,6 @@ import { curtailmentRecords } from "@db/schema";
 import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
 import { processSingleDay } from "./bitcoinService";
-import { startMonitoring } from './dataUpdateMonitor';
 
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const STARTUP_DELAY = 5000; // 5 second delay before starting data updates
@@ -199,9 +198,6 @@ export function startDataUpdateService() {
   serviceStartTime = new Date();
   console.log(`\n=== Starting Data Update Service ===`);
   console.log(`Start Time: ${serviceStartTime.toISOString()}`);
-
-  // Start the monitoring service
-  startMonitoring();
 
   // Add startup delay to ensure server is ready
   setTimeout(() => {
