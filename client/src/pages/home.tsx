@@ -24,6 +24,7 @@ interface BitcoinCalculation {
   valueAtCurrentPrice: number;
   difficulty: number;
   price: number;
+  currentPrice: number; // Added currentPrice
 }
 
 interface DailySummary {
@@ -134,6 +135,7 @@ export default function Home() {
           valueAtCurrentPrice: 0,
           difficulty: 0,
           price: 0,
+          currentPrice: 0, // Added currentPrice
         };
       }
 
@@ -651,42 +653,14 @@ export default function Home() {
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger className="cursor-help">
-                            Mining Opportunity Loss
+                            Value if Bitcoin was mined
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Network Difficulty: {bitcoinPotential?.difficulty.toLocaleString()}</p>
+                            <p>Current price: £{(bitcoinPotential?.currentPrice || 0).toLocaleString()}</p>
+                            <p>USD/GBP Rate: 0.79</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                    </div>
-                    {isDailyLoading ? (
-                      <div className="text-3xl font-bold animate-pulse">
-                        Loading...
-                      </div>
-                    ) : dailyError ? (
-                      <div className="text-sm text-red-500">
-                        {dailyError instanceof Error
-                          ? dailyError.message
-                          : "Failed to load daily data"}
-                      </div>
-                    ) : dailyData ? (
-                      <div className="text-3xl font-bold text-[#F7931A]">
-                        ₿{bitcoinPotential?.bitcoinMined.toFixed(8) || "0.00"}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-muted-foreground">
-                        No daily data available
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Potential mining with{" "}
-                      {selectedMinerModel.replace("_", " ")} miners
-                    </p>
-                  </div>
-
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">
-                      Value if Bitcoin was mined
                     </div>
                     {isDailyLoading ? (
                       <div className="text-3xl font-bold animate-pulse">
