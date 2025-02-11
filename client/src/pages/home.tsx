@@ -146,7 +146,7 @@ export default function Home() {
       url.searchParams.set("date", formattedDate);
       url.searchParams.set("minerModel", selectedMinerModel);
       url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
-      if (selectedLeadParty) {
+      if (selectedLeadParty && selectedLeadParty !== "all") {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
 
