@@ -22,7 +22,7 @@ import {
 interface BitcoinCalculation {
   bitcoinMined: number;
   valueAtCurrentPrice: number;
-  difficulty: number;
+  difficulty: number | null; // Added null type
   price: number;
   currentPrice: number; // Added currentPrice
 }
@@ -656,7 +656,7 @@ export default function Home() {
                             Bitcoin Mining Potential
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Network Difficulty: {bitcoinPotential?.difficulty.toLocaleString()}</p>
+                            <p>Network Difficulty: {bitcoinPotential?.difficulty ? bitcoinPotential.difficulty.toLocaleString() : 'Not available'}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
