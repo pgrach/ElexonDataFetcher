@@ -139,7 +139,7 @@ async function updateLatestData(retryAttempt = 0) {
       await processDailyCurtailment(date);
 
       // Update Bitcoin calculations for all miner models
-      console.log(`\nUpdating Bitcoin calculations for ${date}`);
+      console.log(`\nUpdating Bitcoin calculations for ${date} with current network difficulty`);
       const minerModels = ['S19J_PRO', 'S9', 'M20S'];
 
       for (const minerModel of minerModels) {
