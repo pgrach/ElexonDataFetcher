@@ -1,0 +1,48 @@
+11:42:09 AM [express] GET /api/summary/yearly/2025 304 in 132ms :: {"year":"2025","totalCurtailedEner…
+11:42:09 AM [express] GET /api/summary/monthly/2025-02 304 in 131ms :: {"yearMonth":"2025-02","totalC…
+Mining potential request: {
+  date: '2025-02-11',
+  minerModel: 'S19J_PRO',
+  leadParty: undefined,
+  farmId: undefined,
+  isToday: true
+}
+11:42:09 AM [express] GET /api/lead-parties/2025-02-11 304 in 332ms :: ["Dorenell Windfarm Limited","…
+11:42:09 AM [express] GET /api/curtailment/hourly/2025-02-11 304 in 323ms :: [{"hour":"00:00","curtai…
+Error in mining-potential endpoint: TypeError: Cannot read properties of undefined (reading 'toLocaleString')
+    at <anonymous> (/home/runner/workspace/server/routes/curtailmentRoutes.ts:210:69)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+11:42:09 AM [express] GET /api/curtailment/mining-potential 500 in 588ms :: {"error":"Failed to calcu…
+Mining potential request: {
+  date: '2025-02-11',
+  minerModel: 'S9',
+  leadParty: undefined,
+  farmId: undefined,
+  isToday: true
+}
+Error in mining-potential endpoint: TypeError: Cannot read properties of undefined (reading 'toLocaleString')
+    at <anonymous> (/home/runner/workspace/server/routes/curtailmentRoutes.ts:210:69)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+11:42:13 AM [express] GET /api/curtailment/mining-potential 500 in 220ms :: {"error":"Failed to calcu…
+Mining potential request: {
+  date: '2025-02-11',
+  minerModel: 'M20S',
+  leadParty: undefined,
+  farmId: undefined,
+  isToday: true
+}
+Error in mining-potential endpoint: TypeError: Cannot read properties of undefined (reading 'toLocaleString')
+    at <anonymous> (/home/runner/workspace/server/routes/curtailmentRoutes.ts:210:69)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+11:42:17 AM [express] GET /api/curtailment/mining-potential 500 in 204ms :: {"error":"Failed to calcu…
+Mining potential request: {
+  date: '2025-02-11',
+  minerModel: 'S19J_PRO',
+  leadParty: undefined,
+  farmId: undefined,
+  isToday: true
+}
+Error in mining-potential endpoint: TypeError: Cannot read properties of undefined (reading 'toLocaleString')
+    at <anonymous> (/home/runner/workspace/server/routes/curtailmentRoutes.ts:210:69)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+11:42:20 AM [express] GET /api/curtailment/mining-potential 500 in 201ms :: {"error":"Failed to calcu…

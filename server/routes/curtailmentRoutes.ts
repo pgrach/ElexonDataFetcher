@@ -172,8 +172,13 @@ router.get('/mining-potential', async (req, res) => {
 
     if (!isToday(requestDate)) {
       console.log(`Getting historical difficulty for ${formattedDate}`);
-      difficulty = await getDifficultyData(formattedDate);
-      console.log(`Using historical difficulty for ${formattedDate}:`, difficulty.toLocaleString());
+      try {
+        difficulty = await getDifficultyData(formattedDate);
+        console.log(`Using historical difficulty for ${formattedDate}:`, difficulty ? difficulty.toLocaleString() : 'N/A');
+      } catch (error) {
+        console.error(`Error fetching historical difficulty for ${formattedDate}:`, error);
+        difficulty = currentDifficulty; // Fallback to current difficulty if historical fetch fails
+      }
 
       const historicalData = await db
         .select()
@@ -189,7 +194,7 @@ router.get('/mining-potential', async (req, res) => {
         found: historicalData.length > 0,
         date: formattedDate,
         firstRecord: historicalData[0],
-        difficulty: difficulty.toLocaleString()
+        difficulty: difficulty ? difficulty.toLocaleString() : 'N/A'
       });
 
       if (historicalData && historicalData.length > 0) {
@@ -206,14 +211,14 @@ router.get('/mining-potential', async (req, res) => {
         });
       }
     } else {
-      difficulty = currentDifficulty;
-      console.log(`Using current difficulty for today:`, difficulty.toLocaleString());
+      difficulty = currentDifficulty || 0; // Ensure we have a default value
+      console.log(`Using current difficulty for today:`, difficulty ? difficulty.toLocaleString() : 'N/A');
     }
 
     const result = await calculateBitcoinMining(
       formattedDate,
       minerModel,
-      difficulty,
+      difficulty || 0, // Ensure we pass a valid number
       currentPrice,
       leadParty,
       farmId
@@ -222,7 +227,7 @@ router.get('/mining-potential', async (req, res) => {
     res.json({
       bitcoinMined: result.totalBitcoin,
       valueAtCurrentPrice: result.totalBitcoin * currentPrice,
-      difficulty,
+      difficulty: difficulty || 0,
       currentPrice
     });
 
