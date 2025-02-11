@@ -77,7 +77,7 @@ let dataUpdateServiceStarted = false;
       serveStatic(app);
     }
 
-    const PORT = 5000;
+    const PORT = process.env.PORT || 3000; // Changed port to 3000 to avoid conflicts
     server.listen(PORT, "0.0.0.0", () => {
       log(`Server started on port ${PORT}`);
       log(`Environment: ${app.get("env")}`);

@@ -14,22 +14,23 @@ import {
   shouldRunMonthlyReconciliation 
 } from "./historicalReconciliation";
 
-const UPDATE_INTERVAL = 5 * 60 * 1000; // Reduced to 5 minutes
-const RECONCILIATION_CHECK_INTERVAL = 30 * 60 * 1000; // Check every 30 minutes
+const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const RECONCILIATION_CHECK_INTERVAL = 30 * 60 * 1000;
 let isUpdating = false;
 let lastReconciliationDate: string | null = null;
 let lastMonthlyReconciliationDate: string | null = null;
 let lastReconciliationCheck = 0;
 let serviceStartTime: Date | null = null;
+let lastUpdateTime: Date | null = null;
 
 async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
   const now = new Date();
   const minutes = now.getHours() * 60 + now.getMinutes();
   const currentPeriod = Math.floor(minutes / 30) + 1;
 
-  // Log current time information
-  console.log(`Current time: ${format(now, 'yyyy-MM-dd HH:mm:ss')}`);
+  console.log(`\nCurrent time: ${format(now, 'yyyy-MM-dd HH:mm:ss')}`);
   console.log(`Calculated period: ${currentPeriod} for the day`);
+  console.log(`Last successful update: ${lastUpdateTime?.toISOString() || 'Never'}`);
 
   return {
     date: format(now, 'yyyy-MM-dd'),
@@ -141,7 +142,22 @@ async function updateLatestData() {
   try {
     const { date, period: currentPeriod } = await getCurrentPeriod();
     console.log(`\n=== Starting data refresh at ${new Date().toISOString()} ===`);
+    console.log(`Service running since: ${serviceStartTime?.toISOString()}`);
     console.log(`Fetching data for ${date} up to period ${currentPeriod}`);
+
+    // Add a verification query to check existing data
+    const existingData = await db
+      .select({
+        periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
+        totalVolume: sql<string>`SUM(ABS(volume::numeric))`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date));
+
+    console.log(`Current data state for ${date}:`, {
+      periodCount: existingData[0]?.periodCount || 0,
+      totalVolume: existingData[0]?.totalVolume ? `${Number(existingData[0].totalVolume).toFixed(2)} MWh` : '0 MWh'
+    });
 
     let dataChanged = false;
     let totalRecords = 0;
@@ -149,9 +165,13 @@ async function updateLatestData() {
     // Fetch all periods up to current for today
     for (let period = 1; period <= currentPeriod; period++) {
       try {
-        console.log(`Fetching period ${period}...`);
+        console.log(`\nFetching period ${period}...`);
         const records = await fetchBidsOffers(date, period);
         totalRecords += records.length;
+
+        if (records.length > 0) {
+          console.log(`Retrieved ${records.length} records for period ${period}`);
+        }
 
         const changed = await hasDataChanged(records, date, period);
         if (changed) {
@@ -170,33 +190,26 @@ async function updateLatestData() {
     if (dataChanged) {
       console.log(`Re-running daily aggregation for ${date} due to data changes`);
       await processDailyCurtailment(date);
-    }
-
-    const now = Date.now();
-    const today = format(new Date(), 'yyyy-MM-dd');
-
-    // Check if we should run historical reconciliation
-    if (now - lastReconciliationCheck >= RECONCILIATION_CHECK_INTERVAL) {
-      console.log('Starting reconciliation of recent data...');
-      await reconcileRecentData();
-      lastReconciliationCheck = now;
-      lastReconciliationDate = today;
-      console.log('Recent data reconciliation completed');
-    }
-
-    // Check if we should run monthly reconciliation (once per day)
-    if (shouldRunMonthlyReconciliation() && lastMonthlyReconciliationDate !== today) {
-      console.log('Starting previous month reconciliation...');
-      await reconcilePreviousMonth();
-      await reconcileYearlyData();
-      lastMonthlyReconciliationDate = today;
-      console.log('Previous month and yearly reconciliation completed');
+      lastUpdateTime = new Date();
     }
 
     const duration = (Date.now() - startTime) / 1000;
     console.log(`\n=== Update completed in ${duration.toFixed(1)}s ===`);
     console.log(`Total records processed: ${totalRecords}`);
-    console.log(`Service running since: ${serviceStartTime?.toISOString()}`);
+
+    // Verify final state after update
+    const finalState = await db
+      .select({
+        periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
+        totalVolume: sql<string>`SUM(ABS(volume::numeric))`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date));
+
+    console.log(`Final data state for ${date}:`, {
+      periodCount: finalState[0]?.periodCount || 0,
+      totalVolume: finalState[0]?.totalVolume ? `${Number(finalState[0].totalVolume).toFixed(2)} MWh` : '0 MWh'
+    });
 
   } catch (error) {
     console.error("Error updating latest data:", error);
