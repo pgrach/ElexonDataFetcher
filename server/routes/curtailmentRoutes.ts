@@ -45,7 +45,14 @@ router.get('/mining-potential', async (req, res) => {
       isToday: isToday(requestDate)
     });
 
-    const { price: currentPrice } = await fetchFromMinerstat();
+    // Get current price from Minerstat
+    let currentPrice = 0;
+    try {
+      const { price } = await fetchFromMinerstat();
+      currentPrice = price;
+    } catch (error) {
+      console.error('Error fetching current price:', error);
+    }
 
     // For today's data, always use real-time calculations
     if (isToday(requestDate)) {
@@ -67,11 +74,10 @@ router.get('/mining-potential', async (req, res) => {
         // Get the latest known difficulty from our database
         const latestDifficulty = await db
           .select({
-            difficulty: sql<string>`difficulty`
+            difficulty: sql<string>`MAX(difficulty::numeric)`
           })
           .from(historicalBitcoinCalculations)
           .where(sql`difficulty IS NOT NULL`)
-          .orderBy(sql`settlement_date DESC, settlement_period DESC`)
           .limit(1);
 
         difficulty = Number(latestDifficulty[0]?.difficulty) || 71e12;
@@ -100,19 +106,26 @@ router.get('/mining-potential', async (req, res) => {
         return res.json({
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
-          difficulty: Number(difficulty),
+          difficulty,
           currentPrice,
           upToDate: true,
           currentPeriod
         });
       }
 
-      const bitcoinMined = calculateBitcoinForBMU(totalEnergy, minerModel, Number(difficulty));
+      const bitcoinMined = calculateBitcoinForBMU(totalEnergy, minerModel, difficulty);
+
+      console.log('Real-time calculation result:', {
+        totalEnergy,
+        bitcoinMined,
+        difficulty,
+        currentPrice
+      });
 
       return res.json({
         bitcoinMined,
-        valueAtCurrentPrice: bitcoinMined * (currentPrice || 0),
-        difficulty: Number(difficulty),
+        valueAtCurrentPrice: bitcoinMined * currentPrice,
+        difficulty,
         currentPrice,
         upToDate: true,
         currentPeriod
