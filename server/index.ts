@@ -38,31 +38,16 @@ app.use((req, res, next) => {
 });
 
 let dataUpdateServiceStarted = false;
+let server: any;
 
 (async () => {
   try {
-    const server = registerRoutes(app);
+    server = registerRoutes(app);
 
-    // Start the real-time data update service with error handling
-    if (!dataUpdateServiceStarted) {
-      try {
-        console.log("Initializing data update service...");
-        const updateServiceInterval = startDataUpdateService();
-
-        // Handle cleanup on server shutdown
-        process.on('SIGTERM', () => {
-          console.log('Shutting down data update service...');
-          clearInterval(updateServiceInterval);
-          process.exit(0);
-        });
-
-        dataUpdateServiceStarted = true;
-        console.log("Data update service started successfully");
-      } catch (error) {
-        console.error("Failed to start data update service:", error);
-        // Continue running the server even if the update service fails
-      }
-    }
+    // Add health check endpoint
+    app.get('/health', (req, res) => {
+      res.status(200).json({ status: 'ok', startTime: new Date().toISOString() });
+    });
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
@@ -77,11 +62,40 @@ let dataUpdateServiceStarted = false;
       serveStatic(app);
     }
 
-    const PORT = process.env.PORT || 3000; // Changed port to 3000 to avoid conflicts
+    const PORT = process.env.PORT || 5000;
+
+    // Start server first, explicitly binding to 0.0.0.0
     server.listen(PORT, "0.0.0.0", () => {
       log(`Server started on port ${PORT}`);
       log(`Environment: ${app.get("env")}`);
+
+      // Start the data update service after server is ready
+      if (!dataUpdateServiceStarted) {
+        try {
+          console.log("Initializing data update service...");
+          startDataUpdateService()
+            .then((updateServiceInterval) => {
+              if (updateServiceInterval) {
+                // Handle cleanup on server shutdown
+                process.on('SIGTERM', () => {
+                  console.log('Shutting down data update service...');
+                  clearInterval(updateServiceInterval);
+                  process.exit(0);
+                });
+
+                dataUpdateServiceStarted = true;
+                console.log("Data update service started successfully");
+              }
+            })
+            .catch(error => {
+              console.error("Failed to start data update service:", error);
+            });
+        } catch (error) {
+          console.error("Failed to start data update service:", error);
+        }
+      }
     });
+
   } catch (error) {
     console.error("Failed to start server:", error);
     process.exit(1);
