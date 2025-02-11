@@ -10,9 +10,21 @@ import { processSingleDay } from "./bitcoinService";
 
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const STARTUP_DELAY = 5000; // 5 second delay before starting data updates
+const MAX_RETRY_ATTEMPTS = 3;
 let isUpdating = false;
 let serviceStartTime: Date | null = null;
 let lastUpdateTime: Date | null = null;
+let lastSuccessfulUpdate: Date | null = null;
+
+// Add health check function
+export function getUpdateServiceStatus() {
+  return {
+    serviceStartTime,
+    lastUpdateTime,
+    lastSuccessfulUpdate,
+    isCurrentlyUpdating: isUpdating
+  };
+}
 
 async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
   const now = new Date();
@@ -23,6 +35,7 @@ async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
   console.log(`Time: ${format(now, 'yyyy-MM-dd HH:mm:ss')}`);
   console.log(`Period: ${currentPeriod}`);
   console.log(`Last Update: ${lastUpdateTime?.toISOString() || 'Never'}`);
+  console.log(`Last Successful Update: ${lastSuccessfulUpdate?.toISOString() || 'Never'}`);
 
   return {
     date: format(now, 'yyyy-MM-dd'),
@@ -30,7 +43,7 @@ async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
   };
 }
 
-async function updateLatestData() {
+async function updateLatestData(retryAttempt = 0) {
   if (isUpdating) {
     console.log("Update already in progress, skipping...");
     return;
@@ -44,6 +57,7 @@ async function updateLatestData() {
     console.log(`\n=== Starting Data Update ===`);
     console.log(`Date: ${date}, Current Period: ${currentPeriod}`);
     console.log(`Service Running Since: ${serviceStartTime?.toISOString()}`);
+    console.log(`Retry Attempt: ${retryAttempt}/${MAX_RETRY_ATTEMPTS}`);
 
     let dataChanged = false;
     let totalRecords = 0;
@@ -138,9 +152,11 @@ async function updateLatestData() {
         }
       }
 
-      lastUpdateTime = new Date();
+      lastSuccessfulUpdate = new Date();
+      console.log(`Update successful at ${lastSuccessfulUpdate.toISOString()}`);
     }
 
+    lastUpdateTime = new Date();
     const duration = (Date.now() - startTime) / 1000;
     console.log(`\n=== Update Summary ===`);
     console.log(`Duration: ${duration.toFixed(1)}s`);
@@ -164,7 +180,15 @@ async function updateLatestData() {
 
   } catch (error) {
     console.error("Error updating latest data:", error);
-    throw error;
+
+    if (retryAttempt < MAX_RETRY_ATTEMPTS) {
+      console.log(`Retrying update (Attempt ${retryAttempt + 1}/${MAX_RETRY_ATTEMPTS})`);
+      setTimeout(() => {
+        updateLatestData(retryAttempt + 1);
+      }, 5000 * Math.pow(2, retryAttempt)); // Exponential backoff
+    } else {
+      throw error;
+    }
   } finally {
     isUpdating = false;
   }
@@ -191,12 +215,26 @@ export function startDataUpdateService() {
       }
     }, UPDATE_INTERVAL);
 
-    // Log heartbeat every hour
+    // Enhanced heartbeat logging
     setInterval(() => {
+      const now = new Date();
+      const status = getUpdateServiceStatus();
+
       console.log(`\n=== Service Heartbeat ===`);
-      console.log(`Running Since: ${serviceStartTime?.toISOString()}`);
-      console.log(`Current Time: ${new Date().toISOString()}`);
-    }, 60 * 60 * 1000);
+      console.log(`Running Since: ${status.serviceStartTime?.toISOString()}`);
+      console.log(`Current Time: ${now.toISOString()}`);
+      console.log(`Last Update Attempt: ${status.lastUpdateTime?.toISOString() || 'Never'}`);
+      console.log(`Last Successful Update: ${status.lastSuccessfulUpdate?.toISOString() || 'Never'}`);
+      console.log(`Update In Progress: ${status.isCurrentlyUpdating}`);
+
+      // Alert if no successful updates in last 15 minutes
+      if (status.lastSuccessfulUpdate) {
+        const timeSinceUpdate = now.getTime() - status.lastSuccessfulUpdate.getTime();
+        if (timeSinceUpdate > 15 * 60 * 1000) {
+          console.error(`WARNING: No successful updates in the last ${Math.floor(timeSinceUpdate / 60000)} minutes`);
+        }
+      }
+    }, 60 * 60 * 1000); // Every hour
 
     return intervalId;
   }, STARTUP_DELAY);
