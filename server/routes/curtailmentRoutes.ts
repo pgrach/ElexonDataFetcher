@@ -169,6 +169,7 @@ router.get('/mining-potential', async (req, res) => {
 
     const { price: currentPrice, difficulty: currentDifficulty } = await fetchFromMinerstat();
     let difficulty;
+    const DEFAULT_NETWORK_DIFFICULTY = 71e12; // Set a reasonable default network difficulty
 
     if (!isToday(requestDate)) {
       console.log(`Getting historical difficulty for ${formattedDate}`);
@@ -177,7 +178,7 @@ router.get('/mining-potential', async (req, res) => {
         console.log(`Using historical difficulty for ${formattedDate}:`, difficulty ? difficulty.toLocaleString() : 'N/A');
       } catch (error) {
         console.error(`Error fetching historical difficulty for ${formattedDate}:`, error);
-        difficulty = currentDifficulty; // Fallback to current difficulty if historical fetch fails
+        difficulty = currentDifficulty || DEFAULT_NETWORK_DIFFICULTY; // Use current difficulty or default
       }
 
       const historicalData = await db
@@ -206,19 +207,19 @@ router.get('/mining-potential', async (req, res) => {
         return res.json({
           bitcoinMined: totalBitcoin,
           valueAtCurrentPrice: totalBitcoin * currentPrice,
-          difficulty: Number(historicalData[0].difficulty),
+          difficulty: Number(historicalData[0].difficulty) || DEFAULT_NETWORK_DIFFICULTY,
           currentPrice
         });
       }
     } else {
-      difficulty = currentDifficulty || 0; // Ensure we have a default value
+      difficulty = currentDifficulty || DEFAULT_NETWORK_DIFFICULTY; // Ensure we have a meaningful default value
       console.log(`Using current difficulty for today:`, difficulty ? difficulty.toLocaleString() : 'N/A');
     }
 
     const result = await calculateBitcoinMining(
       formattedDate,
       minerModel,
-      difficulty || 0, // Ensure we pass a valid number
+      difficulty || DEFAULT_NETWORK_DIFFICULTY, // Ensure we pass a valid number
       currentPrice,
       leadParty,
       farmId
@@ -227,7 +228,7 @@ router.get('/mining-potential', async (req, res) => {
     res.json({
       bitcoinMined: result.totalBitcoin,
       valueAtCurrentPrice: result.totalBitcoin * currentPrice,
-      difficulty: difficulty || 0,
+      difficulty: difficulty || DEFAULT_NETWORK_DIFFICULTY,
       currentPrice
     });
 
