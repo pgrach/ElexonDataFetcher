@@ -1,7 +1,7 @@
 import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation, DEFAULT_DIFFICULTY } from '../types/bitcoin';
 import axios from 'axios';
 import { db } from "@db";
-import { curtailmentRecords, historicalBitcoinCalculations, bitcoinDailySummaries, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
+import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
 import { and, eq, between, sql, inArray } from "drizzle-orm";
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
 import { getDifficultyData } from './dynamodbService';
@@ -233,111 +233,6 @@ async function processSingleDay(
           await tx.insert(historicalBitcoinCalculations)
             .values(bulkInsertData);
 
-          // Calculate daily summary
-          const dailyTotals = await tx
-            .select({
-              totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
-              avgDifficulty: sql<string>`AVG(difficulty::numeric)::text`
-            })
-            .from(historicalBitcoinCalculations)
-            .where(
-              and(
-                eq(historicalBitcoinCalculations.settlementDate, date),
-                eq(historicalBitcoinCalculations.minerModel, minerModel)
-              )
-            );
-
-          if (dailyTotals[0]?.totalBitcoin) {
-            // Get current BTC price for value calculation
-            const { price: currentPrice } = await fetchFromMinerstat();
-
-            // Update daily summary
-            await tx.insert(bitcoinDailySummaries).values({
-              summaryDate: date,
-              minerModel,
-              bitcoinMined: dailyTotals[0].totalBitcoin,
-              valueAtMining: (Number(dailyTotals[0].totalBitcoin) * currentPrice).toString(),
-              averageDifficulty: dailyTotals[0].avgDifficulty,
-              updatedAt: new Date()
-            }).onConflictDoUpdate({
-              target: [bitcoinDailySummaries.summaryDate, bitcoinDailySummaries.minerModel],
-              set: {
-                bitcoinMined: dailyTotals[0].totalBitcoin,
-                valueAtMining: (Number(dailyTotals[0].totalBitcoin) * currentPrice).toString(),
-                averageDifficulty: dailyTotals[0].avgDifficulty,
-                updatedAt: new Date()
-              }
-            });
-
-            // Update monthly summary
-            const yearMonth = date.substring(0, 7);
-            const monthlyTotals = await tx
-              .select({
-                totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
-                avgDifficulty: sql<string>`AVG(average_difficulty::numeric)::text`
-              })
-              .from(bitcoinDailySummaries)
-              .where(
-                and(
-                  sql`date_trunc('month', summary_date) = date_trunc('month', ${date}::date)`,
-                  eq(bitcoinDailySummaries.minerModel, minerModel)
-                )
-              );
-
-            if (monthlyTotals[0]?.totalBitcoin) {
-              await tx.insert(bitcoinMonthlySummaries).values({
-                yearMonth,
-                minerModel,
-                bitcoinMined: monthlyTotals[0].totalBitcoin,
-                valueAtMining: (Number(monthlyTotals[0].totalBitcoin) * currentPrice).toString(),
-                averageDifficulty: monthlyTotals[0].avgDifficulty,
-                updatedAt: new Date()
-              }).onConflictDoUpdate({
-                target: [bitcoinMonthlySummaries.yearMonth, bitcoinMonthlySummaries.minerModel],
-                set: {
-                  bitcoinMined: monthlyTotals[0].totalBitcoin,
-                  valueAtMining: (Number(monthlyTotals[0].totalBitcoin) * currentPrice).toString(),
-                  averageDifficulty: monthlyTotals[0].avgDifficulty,
-                  updatedAt: new Date()
-                }
-              });
-            }
-
-            // Update yearly summary
-            const year = date.substring(0, 4);
-            const yearlyTotals = await tx
-              .select({
-                totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
-                avgDifficulty: sql<string>`AVG(average_difficulty::numeric)::text`
-              })
-              .from(bitcoinDailySummaries)
-              .where(
-                and(
-                  sql`date_trunc('year', summary_date) = date_trunc('year', ${date}::date)`,
-                  eq(bitcoinDailySummaries.minerModel, minerModel)
-                )
-              );
-
-            if (yearlyTotals[0]?.totalBitcoin) {
-              await tx.insert(bitcoinYearlySummaries).values({
-                year,
-                minerModel,
-                bitcoinMined: yearlyTotals[0].totalBitcoin,
-                valueAtMining: (Number(yearlyTotals[0].totalBitcoin) * currentPrice).toString(),
-                averageDifficulty: yearlyTotals[0].avgDifficulty,
-                updatedAt: new Date()
-              }).onConflictDoUpdate({
-                target: [bitcoinYearlySummaries.year, bitcoinYearlySummaries.minerModel],
-                set: {
-                  bitcoinMined: yearlyTotals[0].totalBitcoin,
-                  valueAtMining: (Number(yearlyTotals[0].totalBitcoin) * currentPrice).toString(),
-                  averageDifficulty: yearlyTotals[0].avgDifficulty,
-                  updatedAt: new Date()
-                }
-              });
-            }
-          }
-
           console.log(`Inserted ${bulkInsertData.length} records for ${date} ${minerModel}`);
           console.log(`Processed periods: ${periods.join(', ')}`);
         } else {
@@ -354,20 +249,6 @@ async function processSingleDay(
 
   PROCESSING_LOCK.set(lockKey, processingPromise);
   await processingPromise;
-}
-
-// Add helper function for fetching Minerstat data
-async function fetchFromMinerstat() {
-  try {
-    const response = await axios.get('https://api.minerstat.com/v2/stats/bitcoin');
-    return {
-      difficulty: response.data.difficulty,
-      price: response.data.price
-    };
-  } catch (error) {
-    console.error('Error fetching from Minerstat:', error);
-    throw error;
-  }
 }
 
 function calculateBitcoinForBMU(

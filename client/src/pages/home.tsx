@@ -93,18 +93,19 @@ export default function Home() {
       }
 
       const response = await fetch(url);
-      if (!response.ok && response.status !== 404) {
+      if (!response.ok) {
+        if (response.status === 404) {
+          return {
+            totalCurtailedEnergy: 0,
+            totalPayment: 0
+          };
+        }
         throw new Error(`API Error: ${response.status}`);
       }
 
-      const data = await response.json();
-      return {
-        totalCurtailedEnergy: data.totalCurtailedEnergy || 0,
-        totalPayment: data.totalPayment || 0
-      };
+      return response.json();
     },
     enabled: !!formattedDate && isValid(date),
-    refetchInterval: isToday(date) ? 5 * 60 * 1000 : false, // Refetch every 5 minutes if today
   });
 
   const { data: bitcoinPotential } = useQuery<BitcoinCalculation>({
@@ -164,7 +165,11 @@ export default function Home() {
       !!dailyData?.totalCurtailedEnergy,
   });
 
-  const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
+  const {
+    data: monthlyData,
+    isLoading: isMonthlyLoading,
+    error: monthlyError,
+  } = useQuery<MonthlySummary>({
     queryKey: [
       `/api/summary/monthly/${format(date, "yyyy-MM")}`,
       selectedLeadParty,
@@ -336,8 +341,8 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * 
-                        (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
+                      ₿{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
+                        (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -410,7 +415,8 @@ export default function Home() {
                     </div>
                   ) : yearlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{((yearlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * (bitcoinPotential?.valueAtCurrentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
+                        (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -487,8 +493,8 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{((monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * 
-                        (bitcoinPotential?.bitcoinMined || 0)).toFixed(8)}
+                      ₿{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined || 0)) / 
+                        (dailyData?.totalCurtailedEnergy || 1)).toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -561,7 +567,8 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{((monthlyData.totalCurtailedEnergy / (dailyData?.totalCurtailedEnergy || 1)) * (bitcoinPotential?.valueAtCurrentPrice || 0)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice || 0)) / 
+                        (dailyData?.totalCurtailedEnergy || 1)).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">

@@ -148,7 +148,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
     const monthlyTotals = await db
       .select({
         totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`SUM(ABS(${dailySummaries.totalPayment}::numeric))`
+        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
       })
       .from(dailySummaries)
       .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${date}::date)`);

@@ -3,7 +3,7 @@ import { format, parseISO, isToday, isValid } from 'date-fns';
 import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
-import { historicalBitcoinCalculations, bitcoinDailySummaries, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
+import { historicalBitcoinCalculations } from "@db/schema";
 import { and, eq } from "drizzle-orm";
 import { getDifficultyData } from '../services/dynamodbService';
 import axios from 'axios';
@@ -230,112 +230,6 @@ router.get('/mining-potential', async (req, res) => {
     console.error('Error in mining-potential endpoint:', error);
     res.status(500).json({ 
       error: 'Failed to calculate mining potential',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Add Bitcoin summary routes
-router.get('/bitcoin/summary/yearly/:year', async (req, res) => {
-  try {
-    const { year } = req.params;
-
-    const summaries = await db
-      .select({
-        minerModel: bitcoinYearlySummaries.minerModel,
-        bitcoinMined: bitcoinYearlySummaries.bitcoinMined,
-        valueAtMining: bitcoinYearlySummaries.valueAtMining,
-        averageDifficulty: bitcoinYearlySummaries.averageDifficulty
-      })
-      .from(bitcoinYearlySummaries)
-      .where(eq(bitcoinYearlySummaries.year, year));
-
-    // If no data found, return zero values for all miner models
-    if (summaries.length === 0) {
-      const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
-        minerModel: model,
-        bitcoinMined: '0',
-        valueAtMining: '0',
-        averageDifficulty: '0'
-      }));
-      return res.json(defaultModels);
-    }
-
-    res.json(summaries);
-  } catch (error) {
-    console.error('Error fetching yearly Bitcoin summaries:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch yearly Bitcoin summaries',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-router.get('/bitcoin/summary/monthly/:yearMonth', async (req, res) => {
-  try {
-    const { yearMonth } = req.params;
-
-    const summaries = await db
-      .select({
-        minerModel: bitcoinMonthlySummaries.minerModel,
-        bitcoinMined: bitcoinMonthlySummaries.bitcoinMined,
-        valueAtMining: bitcoinMonthlySummaries.valueAtMining,
-        averageDifficulty: bitcoinMonthlySummaries.averageDifficulty
-      })
-      .from(bitcoinMonthlySummaries)
-      .where(eq(bitcoinMonthlySummaries.yearMonth, yearMonth));
-
-    // If no data found, return zero values for all miner models
-    if (summaries.length === 0) {
-      const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
-        minerModel: model,
-        bitcoinMined: '0',
-        valueAtMining: '0',
-        averageDifficulty: '0'
-      }));
-      return res.json(defaultModels);
-    }
-
-    res.json(summaries);
-  } catch (error) {
-    console.error('Error fetching monthly Bitcoin summaries:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch monthly Bitcoin summaries',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-router.get('/bitcoin/summary/daily/:date', async (req, res) => {
-  try {
-    const { date } = req.params;
-
-    const summaries = await db
-      .select({
-        minerModel: bitcoinDailySummaries.minerModel,
-        bitcoinMined: bitcoinDailySummaries.bitcoinMined,
-        valueAtMining: bitcoinDailySummaries.valueAtMining,
-        averageDifficulty: bitcoinDailySummaries.averageDifficulty
-      })
-      .from(bitcoinDailySummaries)
-      .where(eq(bitcoinDailySummaries.summaryDate, date));
-
-    // If no data found, return zero values for all miner models
-    if (summaries.length === 0) {
-      const defaultModels = ['S19J_PRO', 'S9', 'M20S'].map(model => ({
-        minerModel: model,
-        bitcoinMined: '0',
-        valueAtMining: '0',
-        averageDifficulty: '0'
-      }));
-      return res.json(defaultModels);
-    }
-
-    res.json(summaries);
-  } catch (error) {
-    console.error('Error fetching daily Bitcoin summaries:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch daily Bitcoin summaries',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

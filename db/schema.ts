@@ -1,4 +1,4 @@
-import { pgTable, text, serial, date, integer, numeric, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, date, integer, numeric, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 export const curtailmentRecords = pgTable("curtailment_records", {
@@ -16,44 +16,17 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const bitcoinDailySummaries = pgTable("bitcoin_daily_summaries", {
+// Add new table for Bitcoin calculations
+export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calculations", {
   id: serial("id").primaryKey(),
-  summaryDate: date("summary_date").notNull(),
+  settlementDate: date("settlement_date").notNull(),
+  settlementPeriod: integer("settlement_period").notNull(),
+  farmId: text("farm_id").notNull(),
   minerModel: text("miner_model").notNull(),
   bitcoinMined: numeric("bitcoin_mined").notNull(),
-  valueAtMining: numeric("value_at_mining").notNull(),
-  averageDifficulty: numeric("average_difficulty").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow()
-}, (table) => ({
-  uniqDateModel: uniqueIndex('bitcoin_daily_summaries_date_model_idx').on(table.summaryDate, table.minerModel)
-}));
-
-export const bitcoinMonthlySummaries = pgTable("bitcoin_monthly_summaries", {
-  id: serial("id").primaryKey(),
-  yearMonth: text("year_month").notNull(),
-  minerModel: text("miner_model").notNull(),
-  bitcoinMined: numeric("bitcoin_mined").notNull(),
-  valueAtMining: numeric("value_at_mining").notNull(),
-  averageDifficulty: numeric("average_difficulty").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow()
-}, (table) => ({
-  uniqMonthModel: uniqueIndex('bitcoin_monthly_summaries_month_model_idx').on(table.yearMonth, table.minerModel)
-}));
-
-export const bitcoinYearlySummaries = pgTable("bitcoin_yearly_summaries", {
-  id: serial("id").primaryKey(),
-  year: text("year").notNull(),
-  minerModel: text("miner_model").notNull(),
-  bitcoinMined: numeric("bitcoin_mined").notNull(),
-  valueAtMining: numeric("value_at_mining").notNull(),
-  averageDifficulty: numeric("average_difficulty").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow()
-}, (table) => ({
-  uniqYearModel: uniqueIndex('bitcoin_yearly_summaries_year_model_idx').on(table.year, table.minerModel)
-}));
+  difficulty: numeric("difficulty").notNull(),
+  calculatedAt: timestamp("calculated_at").defaultNow(),
+});
 
 export const dailySummaries = pgTable("daily_summaries", {
   summaryDate: date("summary_date").primaryKey(),
@@ -78,17 +51,6 @@ export const yearlySummaries = pgTable("yearly_summaries", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
-export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calculations", {
-  id: serial("id").primaryKey(),
-  settlementDate: date("settlement_date").notNull(),
-  settlementPeriod: integer("settlement_period").notNull(),
-  farmId: text("farm_id").notNull(),
-  minerModel: text("miner_model").notNull(),
-  bitcoinMined: numeric("bitcoin_mined").notNull(),
-  difficulty: numeric("difficulty").notNull(),
-  calculatedAt: timestamp("calculated_at").defaultNow(),
-});
-
 export const ingestionProgress = pgTable("ingestion_progress", {
   id: serial("id").primaryKey(),
   lastProcessedDate: date("last_processed_date").notNull(),
@@ -108,14 +70,10 @@ export const insertYearlySummarySchema = createInsertSchema(yearlySummaries);
 export const selectYearlySummarySchema = createSelectSchema(yearlySummaries);
 export const insertIngestionProgressSchema = createInsertSchema(ingestionProgress);
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
+
+// Add new schemas for Bitcoin calculations
 export const insertHistoricalBitcoinCalculationSchema = createInsertSchema(historicalBitcoinCalculations);
 export const selectHistoricalBitcoinCalculationSchema = createSelectSchema(historicalBitcoinCalculations);
-export const insertBitcoinDailySummarySchema = createInsertSchema(bitcoinDailySummaries);
-export const selectBitcoinDailySummarySchema = createSelectSchema(bitcoinDailySummaries);
-export const insertBitcoinMonthlySummarySchema = createInsertSchema(bitcoinMonthlySummaries);
-export const selectBitcoinMonthlySummarySchema = createSelectSchema(bitcoinMonthlySummaries);
-export const insertBitcoinYearlySummarySchema = createInsertSchema(bitcoinYearlySummaries);
-export const selectBitcoinYearlySummarySchema = createSelectSchema(bitcoinYearlySummaries);
 
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
@@ -127,11 +85,7 @@ export type YearlySummary = typeof yearlySummaries.$inferSelect;
 export type InsertYearlySummary = typeof yearlySummaries.$inferInsert;
 export type IngestionProgress = typeof ingestionProgress.$inferSelect;
 export type InsertIngestionProgress = typeof ingestionProgress.$inferInsert;
+
+// Add new types for Bitcoin calculations
 export type HistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferSelect;
 export type InsertHistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferInsert;
-export type BitcoinDailySummary = typeof bitcoinDailySummaries.$inferSelect;
-export type InsertBitcoinDailySummary = typeof bitcoinDailySummaries.$inferInsert;
-export type BitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferSelect;
-export type InsertBitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferInsert;
-export type BitcoinYearlySummary = typeof bitcoinYearlySummaries.$inferSelect;
-export type InsertBitcoinYearlySummary = typeof bitcoinYearlySummaries.$inferInsert;

@@ -1,0 +1,68 @@
+Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?
+
+Check the render method of `SlotClone`.
+    at Select (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-select.js?v=76c9f4f9:95:5)
+    at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-UACHJROW.js?v=76c9f4f9:52:11
+    at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-UACHJROW.js?v=76c9f4f9:33:11
+    at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-JRFKIA75.js?v=76c9f4f9:115:13
+    at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-UACHJROW.js?v=76c9f4f9:52:11
+    at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-UACHJROW.js?v=76c9f4f9:33:11
+    at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-JRFKIA75.js?v=76c9f4f9:115:13
+    at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-6G3O34QR.js?v=76c9f4f9:2024:13
+    at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=76c9f4f9:178:13
+    at Provider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-JRFKIA75.js?v=76c9f4f9:39:15)
+    at Provider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-6G3O34QR.js?v=76c9f4f9:1922:15)
+    at Popper (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-6G3O34QR.js?v=76c9f4f9:2016:11)
+    at Tooltip (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=76c9f4f9:96:5)
+    at Provider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-JRFKIA75.js?v=76c9f4f9:39:15)
+    at TooltipProvider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=76c9f4f9:52:5)
+    at div
+    at _c (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/src/components/ui/miner-select.tsx:53:11)
+    at div
+    at div
+    at FilterBar (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/src/components/ui/filter-bar.tsx:35:3)
+    at div
+    at Home (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/src/pages/home.tsx:28:27)
+    at Route (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=76c9f4f9:323:16)
+    at Switch (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=76c9f4f9:379:17)
+    at Router
+    at QueryClientProvider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=76c9f4f9:2805:3)
+    at App
+
+Check the render method of &#x60;SlotClone&#x60;.
+at Select (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-select.js?v=76c9f4f9:95:5)
+at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-UACHJROW.js?v=76c9f4f9:52:11
+at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-UACHJROW.js?v=76c9f4f9:33:11
+at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-JRFKIA75.js?v=76c9f4f9:115:13
+at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-UACHJROW.js?v=76c9f4f9:52:11
+at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-UACHJROW.js?v=76c9f4f9:33:11
+at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-JRFKIA75.js?v=76c9f4f9:115:13
+at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-6G3O34QR.js?v=76c9f4f9:2024:13
+at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=76c9f4f9:178:13
+at Provider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-JRFKIA75.js?v=76c9f4f9:39:15)
+at Provider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-6G3O34QR.js?v=76c9f4f9:1922:15)
+at Popper (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-6G3O34QR.js?v=76c9f4f9:2016:11)
+at Tooltip (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=76c9f4f9:96:5)
+at Provider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-JRFKIA75.js?v=76c9f4f9:39:15)
+at TooltipProvider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=76c9f4f9:52:5)
+at div
+at _c (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/src/components/ui/miner-select.tsx:53:11)
+at div
+at div
+at FilterBar (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/src/components/ui/filter-bar.tsx:35:3)
+at div
+at Home (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/src/pages/home.tsx:28:27)
+at Route (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=76c9f4f9:323:16)
+at Switch (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=76c9f4f9:379:17)
+at Router
+at QueryClientProvider (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=76c9f4f9:2805:3)
+at App
+at t.value (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400
+Bitcoin calculation parameters: 
+Object {date: "2025-01-30", isToday: true, minerModel: "S19J_PRO", curtailedEnergy: 6471.3851775}
+Fetching from URL: https://fb6b1d46-0d69-4d3d-bcc5-8d0474975017-00-2eq1h79tpnfmh.spock.replit.dev/api/curtailment/mining-potential?date=2025-01-30&minerModel=S19J_PRO&energy=6471.3851775
+Bitcoin calculation result: 
+Object {bitcoinMined: 10.630418609661307, valueAtCurrentPrice: 1126046.6439865145, difficulty: 108105433845147, price: 105926.83932156}
