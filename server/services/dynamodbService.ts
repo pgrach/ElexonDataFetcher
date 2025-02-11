@@ -3,8 +3,8 @@ import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from "@aws-sdk/lib-
 import { DEFAULT_DIFFICULTY } from '../types/bitcoin';
 import { parse, format } from 'date-fns';
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000;
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 2000; // Increased from 1000 to 2000ms
 
 // Get table name from environment variable with fallback
 const DIFFICULTY_TABLE = process.env.DYNAMODB_DIFFICULTY_TABLE || "asics-dynamodb-DifficultyTable-DQ308ID3POT6";
@@ -60,6 +60,10 @@ async function verifyTableExists(tableName: string): Promise<boolean> {
   }
 }
 
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function retryOperation<T>(operation: () => Promise<T>, attempt = 1): Promise<T> {
   try {
     return await operation();
@@ -68,8 +72,19 @@ async function retryOperation<T>(operation: () => Promise<T>, attempt = 1): Prom
       throw error;
     }
 
-    console.warn(`[DynamoDB] Attempt ${attempt} failed, retrying in ${RETRY_DELAY_MS * attempt}ms:`, error);
-    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+    // Exponential backoff with jitter for DynamoDB
+    const delay = Math.min(
+      RETRY_DELAY_MS * Math.pow(2, attempt - 1) + Math.random() * 1000,
+      30000 // Max delay of 30 seconds
+    );
+
+    if (error?.name === 'ProvisionedThroughputExceededException') {
+      console.warn(`[DynamoDB] Throughput exceeded on attempt ${attempt}, waiting ${delay}ms before retry`);
+    } else {
+      console.warn(`[DynamoDB] Attempt ${attempt} failed, waiting ${delay}ms:`, error);
+    }
+
+    await sleep(delay);
     return retryOperation(operation, attempt + 1);
   }
 }

@@ -92,7 +92,7 @@ async function fetch2024Difficulties(): Promise<void> {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
           const difficulty = await getDifficultyData(date);
           DIFFICULTY_CACHE.set(date, difficulty.toString());
-          console.log(`✓ Cached difficulty for ${date}`);
+          console.log(`✓ Cached difficulty for ${date}: ${difficulty}`);
           success = true;
           await saveDifficultiesToCache();
         } catch (error) {
@@ -129,8 +129,14 @@ async function processSingleDay(
 
   const processingPromise = (async () => {
     try {
+      // If difficulty is not in cache, fetch it
+      if (!DIFFICULTY_CACHE.has(date)) {
+        const difficulty = await getDifficultyData(date);
+        DIFFICULTY_CACHE.set(date, difficulty.toString());
+        console.log(`Fetched and cached difficulty for ${date}: ${difficulty}`);
+      }
+
       return await db.transaction(async (tx) => {
-        // Get all periods with non-zero curtailment volume
         const curtailmentData = await tx
           .select({
             periods: sql<number[]>`array_agg(DISTINCT settlement_period)`,
@@ -152,7 +158,6 @@ async function processSingleDay(
         const periods = curtailmentData[0].periods;
         const farmIds = curtailmentData[0].farmIds;
 
-        // Delete existing records for this date/model combination
         await tx.delete(historicalBitcoinCalculations)
           .where(
             and(
@@ -161,7 +166,6 @@ async function processSingleDay(
             )
           );
 
-        // Get all curtailment records for the identified periods
         const records = await tx
           .select()
           .from(curtailmentRecords)
@@ -177,7 +181,6 @@ async function processSingleDay(
         console.log(`Processing ${date} with difficulty ${difficulty}`);
         console.log(`Found ${records.length} curtailment records across ${periods.length} periods and ${farmIds.length} farms`);
 
-        // Group records by settlement period
         const periodGroups = new Map<number, { totalVolume: number; farms: Map<string, number> }>();
 
         for (const record of records) {
@@ -197,7 +200,6 @@ async function processSingleDay(
           );
         }
 
-        // Calculate and insert records for each period
         const bulkInsertData: Array<{
           settlementDate: string;
           settlementPeriod: number;
@@ -208,14 +210,14 @@ async function processSingleDay(
           calculatedAt: Date;
         }> = [];
 
-        for (const [period, data] of periodGroups.entries()) {
+        for (const [period, data] of periodGroups) {
           const periodBitcoin = calculateBitcoinForBMU(
             data.totalVolume,
             minerModel,
             parseFloat(difficulty)
           );
 
-          for (const [farmId, farmVolume] of data.farms.entries()) {
+          for (const [farmId, farmVolume] of data.farms) {
             const bitcoinShare = (periodBitcoin * farmVolume) / data.totalVolume;
             bulkInsertData.push({
               settlementDate: date,
