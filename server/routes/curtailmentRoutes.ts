@@ -45,97 +45,12 @@ router.get('/mining-potential', async (req, res) => {
       isToday: isToday(requestDate)
     });
 
-    // Get current price from Minerstat
-    let currentPrice = 0;
-    try {
-      const { price } = await fetchFromMinerstat();
-      currentPrice = price;
-    } catch (error) {
-      console.error('Error fetching current price:', error);
-    }
+    const { price: currentPrice } = await fetchFromMinerstat();
 
-    // For today's data, always use real-time calculations
-    if (isToday(requestDate)) {
-      // Calculate current period
-      const now = new Date();
-      const minutes = now.getHours() * 60 + now.getMinutes();
-      const currentPeriod = Math.floor(minutes / 30) + 1;
-
-      console.log(`Current period: ${currentPeriod}`);
-
-      // Get the latest difficulty from minerstat or database
-      let difficulty: number;
-      try {
-        const { difficulty: minerstatDiff } = await fetchFromMinerstat();
-        difficulty = minerstatDiff;
-        console.log(`Using real-time difficulty from Minerstat: ${difficulty}`);
-      } catch (error) {
-        console.error('Error fetching real-time difficulty:', error);
-        // Get the latest known difficulty from our database
-        const latestDifficulty = await db
-          .select({
-            difficulty: sql<string>`MAX(difficulty::numeric)`
-          })
-          .from(historicalBitcoinCalculations)
-          .where(sql`difficulty IS NOT NULL`)
-          .limit(1);
-
-        difficulty = Number(latestDifficulty[0]?.difficulty) || 71e12;
-        console.log(`Using latest known difficulty: ${difficulty}`);
-      }
-
-      // Calculate total curtailed energy for today up to current period
-      const curtailmentTotal = await db
-        .select({
-          totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
-        })
-        .from(curtailmentRecords)
-        .where(
-          and(
-            eq(curtailmentRecords.settlementDate, formattedDate),
-            sql`settlement_period <= ${currentPeriod}`,
-            leadParty ? eq(curtailmentRecords.leadPartyName, leadParty) : undefined,
-            farmId ? eq(curtailmentRecords.farmId, farmId) : undefined
-          )
-        );
-
-      const totalEnergy = Number(curtailmentTotal[0]?.totalEnergy) || 0;
-      console.log(`Total energy up to period ${currentPeriod}: ${totalEnergy} MWh`);
-
-      if (totalEnergy === 0) {
-        return res.json({
-          bitcoinMined: 0,
-          valueAtCurrentPrice: 0,
-          difficulty,
-          currentPrice,
-          upToDate: true,
-          currentPeriod
-        });
-      }
-
-      const bitcoinMined = calculateBitcoinForBMU(totalEnergy, minerModel, difficulty);
-
-      console.log('Real-time calculation result:', {
-        totalEnergy,
-        bitcoinMined,
-        difficulty,
-        currentPrice
-      });
-
-      return res.json({
-        bitcoinMined,
-        valueAtCurrentPrice: bitcoinMined * currentPrice,
-        difficulty,
-        currentPrice,
-        upToDate: true,
-        currentPeriod
-      });
-    }
-
-    // For historical dates, use stored calculations
+    // First, try to get the historical records for this date
     const historicalData = await db
       .select({
-        difficulty: sql<string>`MIN(difficulty)`,
+        difficulty: sql<string>`MIN(difficulty)`, // Get the difficulty used for this date
         bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`
       })
       .from(historicalBitcoinCalculations)
@@ -143,41 +58,42 @@ router.get('/mining-potential', async (req, res) => {
         and(
           eq(historicalBitcoinCalculations.settlementDate, formattedDate),
           eq(historicalBitcoinCalculations.minerModel, minerModel),
-          farmId ? eq(historicalBitcoinCalculations.farmId, farmId) : undefined
+          leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
         )
       );
 
     if (historicalData[0]?.difficulty) {
-      console.log(`Using historical data from database for ${formattedDate}`);
+      console.log(`Using historical difficulty from database: ${historicalData[0].difficulty}`);
       const totalBitcoin = Number(historicalData[0].bitcoinMined) || 0;
 
       return res.json({
         bitcoinMined: totalBitcoin,
         valueAtCurrentPrice: totalBitcoin * (currentPrice || 0),
         difficulty: Number(historicalData[0].difficulty),
-        currentPrice,
-        upToDate: true
+        currentPrice
       });
     }
 
     // If no historical data, calculate using appropriate difficulty
     let difficulty;
-    try {
-      difficulty = await getDifficultyData(formattedDate);
-      console.log(`Using historical difficulty from DynamoDB: ${difficulty}`);
-    } catch (error) {
-      console.error(`Error fetching historical difficulty for ${formattedDate}:`, error);
-      // Get the latest known difficulty from our database
-      const latestDifficulty = await db
-        .select({
-          difficulty: sql<string>`difficulty`
-        })
-        .from(historicalBitcoinCalculations)
-        .where(sql`difficulty IS NOT NULL`)
-        .limit(1);
+    if (!isToday(requestDate)) {
+      try {
+        difficulty = await getDifficultyData(formattedDate);
+        console.log(`Using historical difficulty from DynamoDB: ${difficulty}`);
+      } catch (error) {
+        console.error(`Error fetching historical difficulty for ${formattedDate}:`, error);
+        // Get the latest known difficulty from our database
+        const latestDifficulty = await db
+          .select({
+            difficulty: sql<string>`difficulty`
+          })
+          .from(historicalBitcoinCalculations)
+          .where(sql`difficulty IS NOT NULL`)
+          .limit(1);
 
-      difficulty = latestDifficulty[0]?.difficulty || 71e12;
-      console.log(`Using latest known difficulty: ${difficulty}`);
+        difficulty = latestDifficulty[0]?.difficulty || 71e12;
+        console.log(`Using latest known difficulty: ${difficulty}`);
+      }
     }
 
     // Calculate total curtailed energy for the date
@@ -189,8 +105,7 @@ router.get('/mining-potential', async (req, res) => {
       .where(
         and(
           eq(curtailmentRecords.settlementDate, formattedDate),
-          leadParty ? eq(curtailmentRecords.leadPartyName, leadParty) : undefined,
-          farmId ? eq(curtailmentRecords.farmId, farmId) : undefined
+          leadParty ? eq(curtailmentRecords.leadPartyName, leadParty) : undefined
         )
       );
 
@@ -201,8 +116,7 @@ router.get('/mining-potential', async (req, res) => {
         bitcoinMined: 0,
         valueAtCurrentPrice: 0,
         difficulty: Number(difficulty),
-        currentPrice,
-        upToDate: true
+        currentPrice
       });
     }
 
@@ -212,8 +126,7 @@ router.get('/mining-potential', async (req, res) => {
       bitcoinMined,
       valueAtCurrentPrice: bitcoinMined * (currentPrice || 0),
       difficulty: Number(difficulty),
-      currentPrice,
-      upToDate: true
+      currentPrice
     });
 
   } catch (error) {

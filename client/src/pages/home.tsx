@@ -23,9 +23,7 @@ interface BitcoinCalculation {
   bitcoinMined: number;
   valueAtCurrentPrice: number;
   difficulty: number;
-  currentPrice: number;
-  upToDate: boolean;
-  currentPeriod?: number;
+  price: number;
 }
 
 interface DailySummary {
@@ -110,28 +108,32 @@ export default function Home() {
     enabled: !!formattedDate && isValid(date),
   });
 
-  const { data: bitcoinPotential, isLoading: isBitcoinLoading } = useQuery<BitcoinCalculation>({
+  const { data: bitcoinPotential } = useQuery<BitcoinCalculation>({
     queryKey: [
       `/api/curtailment/mining-potential`,
       selectedMinerModel,
-      formattedDate,
+      dailyData?.totalCurtailedEnergy,
       selectedLeadParty,
+      formattedDate 
     ],
     queryFn: async () => {
       console.log("Bitcoin calculation parameters:", {
         date: formattedDate,
         minerModel: selectedMinerModel,
+        curtailedEnergy: dailyData?.totalCurtailedEnergy,
         leadParty: selectedLeadParty,
       });
 
-      if (!isValid(date)) {
-        console.log("Invalid date, skipping Bitcoin calculation");
+      if (!isValid(date) || !dailyData?.totalCurtailedEnergy) {
+        console.log("Skipping Bitcoin calculation:", {
+          isValidDate: isValid(date),
+          hasCurtailedEnergy: !!dailyData?.totalCurtailedEnergy,
+        });
         return {
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
           difficulty: 0,
-          currentPrice: 0,
-          upToDate: false
+          price: 0,
         };
       }
 
@@ -141,6 +143,7 @@ export default function Home() {
       );
       url.searchParams.set("date", formattedDate);
       url.searchParams.set("minerModel", selectedMinerModel);
+      url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
       if (selectedLeadParty) {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
@@ -156,10 +159,17 @@ export default function Home() {
       console.log("Bitcoin calculation result:", result);
       return result;
     },
-    enabled: !!formattedDate && isValid(date),
+    enabled:
+      !!formattedDate &&
+      isValid(date) &&
+      !!dailyData?.totalCurtailedEnergy,
   });
 
-  const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
+  const {
+    data: monthlyData,
+    isLoading: isMonthlyLoading,
+    error: monthlyError,
+  } = useQuery<MonthlySummary>({
     queryKey: [
       `/api/summary/monthly/${format(date, "yyyy-MM")}`,
       selectedLeadParty,
@@ -644,10 +654,7 @@ export default function Home() {
                             Mining Opportunity Loss
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Network Difficulty: {Number(bitcoinPotential?.difficulty || 0).toLocaleString()}</p>
-                            {bitcoinPotential?.currentPeriod && (
-                              <p>Current Period: {bitcoinPotential.currentPeriod}</p>
-                            )}
+                            <p>Network Difficulty: {bitcoinPotential?.difficulty.toLocaleString()}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -664,7 +671,7 @@ export default function Home() {
                       </div>
                     ) : dailyData ? (
                       <div className="text-3xl font-bold text-[#F7931A]">
-                        ₿{Number(bitcoinPotential?.bitcoinMined || 0).toFixed(8)}
+                        ₿{bitcoinPotential?.bitcoinMined.toFixed(8) || "0.00"}
                       </div>
                     ) : (
                       <div className="text-sm text-muted-foreground">
