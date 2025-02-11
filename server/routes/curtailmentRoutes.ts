@@ -204,22 +204,31 @@ router.get('/mining-potential', async (req, res) => {
           0
         );
 
+        // Use the historical difficulty from the database records
+        const historicalDifficulty = Number(historicalData[0].difficulty);
+        console.log(`Using historical difficulty from database: ${historicalDifficulty}`);
+
         return res.json({
           bitcoinMined: totalBitcoin,
           valueAtCurrentPrice: totalBitcoin * currentPrice,
-          difficulty: Number(historicalData[0].difficulty) || DEFAULT_NETWORK_DIFFICULTY,
+          difficulty: historicalDifficulty,
           currentPrice
         });
       }
     } else {
-      difficulty = currentDifficulty || DEFAULT_NETWORK_DIFFICULTY; // Ensure we have a meaningful default value
-      console.log(`Using current difficulty for today:`, difficulty ? difficulty.toLocaleString() : 'N/A');
+      // For today, use the current difficulty from Minerstat
+      difficulty = currentDifficulty;
+      if (!difficulty) {
+        console.warn('Current difficulty not available from Minerstat, using default');
+        difficulty = DEFAULT_NETWORK_DIFFICULTY;
+      }
+      console.log(`Using difficulty for today:`, difficulty.toLocaleString());
     }
 
     const result = await calculateBitcoinMining(
       formattedDate,
       minerModel,
-      difficulty || DEFAULT_NETWORK_DIFFICULTY, // Ensure we pass a valid number
+      difficulty,
       currentPrice,
       leadParty,
       farmId
@@ -228,7 +237,7 @@ router.get('/mining-potential', async (req, res) => {
     res.json({
       bitcoinMined: result.totalBitcoin,
       valueAtCurrentPrice: result.totalBitcoin * currentPrice,
-      difficulty: difficulty || DEFAULT_NETWORK_DIFFICULTY,
+      difficulty,
       currentPrice
     });
 
