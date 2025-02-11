@@ -13,17 +13,35 @@ const router = Router();
 // Minerstat API helper function
 async function fetchFromMinerstat() {
   try {
-    const response = await axios.get('https://api.minerstat.com/v2/stats/bitcoin');
+    const response = await axios.get('https://api.minerstat.com/v2/coins?list=BTC');
+    const btcData = response.data[0];
+
+    if (!btcData || typeof btcData.difficulty !== 'number' || typeof btcData.price !== 'number') {
+      throw new Error('Invalid response format from Minerstat API');
+    }
+
+    // Convert USD to GBP (using a fixed rate - in production this should be fetched from a forex API)
+    const usdToGbpRate = 0.79; // Example fixed rate
+    const priceInGbp = btcData.price * usdToGbpRate;
+
     console.log('Minerstat API response:', {
-      difficulty: response.data.difficulty,
-      price: response.data.price
+      difficulty: btcData.difficulty,
+      priceUsd: btcData.price,
+      priceGbp: priceInGbp
     });
+
     return {
-      difficulty: response.data.difficulty,
-      price: response.data.price
+      difficulty: btcData.difficulty,
+      price: priceInGbp // Return price in GBP
     };
-  } catch (error) {
-    console.error('Error fetching from Minerstat:', error);
+  } catch (error: any) {
+    console.error('Error fetching from Minerstat:', error.message);
+    if (error.response) {
+      console.error('API Response:', {
+        status: error.response.status,
+        data: error.response.data
+      });
+    }
     throw error;
   }
 }
@@ -45,7 +63,15 @@ router.get('/mining-potential', async (req, res) => {
       isToday: isToday(requestDate)
     });
 
-    const { price: currentPrice } = await fetchFromMinerstat();
+    // Always try to get current price from Minerstat
+    let currentPrice;
+    try {
+      const { price } = await fetchFromMinerstat();
+      currentPrice = price;
+    } catch (error) {
+      console.error('Failed to fetch current price:', error);
+      currentPrice = null;
+    }
 
     // First, try to get the historical records for this date
     const historicalData = await db
