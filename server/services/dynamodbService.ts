@@ -78,7 +78,8 @@ async function retryOperation<T>(operation: () => Promise<T>, attempt = 1): Prom
       30000 // Max delay of 30 seconds
     );
 
-    if (error?.name === 'ProvisionedThroughputExceededException') {
+    const dynamoError = error as { name?: string };
+    if (dynamoError.name === 'ProvisionedThroughputExceededException') {
       console.warn(`[DynamoDB] Throughput exceeded on attempt ${attempt}, waiting ${delay}ms before retry`);
     } else {
       console.warn(`[DynamoDB] Attempt ${attempt} failed, waiting ${delay}ms:`, error);
