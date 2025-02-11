@@ -133,9 +133,9 @@ export default function Home() {
         return {
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
-          difficulty: 0,
+          difficulty: null,
           price: 0,
-          currentPrice: 0, 
+          currentPrice: 0,
         };
       }
 
