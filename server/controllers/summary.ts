@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { db } from "@db";
 import { dailySummaries, curtailmentRecords, monthlySummaries, yearlySummaries } from "@db/schema";
 import { eq, sql, and, desc } from "drizzle-orm";
+import { format } from 'date-fns';
 
 export async function getLeadParties(req: Request, res: Response) {
   try {
@@ -64,7 +65,35 @@ export async function getDailySummary(req: Request, res: Response) {
       });
     }
 
-    // Get the daily summary (aggregate only)
+    // For current day, check curtailment_records directly first
+    const isToday = date === format(new Date(), 'yyyy-MM-dd');
+
+    if (isToday) {
+      // Get the records directly from curtailment_records for today
+      const recordTotals = await db
+        .select({
+          totalVolume: sql<string>`COALESCE(SUM(${curtailmentRecords.volume}::numeric), 0)`,
+          totalPayment: sql<string>`COALESCE(SUM(${curtailmentRecords.payment}::numeric), 0)`
+        })
+        .from(curtailmentRecords)
+        .where(
+          leadParty
+            ? and(
+                eq(curtailmentRecords.settlementDate, date),
+                eq(curtailmentRecords.leadPartyName, leadParty as string)
+              )
+            : eq(curtailmentRecords.settlementDate, date)
+        );
+
+      return res.json({
+        date,
+        totalCurtailedEnergy: Math.abs(Number(recordTotals[0].totalVolume)),
+        totalPayment: Math.abs(Number(recordTotals[0].totalPayment)),
+        leadParty: leadParty || null
+      });
+    }
+
+    // For historical dates, continue with existing logic
     const summary = await db.query.dailySummaries.findFirst({
       where: eq(dailySummaries.summaryDate, date)
     });
@@ -72,8 +101,11 @@ export async function getDailySummary(req: Request, res: Response) {
     // If no lead party filter, return data directly from daily_summaries
     if (!leadParty) {
       if (!summary) {
-        return res.status(404).json({
-          error: "No data available for this date"
+        return res.json({
+          date,
+          totalCurtailedEnergy: 0,
+          totalPayment: 0,
+          leadParty: null
         });
       }
 

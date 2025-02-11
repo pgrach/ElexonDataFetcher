@@ -93,19 +93,18 @@ export default function Home() {
       }
 
       const response = await fetch(url);
-      if (!response.ok) {
-        if (response.status === 404) {
-          return {
-            totalCurtailedEnergy: 0,
-            totalPayment: 0
-          };
-        }
+      if (!response.ok && response.status !== 404) {
         throw new Error(`API Error: ${response.status}`);
       }
 
-      return response.json();
+      const data = await response.json();
+      return {
+        totalCurtailedEnergy: data.totalCurtailedEnergy || 0,
+        totalPayment: data.totalPayment || 0
+      };
     },
     enabled: !!formattedDate && isValid(date),
+    refetchInterval: isToday(date) ? 5 * 60 * 1000 : false, // Refetch every 5 minutes if today
   });
 
   const { data: bitcoinPotential } = useQuery<BitcoinCalculation>({
@@ -165,11 +164,7 @@ export default function Home() {
       !!dailyData?.totalCurtailedEnergy,
   });
 
-  const {
-    data: monthlyData,
-    isLoading: isMonthlyLoading,
-    error: monthlyError,
-  } = useQuery<MonthlySummary>({
+  const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
     queryKey: [
       `/api/summary/monthly/${format(date, "yyyy-MM")}`,
       selectedLeadParty,
