@@ -78,7 +78,7 @@ export async function getDailySummary(req: Request, res: Response) {
       }
 
       const today = new Date().toISOString().split('T')[0];
-      const paymentMultiplier = date === today ? 1 : -1;
+      const paymentMultiplier = date === today ? -1 : 1;
 
       return res.json({
         date,
@@ -109,7 +109,7 @@ export async function getDailySummary(req: Request, res: Response) {
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const paymentMultiplier = date === today ? 1 : -1;
+    const paymentMultiplier = date === today ? -1 : 1;
 
     res.json({
       date,
