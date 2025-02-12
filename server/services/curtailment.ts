@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
 
-const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+const BMU_MAPPING_PATH = path.join(process.cwd(), 'data', 'bmuMapping.json');
 
 let windFarmBmuIds: Set<string> | null = null;
 let bmuLeadPartyMap: Map<string, string> | null = null;
