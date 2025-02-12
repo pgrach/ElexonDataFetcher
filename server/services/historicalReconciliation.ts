@@ -251,7 +251,6 @@ export async function reconcileYearlyData(): Promise<void> {
   }
 }
 
-// Add export to reprocessDay function
 export async function reprocessDay(dateStr: string) {
   try {
     console.log(`\n=== Starting Data Re-processing for ${dateStr} ===`);
@@ -264,4 +263,24 @@ export async function reprocessDay(dateStr: string) {
     console.error('Error during re-processing:', error);
     throw error;
   }
+}
+
+// Add a new function for direct reprocessing
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const dateToProcess = process.argv[2];
+  if (!dateToProcess?.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    console.error('Please provide a date in YYYY-MM-DD format');
+    process.exit(1);
+  }
+
+  console.log(`\nReprocessing data for ${dateToProcess}`);
+  reprocessDay(dateToProcess)
+    .then(() => {
+      console.log('Reprocessing complete');
+      process.exit(0);
+    })
+    .catch(error => {
+      console.error('Fatal error:', error);
+      process.exit(1);
+    });
 }

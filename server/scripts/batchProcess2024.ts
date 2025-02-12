@@ -119,6 +119,7 @@ async function processBatch() {
 console.log(`Starting batch process for date range: ${START_DATE} to ${END_DATE}`);
 console.log(`Processing with concurrency limit of ${MAX_CONCURRENT_DATES} dates`);
 
+// Run the process
 processBatch()
   .then(() => console.log('Processing complete'))
   .catch(error => {
