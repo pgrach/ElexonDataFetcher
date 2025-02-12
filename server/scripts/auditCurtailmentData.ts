@@ -49,7 +49,7 @@ async function getAPIData(date: string) {
   };
 
   console.log('\nFetching API data for all periods...');
-
+  
   for (let period = 1; period <= 48; period++) {
     try {
       const records = await fetchBidsOffers(date, period);
@@ -62,8 +62,7 @@ async function getAPIData(date: string) {
         apiData.periodCount.add(period);
         apiData.farmCount.add(record.id);
         apiData.totalVolume += Math.abs(record.volume);
-        // Make sure payment is negative
-        apiData.totalPayment -= Math.abs(record.volume) * record.originalPrice;
+        apiData.totalPayment += Math.abs(record.volume) * record.originalPrice;
         apiData.records.push({
           ...record,
           settlementPeriod: period

@@ -77,8 +77,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
           const periodResults = await Promise.all(
             validRecords.map(async record => {
               const volume = Math.abs(record.volume);
-              // Ensure payment is negative by using negative volume
-              const payment = -volume * record.originalPrice;
+              const payment = volume * record.originalPrice;
 
               try {
                 await db.insert(curtailmentRecords).values({
@@ -87,7 +86,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
                   farmId: record.id,
                   leadPartyName: bmuLeadPartyMap?.get(record.id) || 'Unknown',
                   volume: record.volume.toString(), // Keep the original negative value
-                  payment: payment.toString(), // Store payment as negative
+                  payment: payment.toString(),
                   originalPrice: record.originalPrice.toString(),
                   finalPrice: record.finalPrice.toString(),
                   soFlag: record.soFlag,
