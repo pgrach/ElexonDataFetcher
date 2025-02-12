@@ -80,7 +80,7 @@ export async function getDailySummary(req: Request, res: Response) {
       return res.json({
         date,
         totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-        totalPayment: Math.abs(Number(summary.totalPayment)),
+        totalPayment: Number(summary.totalPayment),
         leadParty: null
       });
     }
@@ -156,10 +156,10 @@ export async function getMonthlySummary(req: Request, res: Response) {
       return res.json({
         yearMonth,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)),
+        totalPayment: Number(farmTotals[0].totalPayment),
         dailyTotals: {
           totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-          totalPayment: Math.abs(Number(farmTotals[0].totalPayment))
+          totalPayment: Number(farmTotals[0].totalPayment)
         }
       });
     }
@@ -184,13 +184,13 @@ export async function getMonthlySummary(req: Request, res: Response) {
       .from(dailySummaries)
       .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${yearMonth + '-01'}::date)`);
 
-    res.json({
+    return res.json({
       yearMonth,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Math.abs(Number(summary.totalPayment)),
+      totalPayment: Number(summary.totalPayment),
       dailyTotals: {
         totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
-        totalPayment: Math.abs(Number(dailyTotals[0]?.totalPayment || 0))
+        totalPayment: Number(dailyTotals[0]?.totalPayment || 0)
       }
     });
   } catch (error) {
@@ -367,7 +367,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       });
     }
 
-    res.json({
+    return res.json({
       year,
       totalCurtailedEnergy: yearTotals.totalCurtailedEnergy,
       totalPayment: yearTotals.totalPayment
