@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { format, parseISO, isToday, isValid } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
@@ -59,8 +59,7 @@ router.get('/mining-potential', async (req, res) => {
       date: formattedDate,
       minerModel,
       leadParty,
-      farmId,
-      isToday: isToday(requestDate)
+      farmId
     });
 
     // Always try to get current price from Minerstat
@@ -100,26 +99,24 @@ router.get('/mining-potential', async (req, res) => {
       });
     }
 
-    // If no historical data, calculate using appropriate difficulty
+    // If no historical data, get appropriate difficulty
     let difficulty;
-    if (!isToday(requestDate)) {
-      try {
-        difficulty = await getDifficultyData(formattedDate);
-        console.log(`Using historical difficulty from DynamoDB: ${difficulty}`);
-      } catch (error) {
-        console.error(`Error fetching historical difficulty for ${formattedDate}:`, error);
-        // Get the latest known difficulty from our database
-        const latestDifficulty = await db
-          .select({
-            difficulty: sql<string>`difficulty`
-          })
-          .from(historicalBitcoinCalculations)
-          .where(sql`difficulty IS NOT NULL`)
-          .limit(1);
+    try {
+      difficulty = await getDifficultyData(formattedDate);
+      console.log(`Using historical difficulty from DynamoDB: ${difficulty}`);
+    } catch (error) {
+      console.error(`Error fetching difficulty for ${formattedDate}:`, error);
+      // Get the latest known difficulty from our database
+      const latestDifficulty = await db
+        .select({
+          difficulty: sql<string>`difficulty`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(sql`difficulty IS NOT NULL`)
+        .limit(1);
 
-        difficulty = latestDifficulty[0]?.difficulty || 71e12;
-        console.log(`Using latest known difficulty: ${difficulty}`);
-      }
+      difficulty = latestDifficulty[0]?.difficulty || 71e12;
+      console.log(`Using latest known difficulty: ${difficulty}`);
     }
 
     // Calculate total curtailed energy for the date
