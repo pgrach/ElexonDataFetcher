@@ -6,7 +6,7 @@ import { processHistoricalCalculations } from "../services/bitcoinService";
 import { processDailyCurtailment } from "../services/curtailment";
 import { eq, sql } from "drizzle-orm";
 
-const TARGET_DATE = '2025-02-11';
+const TARGET_DATE = '2022-01-01';
 
 async function getDatabaseStats(date: string) {
   try {
@@ -49,11 +49,11 @@ async function getAPIData(date: string) {
   };
 
   console.log('\nFetching API data for all periods...');
-  
+
   for (let period = 1; period <= 48; period++) {
     try {
       const records = await fetchBidsOffers(date, period);
-      const validRecords = records.filter(record => 
+      const validRecords = records.filter(record =>
         record.volume < 0 && (record.soFlag || record.cadlFlag)
       );
 
@@ -70,7 +70,9 @@ async function getAPIData(date: string) {
       }
 
       if (validRecords.length > 0) {
-        console.log(`Period ${period}: ${validRecords.length} records`);
+        const periodVolume = validRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
+        const periodPayment = validRecords.reduce((sum, r) => sum + Math.abs(r.volume) * r.originalPrice, 0);
+        console.log(`Period ${period}: ${validRecords.length} records (${periodVolume.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
       }
     } catch (error) {
       console.error(`Error fetching period ${period}:`, error);
@@ -78,6 +80,7 @@ async function getAPIData(date: string) {
   }
 
   return {
+    date,
     recordCount: apiData.recordCount,
     periodCount: apiData.periodCount.size,
     farmCount: apiData.farmCount.size,
@@ -94,7 +97,7 @@ async function auditCurtailmentData() {
     // Get current database stats
     console.log('Fetching current database stats...');
     const dbStats = await getDatabaseStats(TARGET_DATE);
-    
+
     console.log('\nDatabase Current State:');
     console.log('Curtailment Records:', {
       records: dbStats.curtailment.recordCount,
@@ -113,7 +116,7 @@ async function auditCurtailmentData() {
 
     // Get API data
     const apiStats = await getAPIData(TARGET_DATE);
-    
+
     console.log('\nAPI Current State:', {
       records: apiStats.recordCount,
       periods: apiStats.periodCount,
@@ -125,7 +128,7 @@ async function auditCurtailmentData() {
     // Compare and report differences
     const volumeDiff = Math.abs(apiStats.totalVolume - Number(dbStats.curtailment.totalVolume));
     const paymentDiff = Math.abs(apiStats.totalPayment - Number(dbStats.curtailment.totalPayment));
-    
+
     console.log('\nDiscrepancies Found:');
     console.log('Volume Difference:', volumeDiff.toFixed(2), 'MWh');
     console.log('Payment Difference: £', paymentDiff.toFixed(2));
@@ -134,18 +137,18 @@ async function auditCurtailmentData() {
 
     if (volumeDiff > 0.01 || paymentDiff > 0.01) {
       console.log('\nSignificant differences detected, initiating update process...');
-      
+
       // Update curtailment records
       await processDailyCurtailment(TARGET_DATE);
       console.log('✓ Updated curtailment records');
-      
+
       // Update bitcoin calculations
       await processHistoricalCalculations(TARGET_DATE, TARGET_DATE);
       console.log('✓ Updated historical bitcoin calculations');
-      
+
       // Verify updates
       const updatedStats = await getDatabaseStats(TARGET_DATE);
-      
+
       console.log('\nUpdated Database State:');
       console.log('Curtailment Records:', {
         records: updatedStats.curtailment.recordCount,
@@ -153,7 +156,7 @@ async function auditCurtailmentData() {
         volume: Number(updatedStats.curtailment.totalVolume).toFixed(2),
         payment: Number(updatedStats.curtailment.totalPayment).toFixed(2)
       });
-      
+
       if (updatedStats.summary) {
         console.log('Updated Daily Summary:', {
           energy: Number(updatedStats.summary.totalCurtailedEnergy).toFixed(2),
