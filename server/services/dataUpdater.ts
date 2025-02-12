@@ -112,21 +112,21 @@ async function updateLatestData(retryAttempt = 0) {
             }
           }
 
-          // Group records by lead party for farm-specific calculations
-          const leadParties = records.map(r => r.leadPartyName).filter((v, i, a) => v && a.indexOf(v) === i);
-          const minerModels = ['S19J_PRO', 'S9', 'M20S'];
+          // Verify records were inserted for this period
+          const periodCheck = await db
+            .select({
+              count: sql<number>`COUNT(*)`,
+              totalVolume: sql<string>`SUM(ABS(volume::numeric))`
+            })
+            .from(curtailmentRecords)
+            .where(
+              sql`settlement_date = ${date} AND settlement_period = ${period}`
+            );
 
-          for (const leadParty of leadParties) {
-            for (const minerModel of minerModels) {
-              try {
-                await processSingleDay(date, minerModel, leadParty);
-                console.log(`[${date} P${period}] Updated Bitcoin calculations for ${leadParty} using ${minerModel}`);
-              } catch (error) {
-                console.error(`Error updating Bitcoin calculations for ${leadParty} with ${minerModel}:`, error);
-                // Continue with other combinations even if one fails
-              }
-            }
-          }
+          console.log(`[${date} P${period}] Verification:`, {
+            recordsFound: periodCheck[0].count,
+            totalVolume: Number(periodCheck[0].totalVolume).toFixed(2)
+          });
         }
       } catch (error) {
         console.error(`Error processing period ${period}:`, error);
@@ -138,6 +138,20 @@ async function updateLatestData(retryAttempt = 0) {
       console.log(`\nRe-running daily aggregation for ${date}`);
       await processDailyCurtailment(date);
 
+      // Update Bitcoin calculations for all miner models
+      console.log(`\nUpdating Bitcoin calculations for ${date} with current network difficulty`);
+      const minerModels = ['S19J_PRO', 'S9', 'M20S'];
+
+      for (const minerModel of minerModels) {
+        try {
+          await processSingleDay(date, minerModel);
+          console.log(`[${date}] Completed Bitcoin calculations for ${minerModel}`);
+        } catch (error) {
+          console.error(`Error processing Bitcoin calculations for ${minerModel}:`, error);
+          // Continue with other models even if one fails
+        }
+      }
+
       lastSuccessfulUpdate = new Date();
       console.log(`Update successful at ${lastSuccessfulUpdate.toISOString()}`);
     }
@@ -147,6 +161,22 @@ async function updateLatestData(retryAttempt = 0) {
     console.log(`\n=== Update Summary ===`);
     console.log(`Duration: ${duration.toFixed(1)}s`);
     console.log(`Records Processed: ${totalRecords}`);
+
+    // Verify final state
+    const finalState = await db
+      .select({
+        periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
+        recordCount: sql<number>`COUNT(*)`,
+        totalVolume: sql<string>`SUM(ABS(volume::numeric))`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date));
+
+    console.log(`Final State for ${date}:`, {
+      periods: finalState[0]?.periodCount || 0,
+      records: finalState[0]?.recordCount || 0,
+      volume: finalState[0]?.totalVolume ? `${Number(finalState[0].totalVolume).toFixed(2)} MWh` : '0 MWh'
+    });
 
   } catch (error) {
     console.error("Error updating latest data:", error);

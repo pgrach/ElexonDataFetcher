@@ -113,18 +113,29 @@ export default function Home() {
     queryKey: [
       `/api/curtailment/mining-potential`,
       selectedMinerModel,
-      formattedDate,
+      dailyData?.totalCurtailedEnergy,
       selectedLeadParty,
-      dailyData?.totalCurtailedEnergy
+      formattedDate 
     ],
     queryFn: async () => {
-      if (!isValid(date)) {
+      console.log("Bitcoin calculation parameters:", {
+        date: formattedDate,
+        minerModel: selectedMinerModel,
+        curtailedEnergy: dailyData?.totalCurtailedEnergy,
+        leadParty: selectedLeadParty,
+      });
+
+      if (!isValid(date) || !dailyData?.totalCurtailedEnergy) {
+        console.log("Skipping Bitcoin calculation:", {
+          isValidDate: isValid(date),
+          hasCurtailedEnergy: !!dailyData?.totalCurtailedEnergy,
+        });
         return {
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
-          difficulty: null,
+          difficulty: 0,
           price: 0,
-          currentPrice: 0,
+          currentPrice: 0, 
         };
       }
 
@@ -134,32 +145,21 @@ export default function Home() {
       );
       url.searchParams.set("date", formattedDate);
       url.searchParams.set("minerModel", selectedMinerModel);
-
-      // Ensure we're using the correct energy value
-      if (dailyData?.totalCurtailedEnergy) {
-        url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
-      }
-
-      // Always pass leadParty if selected (matching other queries)
-      if (selectedLeadParty && selectedLeadParty !== "all") {
+      url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
+      if (selectedLeadParty) {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
 
+      console.log("Fetching from URL:", url.toString());
+
       const response = await fetch(url);
       if (!response.ok) {
-        if (response.status === 404) {
-          return {
-            bitcoinMined: 0,
-            valueAtCurrentPrice: 0,
-            difficulty: null,
-            price: 0,
-            currentPrice: 0,
-          };
-        }
         throw new Error("Failed to fetch mining potential");
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log("Bitcoin calculation result:", result);
+      return result;
     },
     enabled:
       !!formattedDate &&
@@ -167,7 +167,11 @@ export default function Home() {
       !!dailyData?.totalCurtailedEnergy,
   });
 
-  const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
+  const {
+    data: monthlyData,
+    isLoading: isMonthlyLoading,
+    error: monthlyError,
+  } = useQuery<MonthlySummary>({
     queryKey: [
       `/api/summary/monthly/${format(date, "yyyy-MM")}`,
       selectedLeadParty,
