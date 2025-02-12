@@ -55,6 +55,9 @@ function Calendar({
         IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
       }}
+      fromYear={2022}
+      toYear={2025}
+      captionLayout="dropdown"
       {...props}
     />
   )
