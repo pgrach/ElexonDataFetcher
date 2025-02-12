@@ -113,12 +113,12 @@ export default function Home() {
     queryKey: [
       `/api/curtailment/mining-potential`,
       selectedMinerModel,
-      dailyData?.totalCurtailedEnergy,
+      formattedDate,
       selectedLeadParty,
-      formattedDate 
+      dailyData?.totalCurtailedEnergy
     ],
     queryFn: async () => {
-      if (!isValid(date) || !dailyData?.totalCurtailedEnergy) {
+      if (!isValid(date)) {
         return {
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
@@ -134,13 +134,28 @@ export default function Home() {
       );
       url.searchParams.set("date", formattedDate);
       url.searchParams.set("minerModel", selectedMinerModel);
-      url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
+
+      // Ensure we're using the correct energy value
+      if (dailyData?.totalCurtailedEnergy) {
+        url.searchParams.set("energy", dailyData.totalCurtailedEnergy.toString());
+      }
+
+      // Always pass leadParty if selected (matching other queries)
       if (selectedLeadParty && selectedLeadParty !== "all") {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
 
       const response = await fetch(url);
       if (!response.ok) {
+        if (response.status === 404) {
+          return {
+            bitcoinMined: 0,
+            valueAtCurrentPrice: 0,
+            difficulty: null,
+            price: 0,
+            currentPrice: 0,
+          };
+        }
         throw new Error("Failed to fetch mining potential");
       }
 
