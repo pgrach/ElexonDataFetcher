@@ -118,18 +118,7 @@ export default function Home() {
       formattedDate 
     ],
     queryFn: async () => {
-      console.log("Bitcoin calculation parameters:", {
-        date: formattedDate,
-        minerModel: selectedMinerModel,
-        curtailedEnergy: dailyData?.totalCurtailedEnergy,
-        leadParty: selectedLeadParty,
-      });
-
       if (!isValid(date) || !dailyData?.totalCurtailedEnergy) {
-        console.log("Skipping Bitcoin calculation:", {
-          isValidDate: isValid(date),
-          hasCurtailedEnergy: !!dailyData?.totalCurtailedEnergy,
-        });
         return {
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
@@ -150,16 +139,12 @@ export default function Home() {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
 
-      console.log("Fetching from URL:", url.toString());
-
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error("Failed to fetch mining potential");
       }
 
-      const result = await response.json();
-      console.log("Bitcoin calculation result:", result);
-      return result;
+      return response.json();
     },
     enabled:
       !!formattedDate &&
@@ -167,11 +152,7 @@ export default function Home() {
       !!dailyData?.totalCurtailedEnergy,
   });
 
-  const {
-    data: monthlyData,
-    isLoading: isMonthlyLoading,
-    error: monthlyError,
-  } = useQuery<MonthlySummary>({
+  const { data: monthlyData, isLoading: isMonthlyLoading, error: monthlyError } = useQuery<MonthlySummary>({
     queryKey: [
       `/api/summary/monthly/${format(date, "yyyy-MM")}`,
       selectedLeadParty,
