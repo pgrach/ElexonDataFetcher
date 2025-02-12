@@ -80,7 +80,7 @@ export async function getDailySummary(req: Request, res: Response) {
       return res.json({
         date,
         totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-        totalPayment: Math.abs(Number(summary.totalPayment)),
+        totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
         leadParty: null
       });
     }
@@ -107,8 +107,8 @@ export async function getDailySummary(req: Request, res: Response) {
 
     res.json({
       date,
-      totalCurtailedEnergy: Math.abs(Number(recordTotals[0].totalVolume)),
-      totalPayment: Math.abs(Number(recordTotals[0].totalPayment)),
+      totalCurtailedEnergy: Math.abs(Number(recordTotals[0].totalVolume)), // Keep absolute for energy
+      totalPayment: Number(recordTotals[0].totalPayment) * -1, // Flip the sign
       leadParty
     });
 
@@ -156,11 +156,7 @@ export async function getMonthlySummary(req: Request, res: Response) {
       return res.json({
         yearMonth,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)),
-        dailyTotals: {
-          totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-          totalPayment: Math.abs(Number(farmTotals[0].totalPayment))
-        }
+        totalPayment: Number(farmTotals[0].totalPayment) * -1, // Flip the sign
       });
     }
 
@@ -187,10 +183,10 @@ export async function getMonthlySummary(req: Request, res: Response) {
     res.json({
       yearMonth,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Math.abs(Number(summary.totalPayment)),
+      totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
       dailyTotals: {
         totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
-        totalPayment: Math.abs(Number(dailyTotals[0]?.totalPayment || 0))
+        totalPayment: Number(dailyTotals[0]?.totalPayment || 0) * -1 // Flip the sign
       }
     });
   } catch (error) {
@@ -299,7 +295,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       const farmTotals = await db
         .select({
           totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-          totalPayment: sql<string>`SUM(ABS(${curtailmentRecords.payment}::numeric))`
+          totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
         })
         .from(curtailmentRecords)
         .where(
@@ -320,7 +316,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       return res.json({
         year,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Number(farmTotals[0].totalPayment)
+        totalPayment: Number(farmTotals[0].totalPayment) * -1 // Flip the sign
       });
     }
 
@@ -329,7 +325,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       .select({
         yearMonth: monthlySummaries.yearMonth,
         totalCurtailedEnergy: monthlySummaries.totalCurtailedEnergy,
-        totalPayment: sql<string>`ABS(${monthlySummaries.totalPayment}::numeric)`
+        totalPayment: sql<string>`${monthlySummaries.totalPayment}::numeric`
       })
       .from(monthlySummaries)
       .where(sql`TO_DATE(${monthlySummaries.yearMonth} || '-01', 'YYYY-MM-DD')::date >= DATE_TRUNC('year', TO_DATE(${year}, 'YYYY'))::date
@@ -370,7 +366,7 @@ export async function getYearlySummary(req: Request, res: Response) {
     res.json({
       year,
       totalCurtailedEnergy: yearTotals.totalCurtailedEnergy,
-      totalPayment: yearTotals.totalPayment
+      totalPayment: yearTotals.totalPayment * -1 // Flip the sign
     });
   } catch (error) {
     console.error('Error fetching yearly summary:', error);
