@@ -112,21 +112,21 @@ async function updateLatestData(retryAttempt = 0) {
             }
           }
 
-          // Verify records were inserted for this period
-          const periodCheck = await db
-            .select({
-              count: sql<number>`COUNT(*)`,
-              totalVolume: sql<string>`SUM(ABS(volume::numeric))`
-            })
-            .from(curtailmentRecords)
-            .where(
-              sql`settlement_date = ${date} AND settlement_period = ${period}`
-            );
+          // Group records by lead party for farm-specific calculations
+          const leadParties = [...new Set(records.map(r => r.leadPartyName))];
+          for (const leadParty of leadParties) {
+            const farmRecords = records.filter(r => r.leadPartyName === leadParty);
+            const farmVolume = farmRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
 
-          console.log(`[${date} P${period}] Verification:`, {
-            recordsFound: periodCheck[0].count,
-            totalVolume: Number(periodCheck[0].totalVolume).toFixed(2)
-          });
+            // Update Bitcoin calculations for each farm
+            try {
+              await processSingleDay(date, 'S19J_PRO', leadParty);
+              console.log(`[${date} P${period}] Updated Bitcoin calculations for ${leadParty}`);
+            } catch (error) {
+              console.error(`Error updating Bitcoin calculations for ${leadParty}:`, error);
+              // Continue with other farms even if one fails
+            }
+          }
         }
       } catch (error) {
         console.error(`Error processing period ${period}:`, error);
