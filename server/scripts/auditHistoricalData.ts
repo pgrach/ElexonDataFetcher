@@ -105,12 +105,30 @@ async function auditDate(date: string) {
     const dbStats = await getDatabaseStats(date);
     const apiStats = await getAPIData(date);
 
+    // If there's no API data and no DB data, this is valid
+    if (apiStats.recordCount === 0 && 
+        (!dbStats.curtailment.recordCount || dbStats.curtailment.recordCount === 0)) {
+      console.log(`[${date}] No curtailment events found in API or database - this is valid`);
+      return {
+        date,
+        hasMissingData: false,
+        dbStats: {
+          volume: 0,
+          payment: 0
+        },
+        apiStats: {
+          volume: 0,
+          payment: 0
+        }
+      };
+    }
+
     const volumeDiff = Math.abs(apiStats.totalVolume - Number(dbStats.curtailment.totalVolume || 0));
     const paymentDiff = Math.abs(apiStats.totalPayment - Number(dbStats.curtailment.totalPayment || 0));
 
     const hasMissingData =
-      !dbStats.curtailment.recordCount ||
-      dbStats.curtailment.recordCount === 0 ||
+      (!dbStats.curtailment.recordCount && apiStats.recordCount > 0) ||
+      (dbStats.curtailment.recordCount === 0 && apiStats.recordCount > 0) ||
       volumeDiff > 0.01 ||
       paymentDiff > 0.01;
 
