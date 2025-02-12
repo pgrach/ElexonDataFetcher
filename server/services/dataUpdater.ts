@@ -7,6 +7,7 @@ import { curtailmentRecords } from "@db/schema";
 import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
 import { processSingleDay } from "./bitcoinService";
+import { reconcileDay } from "./historicalReconciliation";
 
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const STARTUP_DELAY = 5000; // 5 second delay before starting data updates
@@ -59,124 +60,33 @@ async function updateLatestData(retryAttempt = 0) {
     console.log(`Service Running Since: ${serviceStartTime?.toISOString()}`);
     console.log(`Retry Attempt: ${retryAttempt}/${MAX_RETRY_ATTEMPTS}`);
 
-    let dataChanged = false;
-    let totalRecords = 0;
+    // Instead of managing updates directly, use the reconciliation service
+    await reconcileDay(date);
 
-    // Delete existing records for today to prevent duplicates
-    try {
-      const deleteResult = await db.delete(curtailmentRecords)
-        .where(eq(curtailmentRecords.settlementDate, date));
-      console.log(`Cleared existing records for ${date}`);
-    } catch (error) {
-      console.error(`Error clearing existing records for ${date}:`, error);
-      throw error;
-    }
-
-    // Fetch all periods up to current for today
-    for (let period = 1; period <= currentPeriod; period++) {
-      try {
-        console.log(`\nProcessing Period ${period}...`);
-        const records = await fetchBidsOffers(date, period);
-
-        if (records.length > 0) {
-          const totalVolume = records.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-          const totalPayment = records.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice), 0);
-
-          console.log(`[${date} P${period}] Records: ${records.length} (${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)})`);
-
-          for (const record of records) {
-            const volume = record.volume;
-            const payment = Math.abs(record.volume) * record.originalPrice;
-
-            try {
-              await db.insert(curtailmentRecords).values({
-                settlementDate: date,
-                settlementPeriod: period,
-                farmId: record.id,
-                leadPartyName: record.leadPartyName || 'Unknown',
-                volume: volume.toString(),
-                payment: payment.toString(),
-                originalPrice: record.originalPrice.toString(),
-                finalPrice: record.finalPrice.toString(),
-                soFlag: record.soFlag,
-                cadlFlag: record.cadlFlag
-              });
-
-              console.log(`[${date} P${period}] Added record for ${record.id}: ${Math.abs(volume)} MWh, £${payment}`);
-              dataChanged = true;
-              totalRecords++;
-            } catch (error) {
-              console.error(`Error inserting record for ${record.id}:`, error);
-              console.error('Record data:', JSON.stringify(record, null, 2));
-              throw error;
-            }
-          }
-
-          // Verify records were inserted for this period
-          const periodCheck = await db
-            .select({
-              count: sql<number>`COUNT(*)`,
-              totalVolume: sql<string>`SUM(ABS(volume::numeric))`
-            })
-            .from(curtailmentRecords)
-            .where(
-              sql`settlement_date = ${date} AND settlement_period = ${period}`
-            );
-
-          console.log(`[${date} P${period}] Verification:`, {
-            recordsFound: periodCheck[0].count,
-            totalVolume: Number(periodCheck[0].totalVolume).toFixed(2)
-          });
-        }
-      } catch (error) {
-        console.error(`Error processing period ${period}:`, error);
-        throw error;
-      }
-    }
-
-    if (dataChanged) {
-      console.log(`\nRe-running daily aggregation for ${date}`);
-      await processDailyCurtailment(date);
-
-      // Update Bitcoin calculations for all miner models
-      console.log(`\nUpdating Bitcoin calculations for ${date} with current network difficulty`);
-      const minerModels = ['S19J_PRO', 'S9', 'M20S'];
-
-      for (const minerModel of minerModels) {
-        try {
-          await processSingleDay(date, minerModel);
-          console.log(`[${date}] Completed Bitcoin calculations for ${minerModel}`);
-        } catch (error) {
-          console.error(`Error processing Bitcoin calculations for ${minerModel}:`, error);
-          // Continue with other models even if one fails
-        }
-      }
-
-      lastSuccessfulUpdate = new Date();
-      console.log(`Update successful at ${lastSuccessfulUpdate.toISOString()}`);
-    }
-
-    lastUpdateTime = new Date();
-    const duration = (Date.now() - startTime) / 1000;
-    console.log(`\n=== Update Summary ===`);
-    console.log(`Duration: ${duration.toFixed(1)}s`);
-    console.log(`Records Processed: ${totalRecords}`);
-
-    // Verify final state
-    const finalState = await db
+    // Verify the update was successful
+    const verificationCheck = await db
       .select({
-        periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
         recordCount: sql<number>`COUNT(*)`,
-        totalVolume: sql<string>`SUM(ABS(volume::numeric))`
+        periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
+        totalVolume: sql<string>`SUM(ABS(volume::numeric))`,
+        totalPayment: sql<string>`SUM(payment::numeric)`
       })
       .from(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, date));
 
-    console.log(`Final State for ${date}:`, {
-      periods: finalState[0]?.periodCount || 0,
-      records: finalState[0]?.recordCount || 0,
-      volume: finalState[0]?.totalVolume ? `${Number(finalState[0].totalVolume).toFixed(2)} MWh` : '0 MWh'
+    console.log(`\nVerification Check for ${date}:`, {
+      records: verificationCheck[0]?.recordCount || 0,
+      periods: verificationCheck[0]?.periodCount || 0,
+      volume: Number(verificationCheck[0]?.totalVolume || 0).toFixed(2),
+      payment: Number(verificationCheck[0]?.totalPayment || 0).toFixed(2)
     });
+
+    lastSuccessfulUpdate = new Date();
+    console.log(`Update successful at ${lastSuccessfulUpdate.toISOString()}`);
+
+    const duration = (Date.now() - startTime) / 1000;
+    console.log(`\n=== Update Summary ===`);
+    console.log(`Duration: ${duration.toFixed(1)}s`);
 
   } catch (error) {
     console.error("Error updating latest data:", error);
@@ -191,6 +101,7 @@ async function updateLatestData(retryAttempt = 0) {
     }
   } finally {
     isUpdating = false;
+    lastUpdateTime = new Date();
   }
 }
 
