@@ -77,13 +77,10 @@ export async function getDailySummary(req: Request, res: Response) {
         });
       }
 
-      const today = new Date().toISOString().split('T')[0];
-      const paymentMultiplier = date === today ? -1 : 1;
-
       return res.json({
         date,
         totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-        totalPayment: Number(summary.totalPayment) * paymentMultiplier,
+        totalPayment: Number(summary.totalPayment),
         leadParty: null
       });
     }
@@ -108,13 +105,10 @@ export async function getDailySummary(req: Request, res: Response) {
       });
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const paymentMultiplier = date === today ? -1 : 1;
-
     res.json({
       date,
       totalCurtailedEnergy: Math.abs(Number(recordTotals[0].totalVolume)),
-      totalPayment: Number(recordTotals[0].totalPayment) * paymentMultiplier,
+      totalPayment: Math.abs(Number(recordTotals[0].totalPayment)),
       leadParty
     });
 
