@@ -55,7 +55,7 @@ export function FilterBar({
               selected={date}
               onSelect={onDateChange}
               disabled={(date) => {
-                const startDate = new Date("2023-01-01");
+                const startDate = new Date("2022-01-01");
                 startDate.setHours(0, 0, 0, 0);
                 const currentDate = new Date();
                 return date < startDate || date > currentDate;

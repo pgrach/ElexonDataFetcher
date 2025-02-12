@@ -50,7 +50,7 @@ interface HourlyData {
 export default function Home() {
   const [date, setDate] = useState<Date>(() => {
     const today = new Date();
-    const startDate = new Date("2023-01-01");
+    const startDate = new Date("2022-01-01");
     return today < startDate ? startDate : today;
   });
   const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(
