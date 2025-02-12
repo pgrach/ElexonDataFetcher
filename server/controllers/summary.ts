@@ -77,10 +77,13 @@ export async function getDailySummary(req: Request, res: Response) {
         });
       }
 
+      const today = new Date().toISOString().split('T')[0];
+      const paymentMultiplier = date === today ? 1 : -1;
+
       return res.json({
         date,
         totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-        totalPayment: Number(summary.totalPayment),
+        totalPayment: Number(summary.totalPayment) * paymentMultiplier,
         leadParty: null
       });
     }
@@ -105,10 +108,13 @@ export async function getDailySummary(req: Request, res: Response) {
       });
     }
 
+    const today = new Date().toISOString().split('T')[0];
+    const paymentMultiplier = date === today ? 1 : -1;
+
     res.json({
       date,
       totalCurtailedEnergy: Math.abs(Number(recordTotals[0].totalVolume)),
-      totalPayment: Math.abs(Number(recordTotals[0].totalPayment)),
+      totalPayment: Number(recordTotals[0].totalPayment) * paymentMultiplier,
       leadParty
     });
 
