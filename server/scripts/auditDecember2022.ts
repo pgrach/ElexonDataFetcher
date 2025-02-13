@@ -6,8 +6,8 @@ import { processDailyCurtailment } from "../services/curtailment";
 import { sql, eq } from "drizzle-orm";
 import pLimit from 'p-limit';
 
-const START_DATE = '2022-07-01';
-const END_DATE = '2022-07-31';
+const START_DATE = '2022-12-01';
+const END_DATE = '2022-12-31';
 const BATCH_SIZE = 3; // Process 3 days concurrently to avoid rate limits
 const limit = pLimit(BATCH_SIZE);
 const API_RATE_LIMIT = 250; // ms between API calls
@@ -64,6 +64,8 @@ async function getAPIData(date: string) {
         );
 
         if (validRecords.length > 0) {
+          console.log(`[${date} P${period}] Records: ${validRecords.length} (${validRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0).toFixed(2)} MWh, £${validRecords.reduce((sum, r) => sum + Math.abs(r.volume * r.originalPrice), 0).toFixed(2)})`);
+          
           for (const record of validRecords) {
             apiData.recordCount++;
             apiData.periodCount.add(period);
@@ -143,9 +145,9 @@ async function auditDate(date: string) {
   }
 }
 
-async function auditJuly2022() {
+async function auditDecember2022() {
   try {
-    console.log(`\n=== Starting July 2022 Data Audit ===\n`);
+    console.log(`\n=== Starting December 2022 Data Audit ===\n`);
 
     const dates = eachDayOfInterval({
       start: parseISO(START_DATE),
@@ -202,14 +204,14 @@ async function auditJuly2022() {
       errorDates
     };
   } catch (error) {
-    console.error('Error during July 2022 audit:', error);
+    console.error('Error during December 2022 audit:', error);
     throw error;
   }
 }
 
 // Run the audit if this script is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  auditJuly2022()
+  auditDecember2022()
     .then(results => {
       console.log('\n=== Audit Complete ===');
       process.exit(0);
@@ -220,4 +222,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     });
 }
 
-export { auditJuly2022 };
+export { auditDecember2022 };
