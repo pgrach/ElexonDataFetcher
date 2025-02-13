@@ -30,6 +30,16 @@ export default function DataVisualization({ date, selectedLeadParty, selectedMin
     totalPayment: number;
   }>({
     queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
+    queryFn: async () => {
+      const response = await fetch(`/api/summary/daily/${formattedDate}${selectedLeadParty ? `?leadParty=${selectedLeadParty}` : ''}`);
+      if (response.status === 404) {
+        return { totalCurtailedEnergy: 0, totalPayment: 0 };
+      }
+      if (!response.ok) {
+        throw new Error('Failed to fetch daily data');
+      }
+      return response.json();
+    },
     enabled: !!formattedDate,
   })
 
@@ -41,11 +51,36 @@ export default function DataVisualization({ date, selectedLeadParty, selectedMin
       selectedLeadParty,
       formattedDate 
     ],
+    queryFn: async () => {
+      const url = new URL("/api/curtailment/mining-potential", window.location.origin);
+      url.searchParams.set("date", formattedDate);
+      url.searchParams.set("minerModel", selectedMinerModel);
+      if (selectedLeadParty) {
+        url.searchParams.set("leadParty", selectedLeadParty);
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to fetch mining potential');
+      }
+      return response.json();
+    },
     enabled: !!formattedDate && !!dailyData?.totalCurtailedEnergy,
   })
 
   const { data: hourlyData, isLoading: isHourlyLoading } = useQuery<HourlyData[]>({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, selectedLeadParty],
+    queryFn: async () => {
+      const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
+      if (selectedLeadParty) {
+        url.searchParams.set("leadParty", selectedLeadParty);
+      }
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to fetch hourly data');
+      }
+      return response.json();
+    },
     enabled: !!formattedDate,
   })
 

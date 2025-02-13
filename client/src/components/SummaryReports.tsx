@@ -21,6 +21,16 @@ export default function SummaryReports({ date, selectedLeadParty, selectedMinerM
     totalPayment: number;
   }>({
     queryKey: [`/api/summary/daily/${formattedDate}`, selectedLeadParty],
+    queryFn: async () => {
+      const response = await fetch(`/api/summary/daily/${formattedDate}${selectedLeadParty ? `?leadParty=${selectedLeadParty}` : ''}`);
+      if (response.status === 404) {
+        return { totalCurtailedEnergy: 0, totalPayment: 0 };
+      }
+      if (!response.ok) {
+        throw new Error('Failed to fetch daily data');
+      }
+      return response.json();
+    },
     enabled: !!formattedDate,
   })
 
@@ -29,6 +39,16 @@ export default function SummaryReports({ date, selectedLeadParty, selectedMinerM
     totalPayment: number;
   }>({
     queryKey: [`/api/summary/monthly/${format(date, "yyyy-MM")}`, selectedLeadParty],
+    queryFn: async () => {
+      const response = await fetch(`/api/summary/monthly/${format(date, "yyyy-MM")}${selectedLeadParty ? `?leadParty=${selectedLeadParty}` : ''}`);
+      if (response.status === 404) {
+        return { totalCurtailedEnergy: 0, totalPayment: 0 };
+      }
+      if (!response.ok) {
+        throw new Error('Failed to fetch monthly data');
+      }
+      return response.json();
+    },
     enabled: !!date,
   })
 
@@ -37,6 +57,16 @@ export default function SummaryReports({ date, selectedLeadParty, selectedMinerM
     totalPayment: number;
   }>({
     queryKey: [`/api/summary/yearly/${format(date, "yyyy")}`, selectedLeadParty],
+    queryFn: async () => {
+      const response = await fetch(`/api/summary/yearly/${format(date, "yyyy")}${selectedLeadParty ? `?leadParty=${selectedLeadParty}` : ''}`);
+      if (response.status === 404) {
+        return { totalCurtailedEnergy: 0, totalPayment: 0 };
+      }
+      if (!response.ok) {
+        throw new Error('Failed to fetch yearly data');
+      }
+      return response.json();
+    },
     enabled: !!date,
   })
 
@@ -48,6 +78,20 @@ export default function SummaryReports({ date, selectedLeadParty, selectedMinerM
       selectedLeadParty,
       formattedDate 
     ],
+    queryFn: async () => {
+      const url = new URL("/api/curtailment/mining-potential", window.location.origin);
+      url.searchParams.set("date", formattedDate);
+      url.searchParams.set("minerModel", selectedMinerModel);
+      if (selectedLeadParty) {
+        url.searchParams.set("leadParty", selectedLeadParty);
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to fetch mining potential');
+      }
+      return response.json();
+    },
     enabled: !!formattedDate && !!dailyData?.totalCurtailedEnergy,
   })
 
