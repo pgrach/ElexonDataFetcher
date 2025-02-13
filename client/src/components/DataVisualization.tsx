@@ -4,6 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
 import { DualAxisChart } from "@/components/ui/dual-axis-chart"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface DataVisualizationProps {
   date: Date;
@@ -56,8 +62,18 @@ export default function DataVisualization({ date, selectedLeadParty, selectedMin
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Hourly Curtailment Analysis</CardTitle>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger className="text-sm text-muted-foreground">
+              Network Difficulty: {bitcoinPotential?.difficulty ? bitcoinPotential.difficulty.toLocaleString() : 'Not available'}
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Current BTC Price: £{(bitcoinPotential?.currentPrice || 0).toLocaleString()}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </CardHeader>
       <CardContent>
         <div className="h-[400px]">

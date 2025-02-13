@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { format } from "date-fns"
+import type { DateRange } from "react-day-picker"
 import { FilterBar } from "@/components/ui/filter-bar"
 import SummaryReports from "@/components/SummaryReports"
 import DataVisualization from "@/components/DataVisualization"
@@ -18,20 +19,20 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      <FilterBar
-        date={date}
-        onDateChange={(newDate) => newDate && setDate(newDate)}
-        selectedLeadParty={selectedLeadParty}
-        onLeadPartyChange={(value) => setSelectedLeadParty(value || null)}
-        curtailedLeadParties={[]} 
-        selectedMinerModel={selectedMinerModel}
-        onMinerModelChange={setSelectedMinerModel}
-      />
-
       <div className="container mx-auto py-8">
-        <h1 className="text-4xl font-bold mb-8">CurtailCoin</h1>
+        <h1 className="text-4xl font-bold mb-8">Wind Energy Bitcoin Mining Analysis</h1>
 
-        <div className="space-y-6">
+        <FilterBar
+          date={date}
+          onDateChange={(newDate) => newDate && setDate(newDate)}
+          selectedLeadParty={selectedLeadParty}
+          onLeadPartyChange={(value) => setSelectedLeadParty(value || null)}
+          curtailedLeadParties={[]} 
+          selectedMinerModel={selectedMinerModel}
+          onMinerModelChange={setSelectedMinerModel}
+        />
+
+        <div className="space-y-6 mt-8">
           <SummaryReports
             date={date}
             selectedLeadParty={selectedLeadParty}
