@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
-import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay, calculateMonthlyBitcoinSummary, populateHistoricalMonthlySummaries } from '../services/bitcoinService';
+import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay, calculateMonthlyBitcoinSummary } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries } from "@db/schema";
@@ -238,31 +238,6 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
     console.error('Error in monthly-mining-potential endpoint:', error);
     res.status(500).json({
       error: 'Failed to calculate monthly mining potential',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Add endpoint to populate historical monthly summaries
-router.post('/populate-historical-monthly-summaries', async (req, res) => {
-  try {
-    const startDate = '2022-01-01';
-    const endDate = '2023-12-31';
-
-    console.log(`Starting historical monthly summaries population from ${startDate} to ${endDate}`);
-
-    // First, ensure we have the historical calculations
-    await processHistoricalCalculations(startDate, endDate);
-    console.log('Completed historical calculations, now calculating monthly summaries');
-
-    // Then populate the monthly summaries
-    await populateHistoricalMonthlySummaries(startDate, endDate);
-
-    res.json({ message: 'Historical monthly summaries population completed successfully' });
-  } catch (error) {
-    console.error('Error populating historical monthly summaries:', error);
-    res.status(500).json({
-      error: 'Failed to populate historical monthly summaries',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
