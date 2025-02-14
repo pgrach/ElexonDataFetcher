@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { format, parseISO } from 'date-fns';
-import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay } from '../services/bitcoinService';
+import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
+import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay, calculateMonthlyBitcoinSummary } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
-import { historicalBitcoinCalculations, curtailmentRecords } from "@db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries } from "@db/schema";
+import { and, eq, sql, between } from "drizzle-orm";
 import { getDifficultyData } from '../services/dynamodbService';
 import axios from 'axios';
 
@@ -154,8 +154,90 @@ router.get('/mining-potential', async (req, res) => {
 
   } catch (error) {
     console.error('Error in mining-potential endpoint:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to calculate mining potential',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Add new endpoint for monthly Bitcoin mining summaries
+router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
+  try {
+    const { yearMonth } = req.params;
+    const minerModel = req.query.minerModel as string || 'S19J_PRO';
+    const leadParty = req.query.leadParty as string;
+
+    console.log('Monthly mining potential request:', {
+      yearMonth,
+      minerModel,
+      leadParty
+    });
+
+    // Try to get current price from Minerstat
+    let currentPrice;
+    try {
+      const { price } = await fetchFromMinerstat();
+      currentPrice = price;
+    } catch (error) {
+      console.error('Failed to fetch current price:', error);
+      currentPrice = null;
+    }
+
+    // First check if we have a pre-calculated monthly summary
+    const monthlySummary = await db
+      .select()
+      .from(bitcoinMonthlySummaries)
+      .where(
+        and(
+          eq(bitcoinMonthlySummaries.yearMonth, yearMonth),
+          eq(bitcoinMonthlySummaries.minerModel, minerModel)
+        )
+      );
+
+    if (monthlySummary[0]) {
+      return res.json({
+        bitcoinMined: Number(monthlySummary[0].totalBitcoinMined),
+        valueAtCurrentPrice: Number(monthlySummary[0].totalBitcoinMined) * (currentPrice || 0),
+        difficulty: Number(monthlySummary[0].averageDifficulty),
+        currentPrice
+      });
+    }
+
+    // If no summary exists, calculate it
+    await calculateMonthlyBitcoinSummary(yearMonth, minerModel);
+
+    // Fetch the newly calculated summary
+    const newSummary = await db
+      .select()
+      .from(bitcoinMonthlySummaries)
+      .where(
+        and(
+          eq(bitcoinMonthlySummaries.yearMonth, yearMonth),
+          eq(bitcoinMonthlySummaries.minerModel, minerModel)
+        )
+      );
+
+    if (!newSummary[0]) {
+      return res.json({
+        bitcoinMined: 0,
+        valueAtCurrentPrice: 0,
+        difficulty: 0,
+        currentPrice
+      });
+    }
+
+    res.json({
+      bitcoinMined: Number(newSummary[0].totalBitcoinMined),
+      valueAtCurrentPrice: Number(newSummary[0].totalBitcoinMined) * (currentPrice || 0),
+      difficulty: Number(newSummary[0].averageDifficulty),
+      currentPrice
+    });
+
+  } catch (error) {
+    console.error('Error in monthly-mining-potential endpoint:', error);
+    res.status(500).json({
+      error: 'Failed to calculate monthly mining potential',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

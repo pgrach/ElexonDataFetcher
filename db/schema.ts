@@ -28,6 +28,16 @@ export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calcula
   calculatedAt: timestamp("calculated_at").defaultNow(),
 });
 
+// New table for monthly Bitcoin summaries
+export const bitcoinMonthlySummaries = pgTable("bitcoin_monthly_summaries", {
+  yearMonth: text("year_month").primaryKey(),
+  minerModel: text("miner_model").notNull(),
+  totalBitcoinMined: numeric("total_bitcoin_mined").notNull(),
+  averageDifficulty: numeric("average_difficulty").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const dailySummaries = pgTable("daily_summaries", {
   summaryDate: date("summary_date").primaryKey(),
   totalCurtailedEnergy: numeric("total_curtailed_energy"),
@@ -74,6 +84,8 @@ export const selectIngestionProgressSchema = createSelectSchema(ingestionProgres
 // Add new schemas for Bitcoin calculations
 export const insertHistoricalBitcoinCalculationSchema = createInsertSchema(historicalBitcoinCalculations);
 export const selectHistoricalBitcoinCalculationSchema = createSelectSchema(historicalBitcoinCalculations);
+export const insertBitcoinMonthlySummarySchema = createInsertSchema(bitcoinMonthlySummaries);
+export const selectBitcoinMonthlySummarySchema = createSelectSchema(bitcoinMonthlySummaries);
 
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
@@ -89,3 +101,5 @@ export type InsertIngestionProgress = typeof ingestionProgress.$inferInsert;
 // Add new types for Bitcoin calculations
 export type HistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferSelect;
 export type InsertHistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferInsert;
+export type BitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferSelect;
+export type InsertBitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferInsert;
