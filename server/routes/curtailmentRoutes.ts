@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
-import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay, calculateMonthlyBitcoinSummary, populateHistoricalData } from '../services/bitcoinService';
+import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay, calculateMonthlyBitcoinSummary } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries } from "@db/schema";
@@ -238,35 +238,6 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
     console.error('Error in monthly-mining-potential endpoint:', error);
     res.status(500).json({
       error: 'Failed to calculate monthly mining potential',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-router.post('/process-historical-data', async (req, res) => {
-  try {
-    const startYear = req.query.startYear ? parseInt(req.query.startYear as string) : 2022;
-    const endYear = req.query.endYear ? parseInt(req.query.endYear as string) : 2023;
-
-    console.log(`Starting historical data processing for ${startYear}-${endYear}`);
-
-    // Start processing in the background
-    populateHistoricalData(startYear, endYear)
-      .then(() => {
-        console.log('Historical data processing completed successfully');
-      })
-      .catch(error => {
-        console.error('Error in historical data processing:', error);
-      });
-
-    // Respond immediately since this is a long-running process
-    res.json({
-      message: `Started processing historical data for ${startYear}-${endYear}. This may take several hours to complete.`
-    });
-  } catch (error) {
-    console.error('Error initiating historical data processing:', error);
-    res.status(500).json({
-      error: 'Failed to start historical data processing',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

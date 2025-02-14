@@ -137,13 +137,10 @@ async function processSingleDay(
       }
 
       return await db.transaction(async (tx) => {
-        console.log(`Processing day ${date} for miner model ${minerModel}`);
-
         const curtailmentData = await tx
           .select({
             periods: sql<number[]>`array_agg(DISTINCT settlement_period)`,
-            farmIds: sql<string[]>`array_agg(DISTINCT farm_id)`,
-            totalVolume: sql<string>`SUM(ABS(volume::numeric))`
+            farmIds: sql<string[]>`array_agg(DISTINCT farm_id)`
           })
           .from(curtailmentRecords)
           .where(
@@ -158,12 +155,9 @@ async function processSingleDay(
           return;
         }
 
-        console.log(`Found total volume for ${date}: ${curtailmentData[0].totalVolume} MWh`);
-
         const periods = curtailmentData[0].periods;
         const farmIds = curtailmentData[0].farmIds;
 
-        // Delete existing calculations for this date and miner model
         await tx.delete(historicalBitcoinCalculations)
           .where(
             and(
@@ -184,7 +178,7 @@ async function processSingleDay(
           );
 
         const difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
-        console.log(`Processing ${date} with difficulty ${difficulty} for ${minerModel}`);
+        console.log(`Processing ${date} with difficulty ${difficulty}`);
         console.log(`Found ${records.length} curtailment records across ${periods.length} periods and ${farmIds.length} farms`);
 
         const periodGroups = new Map<number, { totalVolume: number; farms: Map<string, number> }>();
@@ -220,10 +214,8 @@ async function processSingleDay(
           const periodBitcoin = calculateBitcoinForBMU(
             data.totalVolume,
             minerModel,
-            Number(difficulty)
+            parseFloat(difficulty)
           );
-
-          console.log(`Period ${period} - Volume: ${data.totalVolume} MWh, Bitcoin: ${periodBitcoin}`);
 
           for (const [farmId, farmVolume] of data.farms) {
             const bitcoinShare = (periodBitcoin * farmVolume) / data.totalVolume;
@@ -261,6 +253,49 @@ async function processSingleDay(
   await processingPromise;
 }
 
+function calculateBitcoinForBMU(
+  curtailedMwh: number,
+  minerModel: string,
+  difficulty: number
+): number {
+  const miner = minerModels[minerModel];
+  if (!miner) throw new Error(`Invalid miner model: ${minerModel}`);
+
+  const curtailedKwh = curtailedMwh * 1000;
+  const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
+  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
+  const difficultyNum = typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty;
+  const hashesPerBlock = difficultyNum * Math.pow(2, 32);
+  const networkHashRate = hashesPerBlock / 600;
+  const networkHashRateTH = networkHashRate / 1e12;
+  const totalHashPower = potentialMiners * miner.hashrate;
+  const ourNetworkShare = totalHashPower / networkHashRateTH;
+  return Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
+}
+
+async function processHistoricalCalculations(
+  startDate: string,
+  endDate: string,
+  minerModel: string = 'S19J_PRO'
+): Promise<void> {
+  await fetch2024Difficulties();
+  const limit = pLimit(10);
+  const MINER_MODELS = Object.keys(minerModels);
+
+  await Promise.all(
+    MINER_MODELS.map(model =>
+      limit(async () => {
+        try {
+          await processSingleDay(startDate, model);
+        } catch (error) {
+          console.error(`Failed to process ${model} for ${startDate}:`, error);
+          throw error;
+        }
+      })
+    )
+  );
+}
+
 async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: string): Promise<void> {
   console.log(`Calculating monthly Bitcoin summary for ${yearMonth} with ${minerModel}`);
 
@@ -286,8 +321,6 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
         )
       );
 
-    console.log(`Monthly data for ${yearMonth}:`, monthlyData[0]);
-
     if (!monthlyData[0]?.totalBitcoin) {
       console.log(`No Bitcoin data found for ${yearMonth}`);
       return;
@@ -295,8 +328,6 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
 
     const totalBitcoin = Number(monthlyData[0].totalBitcoin);
     const avgDifficulty = Number(monthlyData[0].avgDifficulty);
-
-    console.log(`Calculated total Bitcoin for ${yearMonth}: ${totalBitcoin}`);
 
     await db.transaction(async (tx) => {
       // Delete existing summary if any
@@ -309,7 +340,7 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
           )
         );
 
-      // Insert new summary
+      // Insert new summary with the updated schema
       await tx
         .insert(bitcoinMonthlySummaries)
         .values({
@@ -330,117 +361,10 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
   }
 }
 
-function calculateBitcoinForBMU(
-  curtailedMwh: number,
-  minerModel: string,
-  difficulty: number
-): number {
-  const miner = minerModels[minerModel];
-  if (!miner) throw new Error(`Invalid miner model: ${minerModel}`);
-
-  console.log(`Calculating Bitcoin for ${curtailedMwh} MWh using ${minerModel}`);
-  console.log(`Miner specs - Hashrate: ${miner.hashrate} TH/s, Power: ${miner.power}W`);
-
-  const curtailedKwh = curtailedMwh * 1000;
-  const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
-  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
-
-  console.log(`Potential miners that could run: ${potentialMiners}`);
-
-  const hashesPerBlock = difficulty * Math.pow(2, 32);
-  const networkHashRate = hashesPerBlock / 600;
-  const networkHashRateTH = networkHashRate / 1e12;
-  const totalHashPower = potentialMiners * miner.hashrate;
-  const ourNetworkShare = totalHashPower / networkHashRateTH;
-
-  const bitcoinMined = ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD;
-
-  console.log(`Network share: ${(ourNetworkShare * 100).toFixed(8)}%`);
-  console.log(`Bitcoin mined: ${bitcoinMined.toFixed(8)}`);
-
-  return Number(bitcoinMined.toFixed(8));
-}
-
-async function processHistoricalCalculations(
-  startDate: string,
-  endDate: string,
-  minerModel: string = 'S19J_PRO'
-): Promise<void> {
-  await fetch2024Difficulties();
-  const limit = pLimit(10);
-  const MINER_MODELS = Object.keys(minerModels);
-
-  await Promise.all(
-    MINER_MODELS.map(model =>
-      limit(async () => {
-        try {
-          //const dates = eachDayOfInterval({ start: parseISO(startDate), end: parseISO(endDate) }).map(date => format(date, 'yyyy-MM-dd'));
-          await processSingleDay(startDate, model);
-        } catch (error) {
-          console.error(`Failed to process ${model} for ${startDate}:`, error);
-          throw error;
-        }
-      })
-    )
-  );
-}
-
-async function populateHistoricalData(startYear: number = 2022, endYear: number = 2023) {
-  console.log(`Starting historical data population for ${startYear}-${endYear}`);
-  const limit = pLimit(5); // Process 5 days concurrently
-  const availableMinerModels = Object.keys(minerModels);
-
-  try {
-    // Process each year
-    for (let year = startYear; year <= endYear; year++) {
-      console.log(`Processing year ${year}`);
-
-      // Process each month
-      for (let month = 1; month <= 12; month++) {
-        const startDate = new Date(year, month - 1, 1);
-        const endDate = endOfMonth(startDate);
-        const yearMonth = format(startDate, 'yyyy-MM');
-
-        console.log(`Processing ${yearMonth}`);
-
-        // Get all days in the month
-        const dates = eachDayOfInterval({ start: startDate, end: endDate })
-          .map(date => format(date, 'yyyy-MM-dd'));
-
-        // Process each day with all miner models
-        const processPromises: Promise<void>[] = [];
-        for (const date of dates) {
-          for (const minerModel of availableMinerModels) {
-            processPromises.push(limit(() => processSingleDay(date, minerModel)));
-          }
-        }
-
-        await Promise.all(processPromises);
-
-        // Generate monthly summaries for each miner model
-        const summaryPromises: Promise<void>[] = [];
-        for (const minerModel of availableMinerModels) {
-          summaryPromises.push(calculateMonthlyBitcoinSummary(yearMonth, minerModel));
-        }
-        await Promise.all(summaryPromises);
-
-        console.log(`Completed processing ${yearMonth}`);
-      }
-    }
-
-    console.log('Historical data population completed');
-  } catch (error) {
-    console.error('Error populating historical data:', error);
-    throw error;
-  }
-}
-
-// Single export statement at the end
 export {
   calculateBitcoinForBMU,
   processHistoricalCalculations,
   processSingleDay,
   fetch2024Difficulties,
-  calculateMonthlyBitcoinSummary,
-  populateHistoricalData
+  calculateMonthlyBitcoinSummary
 };
