@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
-import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay, calculateMonthlyBitcoinSummary } from '../services/bitcoinService';
+import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay, calculateMonthlyBitcoinSummary, processHistoricalMonthlyData } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries } from "@db/schema";
@@ -238,6 +238,28 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
     console.error('Error in monthly-mining-potential endpoint:', error);
     res.status(500).json({
       error: 'Failed to calculate monthly mining potential',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Add new endpoint for processing historical monthly data
+router.post('/process-historical-monthly-data', async (req, res) => {
+  try {
+    const startDate = new Date('2022-01-01');
+    const endDate = new Date('2023-12-31');
+
+    console.log('Starting historical monthly data processing');
+    await processHistoricalMonthlyData(startDate, endDate);
+
+    res.json({ 
+      message: 'Historical monthly data processing completed',
+      period: `${format(startDate, 'yyyy-MM')} to ${format(endDate, 'yyyy-MM')}`
+    });
+  } catch (error) {
+    console.error('Error processing historical monthly data:', error);
+    res.status(500).json({
+      error: 'Failed to process historical monthly data',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
