@@ -321,6 +321,14 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
         )
       );
 
+    console.log('Monthly data query result:', {
+      yearMonth,
+      minerModel,
+      rawData: monthlyData[0],
+      startDate: format(startDate, 'yyyy-MM-dd'),
+      endDate: format(endDate, 'yyyy-MM-dd')
+    });
+
     if (!monthlyData[0]?.totalBitcoin) {
       console.log(`No Bitcoin data found for ${yearMonth}`);
       return;
@@ -328,6 +336,13 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
 
     const totalBitcoin = Number(monthlyData[0].totalBitcoin);
     const avgDifficulty = Number(monthlyData[0].avgDifficulty);
+
+    console.log('Processing monthly summary:', {
+      yearMonth,
+      minerModel,
+      totalBitcoin,
+      avgDifficulty
+    });
 
     await db.transaction(async (tx) => {
       // Delete existing summary if any

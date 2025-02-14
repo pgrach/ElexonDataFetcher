@@ -251,6 +251,11 @@ router.post('/populate-historical-monthly-summaries', async (req, res) => {
 
     console.log(`Starting historical monthly summaries population from ${startDate} to ${endDate}`);
 
+    // First, ensure we have the historical calculations
+    await processHistoricalCalculations(startDate, endDate);
+    console.log('Completed historical calculations, now calculating monthly summaries');
+
+    // Then populate the monthly summaries
     await populateHistoricalMonthlySummaries(startDate, endDate);
 
     res.json({ message: 'Historical monthly summaries population completed successfully' });
