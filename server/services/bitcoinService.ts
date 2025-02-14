@@ -3,7 +3,7 @@ import axios from 'axios';
 import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations, bitcoinMonthlySummaries } from "@db/schema";
 import { and, eq, between, sql, inArray } from "drizzle-orm";
-import { format, parseISO, eachDayOfInterval, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
+import { format, parseISO, eachDayOfInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { getDifficultyData } from './dynamodbService';
 import pLimit from 'p-limit';
 import fs from 'fs';
@@ -361,42 +361,10 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
   }
 }
 
-async function processHistoricalMonthlyData(startDate: Date, endDate: Date): Promise<void> {
-  console.log(`Processing historical monthly data from ${format(startDate, 'yyyy-MM')} to ${format(endDate, 'yyyy-MM')}`);
-
-  const months = eachMonthOfInterval({ start: startDate, end: endDate });
-  const limit = pLimit(5); // Process 5 months concurrently
-  const MINER_MODELS = Object.keys(minerModels);
-
-  await Promise.all(
-    months.map(month =>
-      limit(async () => {
-        const yearMonth = format(month, 'yyyy-MM');
-        console.log(`Processing ${yearMonth}`);
-
-        try {
-          await Promise.all(
-            MINER_MODELS.map(minerModel =>
-              calculateMonthlyBitcoinSummary(yearMonth, minerModel)
-            )
-          );
-          console.log(`Completed processing ${yearMonth}`);
-        } catch (error) {
-          console.error(`Error processing ${yearMonth}:`, error);
-          throw error;
-        }
-      })
-    )
-  );
-
-  console.log('Completed processing all historical monthly data');
-}
-
 export {
   calculateBitcoinForBMU,
   processHistoricalCalculations,
   processSingleDay,
   fetch2024Difficulties,
-  calculateMonthlyBitcoinSummary,
-  processHistoricalMonthlyData
+  calculateMonthlyBitcoinSummary
 };
