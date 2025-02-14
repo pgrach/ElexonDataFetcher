@@ -53,9 +53,7 @@ export default function Home() {
     const startDate = new Date("2022-01-01");
     return today < startDate ? startDate : today;
   });
-  const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(
-    null,
-  );
+  const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
   const [selectedMinerModel, setSelectedMinerModel] = useState("S19J_PRO");
 
   const formattedDate = format(date, "yyyy-MM-dd");
@@ -66,13 +64,49 @@ export default function Home() {
   });
 
   useEffect(() => {
-    if (
-      selectedLeadParty &&
-      !curtailedLeadParties.includes(selectedLeadParty)
-    ) {
+    if (selectedLeadParty && !curtailedLeadParties.includes(selectedLeadParty)) {
       setSelectedLeadParty(null);
     }
   }, [formattedDate, curtailedLeadParties, selectedLeadParty]);
+
+  // Monthly data query - moved before it's used in monthlyBitcoinPotential
+  const {
+    data: monthlyData,
+    isLoading: isMonthlyLoading,
+    error: monthlyError,
+  } = useQuery<MonthlySummary>({
+    queryKey: [
+      `/api/summary/monthly/${format(date, "yyyy-MM")}`,
+      selectedLeadParty,
+    ],
+    queryFn: async () => {
+      if (!isValid(date)) {
+        throw new Error("Invalid date selected");
+      }
+
+      const url = new URL(
+        `/api/summary/monthly/${format(date, "yyyy-MM")}`,
+        window.location.origin,
+      );
+      if (selectedLeadParty && selectedLeadParty !== "all") {
+        url.searchParams.set("leadParty", selectedLeadParty);
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        if (response.status === 404) {
+          return {
+            totalCurtailedEnergy: 0,
+            totalPayment: 0
+          };
+        }
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      return response.json();
+    },
+    enabled: !!date && isValid(date),
+  });
 
   const {
     data: dailyData,
@@ -115,7 +149,7 @@ export default function Home() {
       selectedMinerModel,
       dailyData?.totalCurtailedEnergy,
       selectedLeadParty,
-      formattedDate 
+      formattedDate
     ],
     queryFn: async () => {
       console.log("Bitcoin calculation parameters:", {
@@ -135,7 +169,7 @@ export default function Home() {
           valueAtCurrentPrice: 0,
           difficulty: 0,
           price: 0,
-          currentPrice: 0, 
+          currentPrice: 0,
         };
       }
 
@@ -167,42 +201,49 @@ export default function Home() {
       !!dailyData?.totalCurtailedEnergy,
   });
 
-  const {
-    data: monthlyData,
-    isLoading: isMonthlyLoading,
-    error: monthlyError,
-  } = useQuery<MonthlySummary>({
+  // Monthly bitcoin potential query - now monthlyData is defined before this
+  const { data: monthlyBitcoinPotential } = useQuery<BitcoinCalculation>({
     queryKey: [
-      `/api/summary/monthly/${format(date, "yyyy-MM")}`,
+      `/api/curtailment/mining-potential`,
+      selectedMinerModel,
+      monthlyData?.totalCurtailedEnergy,
       selectedLeadParty,
+      format(date, "yyyy-MM"),
+      "monthly"
     ],
     queryFn: async () => {
-      if (!isValid(date)) {
-        throw new Error("Invalid date selected");
+      if (!isValid(date) || !monthlyData?.totalCurtailedEnergy) {
+        return {
+          bitcoinMined: 0,
+          valueAtCurrentPrice: 0,
+          difficulty: 0,
+          price: 0,
+          currentPrice: 0,
+        };
       }
 
       const url = new URL(
-        `/api/summary/monthly/${format(date, "yyyy-MM")}`,
+        "/api/curtailment/mining-potential",
         window.location.origin,
       );
-      if (selectedLeadParty && selectedLeadParty !== "all") {
+      url.searchParams.set("date", format(date, "yyyy-MM-dd"));
+      url.searchParams.set("minerModel", selectedMinerModel);
+      url.searchParams.set("monthly", "true");
+      if (selectedLeadParty) {
         url.searchParams.set("leadParty", selectedLeadParty);
       }
 
       const response = await fetch(url);
       if (!response.ok) {
-        if (response.status === 404) {
-          return {
-            totalCurtailedEnergy: 0,
-            totalPayment: 0
-          };
-        }
-        throw new Error(`API Error: ${response.status}`);
+        throw new Error("Failed to fetch monthly mining potential");
       }
 
       return response.json();
     },
-    enabled: !!date && isValid(date),
+    enabled:
+      !!formattedDate &&
+      isValid(date) &&
+      !!monthlyData?.totalCurtailedEnergy,
   });
 
   const {
@@ -495,8 +536,7 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{(((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined ?? 0)) / 
-                        (dailyData?.totalCurtailedEnergy ?? 1))).toFixed(8)}
+                      ₿{monthlyBitcoinPotential?.bitcoinMined.toFixed(8) ?? "0.00000000"}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
@@ -569,8 +609,7 @@ export default function Home() {
                     </div>
                   ) : monthlyData ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{(((monthlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice ?? 0)) / 
-                        (dailyData?.totalCurtailedEnergy ?? 1))).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{(monthlyBitcoinPotential?.valueAtCurrentPrice ?? 0).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">

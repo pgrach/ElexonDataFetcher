@@ -54,12 +54,15 @@ router.get('/mining-potential', async (req, res) => {
     const leadParty = req.query.leadParty as string;
     const farmId = req.query.farmId as string;
     const formattedDate = format(requestDate, 'yyyy-MM-dd');
+    const monthStart = format(requestDate, 'yyyy-MM-01');
+    const isMonthly = req.query.monthly === 'true';
 
     console.log('Mining potential request:', {
       date: formattedDate,
       minerModel,
       leadParty,
-      farmId
+      farmId,
+      isMonthly
     });
 
     // Always try to get current price from Minerstat
@@ -72,10 +75,37 @@ router.get('/mining-potential', async (req, res) => {
       currentPrice = null;
     }
 
-    // First, try to get the historical records for this date
+    if (isMonthly) {
+      // For monthly calculations, get average difficulty for the month
+      const monthlyData = await db
+        .select({
+          avgDifficulty: sql<string>`AVG(difficulty::numeric)`,
+          totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            sql`DATE_TRUNC('month', settlement_date::date) = DATE_TRUNC('month', ${formattedDate}::date)`,
+            eq(historicalBitcoinCalculations.minerModel, minerModel),
+            leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
+          )
+        );
+
+      if (monthlyData[0]?.avgDifficulty) {
+        console.log(`Using average monthly difficulty: ${monthlyData[0].avgDifficulty}`);
+        return res.json({
+          bitcoinMined: Number(monthlyData[0].totalBitcoin) || 0,
+          valueAtCurrentPrice: (Number(monthlyData[0].totalBitcoin) || 0) * (currentPrice || 0),
+          difficulty: Number(monthlyData[0].avgDifficulty),
+          currentPrice
+        });
+      }
+    }
+
+    // For daily calculations, continue with existing logic
     const historicalData = await db
       .select({
-        difficulty: sql<string>`MIN(difficulty)`, // Get the difficulty used for this date
+        difficulty: sql<string>`MIN(difficulty)`,
         bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`
       })
       .from(historicalBitcoinCalculations)
