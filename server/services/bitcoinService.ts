@@ -361,10 +361,50 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
   }
 }
 
+async function populateHistoricalMonthlySummaries(
+  startDate: string,
+  endDate: string
+): Promise<void> {
+  console.log(`Populating historical monthly summaries from ${startDate} to ${endDate}`);
+
+  const start = parseISO(startDate);
+  const end = parseISO(endDate);
+  const months = new Set<string>();
+
+  // Get all months between start and end dates
+  let currentDate = start;
+  while (currentDate <= end) {
+    months.add(format(currentDate, 'yyyy-MM'));
+    currentDate = startOfMonth(new Date(currentDate.setMonth(currentDate.getMonth() + 1)));
+  }
+
+  const MINER_MODELS = Object.keys(minerModels);
+  const limit = pLimit(5); // Process 5 months concurrently
+
+  console.log(`Processing ${months.size} months for ${MINER_MODELS.length} miner models`);
+
+  const tasks = Array.from(months).flatMap(yearMonth =>
+    MINER_MODELS.map(minerModel =>
+      limit(async () => {
+        try {
+          await calculateMonthlyBitcoinSummary(yearMonth, minerModel);
+          console.log(`Completed ${yearMonth} for ${minerModel}`);
+        } catch (error) {
+          console.error(`Failed to process ${yearMonth} for ${minerModel}:`, error);
+        }
+      })
+    )
+  );
+
+  await Promise.all(tasks);
+  console.log('Completed populating historical monthly summaries');
+}
+
 export {
   calculateBitcoinForBMU,
   processHistoricalCalculations,
   processSingleDay,
   fetch2024Difficulties,
-  calculateMonthlyBitcoinSummary
+  calculateMonthlyBitcoinSummary,
+  populateHistoricalMonthlySummaries
 };
