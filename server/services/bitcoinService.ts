@@ -286,6 +286,7 @@ async function processHistoricalCalculations(
     MINER_MODELS.map(model =>
       limit(async () => {
         try {
+          //const dates = eachDayOfInterval({ start: parseISO(startDate), end: parseISO(endDate) }).map(date => format(date, 'yyyy-MM-dd'));
           await processSingleDay(startDate, model);
         } catch (error) {
           console.error(`Failed to process ${model} for ${startDate}:`, error);
@@ -361,10 +362,62 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
   }
 }
 
+async function populateHistoricalData(startYear: number = 2022, endYear: number = 2023) {
+  console.log(`Starting historical data population for ${startYear}-${endYear}`);
+  const limit = pLimit(5); // Process 5 days concurrently
+  const availableMinerModels = Object.keys(minerModels);
+
+  try {
+    // Process each year
+    for (let year = startYear; year <= endYear; year++) {
+      console.log(`Processing year ${year}`);
+
+      // Process each month
+      for (let month = 1; month <= 12; month++) {
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = endOfMonth(startDate);
+        const yearMonth = format(startDate, 'yyyy-MM');
+
+        console.log(`Processing ${yearMonth}`);
+
+        // Get all days in the month
+        const dates = eachDayOfInterval({ start: startDate, end: endDate })
+          .map(date => format(date, 'yyyy-MM-dd'));
+
+        // Process each day with all miner models
+        const processPromises: Promise<void>[] = [];
+        for (const date of dates) {
+          for (const minerModel of availableMinerModels) {
+            processPromises.push(limit(() => processSingleDay(date, minerModel)));
+          }
+        }
+
+        await Promise.all(processPromises);
+
+        // Generate monthly summaries for each miner model
+        const summaryPromises: Promise<void>[] = [];
+        for (const minerModel of availableMinerModels) {
+          summaryPromises.push(calculateMonthlyBitcoinSummary(yearMonth, minerModel));
+        }
+        await Promise.all(summaryPromises);
+
+        console.log(`Completed processing ${yearMonth}`);
+      }
+    }
+
+    console.log('Historical data population completed');
+  } catch (error) {
+    console.error('Error populating historical data:', error);
+    throw error;
+  }
+}
+
+// Single export statement at the end
 export {
   calculateBitcoinForBMU,
   processHistoricalCalculations,
   processSingleDay,
   fetch2024Difficulties,
-  calculateMonthlyBitcoinSummary
+  calculateMonthlyBitcoinSummary,
+  populateHistoricalData
 };
