@@ -197,8 +197,8 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
 
     if (monthlySummary[0]) {
       return res.json({
-        bitcoinMined: Number(monthlySummary[0].totalBitcoinMined),
-        valueAtCurrentPrice: Number(monthlySummary[0].totalBitcoinMined) * (currentPrice || 0),
+        bitcoinMined: Number(monthlySummary[0].bitcoinMined),
+        valueAtCurrentPrice: Number(monthlySummary[0].bitcoinMined) * (currentPrice || 0),
         difficulty: Number(monthlySummary[0].averageDifficulty),
         currentPrice
       });
@@ -228,8 +228,8 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
     }
 
     res.json({
-      bitcoinMined: Number(newSummary[0].totalBitcoinMined),
-      valueAtCurrentPrice: Number(newSummary[0].totalBitcoinMined) * (currentPrice || 0),
+      bitcoinMined: Number(newSummary[0].bitcoinMined),
+      valueAtCurrentPrice: Number(newSummary[0].bitcoinMined) * (currentPrice || 0),
       difficulty: Number(newSummary[0].averageDifficulty),
       currentPrice
     });

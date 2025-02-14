@@ -340,13 +340,14 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
           )
         );
 
-      // Insert new summary
+      // Insert new summary with the updated schema
       await tx
         .insert(bitcoinMonthlySummaries)
         .values({
           yearMonth,
           minerModel,
-          totalBitcoinMined: totalBitcoin.toString(),
+          bitcoinMined: totalBitcoin.toString(),
+          valueAtMining: "0", // Set to 0 as this will be calculated with current price when queried
           averageDifficulty: avgDifficulty.toString(),
           createdAt: new Date(),
           updatedAt: new Date()

@@ -16,7 +16,6 @@ export const curtailmentRecords = pgTable("curtailment_records", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Add new table for Bitcoin calculations
 export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calculations", {
   id: serial("id").primaryKey(),
   settlementDate: date("settlement_date").notNull(),
@@ -28,11 +27,12 @@ export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calcula
   calculatedAt: timestamp("calculated_at").defaultNow(),
 });
 
-// New table for monthly Bitcoin summaries
 export const bitcoinMonthlySummaries = pgTable("bitcoin_monthly_summaries", {
-  yearMonth: text("year_month").primaryKey(),
+  id: serial("id").primaryKey(),
+  yearMonth: text("year_month").notNull(),
   minerModel: text("miner_model").notNull(),
-  totalBitcoinMined: numeric("total_bitcoin_mined").notNull(),
+  bitcoinMined: numeric("bitcoin_mined").notNull(),
+  valueAtMining: numeric("value_at_mining").notNull(),
   averageDifficulty: numeric("average_difficulty").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -81,7 +81,6 @@ export const selectYearlySummarySchema = createSelectSchema(yearlySummaries);
 export const insertIngestionProgressSchema = createInsertSchema(ingestionProgress);
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
 
-// Add new schemas for Bitcoin calculations
 export const insertHistoricalBitcoinCalculationSchema = createInsertSchema(historicalBitcoinCalculations);
 export const selectHistoricalBitcoinCalculationSchema = createSelectSchema(historicalBitcoinCalculations);
 export const insertBitcoinMonthlySummarySchema = createInsertSchema(bitcoinMonthlySummaries);
@@ -98,7 +97,6 @@ export type InsertYearlySummary = typeof yearlySummaries.$inferInsert;
 export type IngestionProgress = typeof ingestionProgress.$inferSelect;
 export type InsertIngestionProgress = typeof ingestionProgress.$inferInsert;
 
-// Add new types for Bitcoin calculations
 export type HistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferSelect;
 export type InsertHistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferInsert;
 export type BitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferSelect;
