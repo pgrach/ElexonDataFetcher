@@ -4,10 +4,10 @@ import { db } from "@db";
 import { historicalBitcoinCalculations } from "@db/schema";
 import { eq, sql } from "drizzle-orm";
 
-const START_DATE = '2025-01-01';
-const END_DATE = '2025-02-28';  // Changed from 02-29 as 2025 is not a leap year
+const START_DATE = '2022-01-01';
+const END_DATE = '2023-12-31';  // Changed date range to cover 2022-2023
 const BATCH_SIZE = 5;
-const FORCE_REPROCESS = true; // Set to true to reprocess all dates with all three models
+const FORCE_REPROCESS = true; // Force reprocess to ensure all dates are covered
 
 async function processBatch(dates: string[]) {
   console.log(`Processing batch of ${dates.length} dates:`, dates);
@@ -21,23 +21,6 @@ async function processBatch(dates: string[]) {
   for (const date of dates) {
     try {
       console.log(`\nProcessing ${date}...`);
-
-      if (!FORCE_REPROCESS) {
-        // Check if we should skip this date
-        const existingData = await db
-          .select({
-            count: sql<number>`count(*)::int`
-          })
-          .from(historicalBitcoinCalculations)
-          .where(eq(historicalBitcoinCalculations.settlementDate, date));
-
-        if (existingData[0]?.count > 0) {
-          console.log(`Skipping ${date} - already processed`);
-          results.skipped.push(date);
-          continue;
-        }
-      }
-
       await reprocessDay(date);
       results.success.push(date);
     } catch (error) {

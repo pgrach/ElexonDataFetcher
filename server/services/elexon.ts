@@ -2,10 +2,14 @@ import { db } from "@db";
 import axios from "axios";
 import fs from "fs/promises";
 import path from "path";
+import { fileURLToPath } from 'url';
 import { ElexonBidOffer, ElexonResponse } from "../types/elexon";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
-const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+const BMU_MAPPING_PATH = path.join(__dirname, "../data/bmuMapping.json");
 const MAX_REQUESTS_PER_MINUTE = 4500; // Keep buffer below 5000 limit
 const REQUEST_WINDOW_MS = 60000; // 1 minute in milliseconds
 const PARALLEL_REQUESTS = 10; // Allow 10 parallel requests
@@ -19,9 +23,11 @@ async function loadWindFarmIds(): Promise<Set<string>> {
   }
 
   try {
+    console.log('Loading BMU mapping from:', BMU_MAPPING_PATH);
     const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
     const bmuMapping = JSON.parse(mappingContent);
     windFarmIds = new Set(bmuMapping.map((bmu: any) => bmu.elexonBmUnit));
+    console.log(`Loaded ${windFarmIds.size} wind farm BMU IDs`);
     return windFarmIds;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);

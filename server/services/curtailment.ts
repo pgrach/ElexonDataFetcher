@@ -4,8 +4,12 @@ import { fetchBidsOffers } from "./elexon";
 import { eq, sql } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
+import { fileURLToPath } from 'url';
 
-const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const BMU_MAPPING_PATH = path.join(__dirname, "../data/bmuMapping.json");
 
 let windFarmBmuIds: Set<string> | null = null;
 let bmuLeadPartyMap: Map<string, string> | null = null;
