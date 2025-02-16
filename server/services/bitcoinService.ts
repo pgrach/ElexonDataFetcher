@@ -20,11 +20,18 @@ const SETTLEMENT_PERIOD_MINUTES = 30;
 const BLOCKS_PER_SETTLEMENT_PERIOD = 3;
 
 // Processing configuration
-const MAX_RETRIES = 5;
-const BASE_DELAY = 5000; // 5 seconds base delay
+const MAX_RETRIES = 3;
+const BASE_DELAY = 1000; // 1 second base delay
+const DYNAMO_TIMEOUT = 5000; // 5 second timeout for DynamoDB requests
 
 // Cache file path
-const CACHE_FILE = path.join(__dirname, '..', 'data', '2024_difficulties.json');
+const CACHE_FILE = path.join(__dirname, '..', 'data', 'difficulty_cache.json');
+const CACHE_DIR = path.dirname(CACHE_FILE);
+
+// Ensure cache directory exists
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
 
 // Shared caches
 const DIFFICULTY_CACHE = new Map<string, string>();
@@ -34,6 +41,7 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Load cached difficulties
 async function loadCachedDifficulties(): Promise<void> {
   try {
     if (fs.existsSync(CACHE_FILE)) {
@@ -48,72 +56,61 @@ async function loadCachedDifficulties(): Promise<void> {
   }
 }
 
+// Save difficulties to cache
 async function saveDifficultiesToCache(): Promise<void> {
   try {
-    const cacheDir = path.dirname(CACHE_FILE);
-    if (!fs.existsSync(cacheDir)) {
-      fs.mkdirSync(cacheDir, { recursive: true });
-    }
     const data = Object.fromEntries(DIFFICULTY_CACHE.entries());
     fs.writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2));
-    console.log('Saved difficulties to cache file');
   } catch (error) {
     console.error('Error saving difficulties to cache:', error);
   }
 }
 
-async function fetch2024Difficulties(): Promise<void> {
-  console.log('Fetching 2024 difficulty data...');
-  await loadCachedDifficulties();
+// Fetch difficulty with timeout and fallback
+async function fetchDifficultyWithTimeout(date: string): Promise<string> {
+  try {
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('DynamoDB timeout')), DYNAMO_TIMEOUT)
+    );
+    const difficultyPromise = getDifficultyData(date);
 
-  const dateRange = eachDayOfInterval({
-    start: new Date('2024-01-01'),
-    end: new Date('2024-12-31')
-  });
+    const difficulty = await Promise.race([difficultyPromise, timeoutPromise]) as number;
+    return difficulty.toString();
+  } catch (error) {
+    console.warn(`Failed to fetch difficulty for ${date}, using default:`, error);
+    return DEFAULT_DIFFICULTY.toString();
+  }
+}
 
-  const dates = dateRange.map(date => format(date, 'yyyy-MM-dd'));
-  const uncachedDates = dates.filter(date => !DIFFICULTY_CACHE.has(date));
-
-  if (uncachedDates.length === 0) {
-    console.log('All difficulties already cached');
-    return;
+// Get difficulty with retries and caching
+async function getDifficultyForDate(date: string): Promise<string> {
+  // Check cache first
+  if (DIFFICULTY_CACHE.has(date)) {
+    return DIFFICULTY_CACHE.get(date)!;
   }
 
-  console.log(`Need to fetch ${uncachedDates.length} difficulties`);
-  const limit = pLimit(1); // Single request at a time
-
-  for (const date of uncachedDates) {
-    await limit(async () => {
-      let retries = 0;
-      let success = false;
-
-      while (!success && retries < MAX_RETRIES) {
-        try {
-          console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
-          const difficulty = await getDifficultyData(date);
-          DIFFICULTY_CACHE.set(date, difficulty.toString());
-          console.log(`✓ Cached difficulty for ${date}: ${difficulty}`);
-          success = true;
-          await saveDifficultiesToCache();
-        } catch (error) {
-          retries++;
-          if (retries === MAX_RETRIES) {
-            console.error(`Max retries reached for ${date}, using default difficulty`);
-            DIFFICULTY_CACHE.set(date, DEFAULT_DIFFICULTY.toString());
-            await saveDifficultiesToCache();
-            break;
-          }
-          const delay = BASE_DELAY * Math.pow(2, retries - 1);
-          console.log(`Attempt ${retries} failed, waiting ${delay/1000}s before retry`);
-          await sleep(delay);
-        }
+  let retries = 0;
+  while (retries < MAX_RETRIES) {
+    try {
+      const difficulty = await fetchDifficultyWithTimeout(date);
+      DIFFICULTY_CACHE.set(date, difficulty);
+      await saveDifficultiesToCache();
+      return difficulty;
+    } catch (error) {
+      retries++;
+      if (retries === MAX_RETRIES) {
+        console.error(`Max retries reached for ${date}, using default difficulty`);
+        const defaultDifficulty = DEFAULT_DIFFICULTY.toString();
+        DIFFICULTY_CACHE.set(date, defaultDifficulty);
+        await saveDifficultiesToCache();
+        return defaultDifficulty;
       }
-
-      await sleep(5000); // 5 second cooldown between requests
-    });
+      const delay = BASE_DELAY * Math.pow(2, retries - 1);
+      await sleep(delay);
+    }
   }
 
-  console.log(`Completed caching difficulties. Total cached: ${DIFFICULTY_CACHE.size}`);
+  return DEFAULT_DIFFICULTY.toString();
 }
 
 async function processSingleDay(
@@ -129,12 +126,8 @@ async function processSingleDay(
 
   const processingPromise = (async () => {
     try {
-      // If difficulty is not in cache, fetch it
-      if (!DIFFICULTY_CACHE.has(date)) {
-        const difficulty = await getDifficultyData(date);
-        DIFFICULTY_CACHE.set(date, difficulty.toString());
-        console.log(`Fetched and cached difficulty for ${date}: ${difficulty}`);
-      }
+      // Get difficulty first
+      const difficulty = await getDifficultyForDate(date);
 
       return await db.transaction(async (tx) => {
         const curtailmentData = await tx
@@ -177,7 +170,6 @@ async function processSingleDay(
             )
           );
 
-        const difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
         console.log(`Processing ${date} with difficulty ${difficulty}`);
         console.log(`Found ${records.length} curtailment records across ${periods.length} periods and ${farmIds.length} farms`);
 
@@ -278,19 +270,18 @@ async function processHistoricalCalculations(
   endDate: string,
   minerModel: string = 'S19J_PRO'
 ): Promise<void> {
-  await fetch2024Difficulties();
+  await loadCachedDifficulties(); // Load cached difficulties at the beginning
   const limit = pLimit(10);
   const MINER_MODELS = Object.keys(minerModels);
 
   await Promise.all(
     MINER_MODELS.map(model =>
       limit(async () => {
-        try {
-          await processSingleDay(startDate, model);
-        } catch (error) {
-          console.error(`Failed to process ${model} for ${startDate}:`, error);
-          throw error;
-        }
+        const dateRange = eachDayOfInterval({
+          start: parseISO(startDate),
+          end: parseISO(endDate)
+        });
+        await Promise.all(dateRange.map(date => processSingleDay(format(date, 'yyyy-MM-dd'), model)))
       })
     )
   );
