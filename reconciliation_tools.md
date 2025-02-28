@@ -1,103 +1,108 @@
-# Bitcoin Calculation Reconciliation Tools Guide
+# Reconciliation Tools Guide
 
-This guide provides an overview of the core reconciliation tools available in this project to help ensure 100% data integrity between `curtailment_records` and `historical_bitcoin_calculations` tables.
+This guide provides an overview of the available tools for maintaining data consistency between curtailment records and Bitcoin calculations within our platform.
 
-## Tool Overview
+## Available Tools
 
-### Core Reconciliation Tools
+### 1. Unified Reconciliation System
 
-1. **simple_reconcile.ts**  
-   A streamlined tool for checking and fixing reconciliation issues:
-   ```bash
-   npx tsx simple_reconcile.ts status         # Check overall status
-   npx tsx simple_reconcile.ts find           # Find dates with missing calculations
-   npx tsx simple_reconcile.ts date YYYY-MM-DD # Fix a specific date
-   npx tsx simple_reconcile.ts december       # Fix December 2023 specifically
-   npx tsx simple_reconcile.ts all            # Fix all missing dates (use with caution)
-   ```
+**Command:** `./unified_reconcile.sh [command] [options]`
 
-2. **reconciliation.ts**  
-   A consolidated system with multiple reconciliation operations:
-   ```bash
-   npx tsx reconciliation.ts status           # Check status
-   npx tsx reconciliation.ts reconcile        # Fix all missing
-   npx tsx reconciliation.ts date 2023-12-25  # Check/fix specific date
-   npx tsx reconciliation.ts period 2023-12-21 7 # Fix specific period
-   npx tsx reconciliation.ts combo 2023-12-21 7 FARM_ID MODEL # Fix specific combination
-   npx tsx reconciliation.ts batch 2023-12-21 10 # Process batch with limit
-   npx tsx reconciliation.ts december         # Fix December 2023
-   npx tsx reconciliation.ts range 2023-12-01 2023-12-31 # Fix date range
-   ```
+A comprehensive solution that combines efficient batch processing, intelligent retry logic, and detailed reporting in a single unified tool. This is the recommended tool for most reconciliation tasks.
 
-3. **daily_reconciliation_check.ts**  
-   Automatically checks and fixes the current and previous day:
-   ```bash
-   npx tsx daily_reconciliation_check.ts
-   ```
+#### Key Commands:
 
-### Status and Monitoring Tools
+- `status` - Show current reconciliation status
+- `analyze` - Analyze missing calculations and diagnose issues
+- `reconcile [batchSize]` - Fix all missing calculations with specified batch size
+- `date YYYY-MM-DD` - Process a specific date
+- `range YYYY-MM-DD YYYY-MM-DD [batchSize]` - Process a date range
+- `critical YYYY-MM-DD` - Process a problematic date with extra safeguards
 
-4. **check_reconciliation_status.ts**  
-   A simple utility to quickly check overall reconciliation status:
-   ```bash
-   npx tsx check_reconciliation_status.ts
-   ```
+**Example:**
+```bash
+# Check overall status
+./unified_reconcile.sh status
 
-5. **reconciliation_progress_report.ts**  
-   Generates detailed reports on reconciliation progress:
-   ```bash
-   npx tsx reconciliation_progress_report.ts
-   ```
+# Fix a specific date with issues
+./unified_reconcile.sh date 2025-02-15
+```
 
-6. **reconciliation_progress_check.ts**  
-   Provides a quick overview of current reconciliation status:
-   ```bash
-   npx tsx reconciliation_progress_check.ts
-   ```
+### 2. Daily Reconciliation Check
 
-7. **reconciliation_visualization.ts**  
-   Generates visual representations of reconciliation progress:
-   ```bash
-   npx tsx reconciliation_visualization.ts
-   ```
+**Command:** `npx tsx daily_reconciliation_check.ts [days=2] [forceProcess=false]`
 
-## Data Model
+Automatically checks and fixes issues in recent days' data. Useful for routine maintenance.
 
-The reconciliation process ensures consistency between:
+**Parameters:**
+- `days` - Number of recent days to check (default: 2)
+- `forceProcess` - Whether to process all dates even if they appear complete (default: false)
 
-- **curtailment_records**: Contains raw curtailment data (date, period, farmId, volume, etc.)
-- **historical_bitcoin_calculations**: Contains calculated Bitcoin mining potential for each curtailment record across all miner models
+**Example:**
+```bash
+# Check and fix the last 5 days
+npx tsx daily_reconciliation_check.ts 5
 
-## Reconciliation Process
+# Force reprocessing of the last 3 days
+npx tsx daily_reconciliation_check.ts 3 true
+```
 
-1. **Audit**: Identify dates with missing calculations
-2. **Fetch Difficulty**: Retrieve historical Bitcoin network difficulty from DynamoDB
-3. **Calculate**: Process missing calculations for each miner model (S19J_PRO, S9, M20S)
-4. **Verify**: Confirm that all expected calculations now exist
+### 3. Verification Tool
+
+**Command:** `npx tsx check_unified_reconciliation.ts`
+
+A simple tool to verify that the unified reconciliation system is correctly set up and functioning.
+
+**Example:**
+```bash
+npx tsx check_unified_reconciliation.ts
+```
+
+## Integration with Data Updater Service
+
+The reconciliation tools are integrated with the platform's data updater service, which automatically invokes reconciliation during real-time data updates.
+
+Key integration points:
+- `updateLatestData()` function in `dataUpdater.ts` calls reconciliation functions
+- Automatic reconciliation runs on schedule via the data updater service
+- On-demand reconciliation can be triggered through the tools above
 
 ## Troubleshooting
 
-**Common Issues**:
-- **DynamoDB Connectivity**: If difficulty data cannot be retrieved, a default value is used
-- **Timeouts**: For dates with many records, use batch processing or period-specific reconciliation
-- **Partial Completions**: Check the specific miner models that are incomplete for a date
+### Common Issues
 
-## Monitoring Progress
+1. **Timeouts**
+   - Symptom: Operations time out during large data processing
+   - Solution: Use smaller batch sizes or try the `critical` mode for problematic dates
 
-- Use `npx tsx simple_reconcile.ts status` to check overall reconciliation status
-- Review the RECONCILIATION_PROGRESS.md file for the latest progress report
-- Use `npx tsx reconciliation_progress_report.ts` for a detailed status breakdown
+2. **Missing Calculations**
+   - Symptom: Some dates show incomplete reconciliation
+   - Solution: Run the specific date with `unified_reconcile.sh date YYYY-MM-DD`
+
+3. **Data Discrepancies**
+   - Symptom: Calculations exist but don't match expected values
+   - Solution: Use `unified_reconcile.sh analyze` to identify patterns in the discrepancies
+
+### Checking Logs
+
+Reconciliation logs are stored in:
+- `reconciliation.log` - Main reconciliation log
+- `logs/daily_reconciliation_*.log` - Daily check logs
 
 ## Best Practices
 
-1. Process one month at a time to avoid memory issues
-2. Start with dates having the most missing calculations
-3. Regularly verify your progress with status checks
-4. Use the `daily_reconciliation_check.ts` in scheduled jobs to maintain reconciliation
+1. **Regular Verification**
+   - Run daily checks consistently to catch issues early
+   - Periodically verify the status of historical data
 
-## Technical Details
+2. **Batch Processing**
+   - For large historical data repairs, use date ranges with manageable batch sizes
+   - Start with small batches (5-10) and increase if successful
 
-- **Difficulty Data**: Historical Bitcoin network difficulty is stored in DynamoDB
-- **Miner Models**: We track calculations for three miner models (S19J_PRO, S9, M20S)
-- **Batch Processing**: Large datasets are processed in controlled batches to prevent timeouts
-- **Error Handling**: All tools include robust error handling and graceful failure recovery
+3. **Critical Dates**
+   - For dates that consistently fail, use the `critical` command
+   - If specific date-period-farm combinations are problematic, use `spot-fix`
+
+4. **Performance Optimization**
+   - Run resource-intensive reconciliation during off-peak hours
+   - Monitor database load during large batch operations
