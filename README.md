@@ -22,21 +22,21 @@ December 2023 reconciliation is now 100% complete. The current focus is on Novem
 ## Reconciliation Process
 
 ### 1. Unified Reconciliation System
-- `./unified_reconcile.sh status` - Check current reconciliation status
-- `./unified_reconcile.sh analyze` - Analyze missing calculations and detect issues
-- `./unified_reconcile.sh reconcile [batchSize]` - Process all missing calculations
-- `./unified_reconcile.sh date YYYY-MM-DD` - Process a specific date
-- `./unified_reconcile.sh range YYYY-MM-DD YYYY-MM-DD` - Process a date range
-- `./unified_reconcile.sh critical YYYY-MM-DD` - Process a problematic date with extra safeguards
-- `./unified_reconcile.sh spot-fix YYYY-MM-DD PERIOD FARM_ID` - Fix specific records
+- `npx tsx unified_reconciliation.ts status` - Check current reconciliation status
+- `npx tsx unified_reconciliation.ts analyze` - Analyze missing calculations and detect issues
+- `npx tsx unified_reconciliation.ts reconcile [batchSize]` - Process all missing calculations
+- `npx tsx unified_reconciliation.ts date YYYY-MM-DD` - Process a specific date
+- `npx tsx unified_reconciliation.ts range YYYY-MM-DD YYYY-MM-DD [batchSize]` - Process a date range
+- `npx tsx unified_reconciliation.ts critical YYYY-MM-DD` - Process a problematic date with extra safeguards
+- `npx tsx unified_reconciliation.ts spot-fix YYYY-MM-DD PERIOD FARM_ID` - Fix specific records
 
 ### 2. Daily Automation
 - Automated daily process to reconcile the previous day's curtailment records with Bitcoin calculations
 - Uses `daily_reconciliation_check.ts` script which integrates with the unified system
 
-### 3. Testing Tools
-- `./test_reconciliation.sh` - Run tests to verify reconciliation functionality
-- `npx tsx run_reconciliation_test.ts` - Automated test suite for reconciliation functions
+### 3. Advanced Reconciliation
+- `npx tsx comprehensive_reconciliation.ts` - High-performance reconciliation system
+- `npx tsx comprehensive_reconciliation.ts report` - Generate detailed reconciliation reports
 
 ## Data Model
 
@@ -66,11 +66,8 @@ The app runs with the "Start application" workflow, which executes `npm run dev`
 
 ### Documentation
 
-#### Comprehensive Guides
-- `RECONCILIATION_GUIDE.md` - Detailed user guide for the reconciliation system
-- `RECONCILIATION_PROGRESS.md` - Current status and progress of reconciliation efforts
-- `RECONCILIATION_ENHANCEMENTS.md` - Planned enhancements and feature roadmap
-- `reconciliation_tools.md` - Technical documentation of available tools
+#### Comprehensive Guide
+- `RECONCILIATION.md` - Complete documentation for the reconciliation system, including user guide, status tracking, enhancement roadmap, and technical details
 
 #### API Documentation
 The platform exposes several API endpoints to access curtailment and mining data:
