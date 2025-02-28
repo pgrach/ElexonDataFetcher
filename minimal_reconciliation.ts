@@ -26,22 +26,57 @@ const DEFAULT_BATCH_SIZE = 1;
 const LOG_FILE = './minimal_reconciliation.log';
 const CHECKPOINT_FILE = './minimal_checkpoint.json';
 
-// Database pool with minimal connections
+// Database pool with minimal connections and error handling
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: 2, // Very limited number of connections
   idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 5000,
-  query_timeout: 10000,
+  connectionTimeoutMillis: 10000, // Increased timeout
+  query_timeout: 15000, // Increased query timeout
   allowExitOnIdle: true
 });
 
-// Logging utility
+// Add error handler to pool
+pool.on('error', (err) => {
+  try {
+    const timestamp = new Date().toISOString();
+    const message = `[${timestamp}] [DB ERROR] Database pool error: ${err.message}`;
+    
+    try {
+      process.stderr.write(message + '\n');
+    } catch (writeErr) {
+      // Handle stderr pipe errors silently
+    }
+    
+    try {
+      fs.appendFileSync(LOG_FILE, message + '\n');
+    } catch (fileErr) {
+      // If logging fails, this is a last resort
+    }
+  } catch (e) {
+    // Last resort error handling
+  }
+});
+
+// Logging utility with error handling
 function log(message: string, type: 'info' | 'error' | 'success' | 'warning' = 'info'): void {
   const timestamp = new Date().toISOString();
   const formatted = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
-  console.log(formatted);
-  fs.appendFileSync(LOG_FILE, formatted + '\n');
+  
+  try {
+    console.log(formatted);
+  } catch (err) {
+    // Handle stdout pipe errors silently
+    if (err && (err as any).code !== 'EPIPE') {
+      process.stderr.write(`Error writing to console: ${err}\n`);
+    }
+  }
+  
+  try {
+    fs.appendFileSync(LOG_FILE, formatted + '\n');
+  } catch (err) {
+    process.stderr.write(`Error writing to log file: ${err}\n`);
+  }
 }
 
 // Sleep utility
@@ -415,17 +450,54 @@ async function sequentialProcess(date: string, batchSize: number = DEFAULT_BATCH
     // Close and reestablish connection pool to avoid leaks
     if (i > 0 && i % (batchSize * 5) === 0) {
       log('Refreshing connection pool...', 'info');
-      await pool.end();
+      
+      try {
+        // Gracefully close the pool
+        await pool.end();
+      } catch (err) {
+        log(`Error closing pool: ${err}`, 'warning');
+        // Continue anyway
+      }
+      
+      await sleep(3000); // Longer pause to ensure connections are closed
+      
+      try {
+        // Recreate pool with improved settings
+        Object.assign(pool, new pg.Pool({
+          connectionString: process.env.DATABASE_URL,
+          max: 2,
+          idleTimeoutMillis: 10000,
+          connectionTimeoutMillis: 10000, // Increased timeout
+          query_timeout: 15000, // Increased query timeout
+          allowExitOnIdle: true
+        }));
+        
+        // Make sure pool has error handler
+        pool.on('error', (err) => {
+          try {
+            const timestamp = new Date().toISOString();
+            process.stderr.write(`[${timestamp}] [DB ERROR] Database pool error: ${err.message}\n`);
+            fs.appendFileSync(LOG_FILE, `[${timestamp}] [DB ERROR] Database pool error: ${err.message}\n`);
+          } catch (e) {
+            // Last resort error handling
+          }
+        });
+        
+        log('Connection pool refreshed successfully', 'success');
+      } catch (err) {
+        log(`Error recreating pool: ${err}`, 'error');
+        // Create a fallback pool with minimal settings
+        Object.assign(pool, new pg.Pool({
+          connectionString: process.env.DATABASE_URL,
+          max: 1,
+          idleTimeoutMillis: 5000,
+          connectionTimeoutMillis: 5000,
+          query_timeout: 10000
+        }));
+      }
+      
+      // Extra pause to ensure new pool is ready
       await sleep(2000);
-      // Recreate pool
-      Object.assign(pool, new pg.Pool({
-        connectionString: process.env.DATABASE_URL,
-        max: 2,
-        idleTimeoutMillis: 10000,
-        connectionTimeoutMillis: 5000,
-        query_timeout: 10000,
-        allowExitOnIdle: true
-      }));
     }
   }
   
@@ -606,16 +678,64 @@ async function main() {
   }
 }
 
+// Safe process exit function
+async function safeExit(exitCode: number): Promise<never> {
+  try {
+    // Try to safely close the pool before exiting
+    await pool.end().catch(() => {
+      // Ignore errors closing the pool during exit
+    });
+  } catch (e) {
+    // Last resort error handling
+  }
+  
+  // Use process.exit as a last resort
+  process.exit(exitCode);
+  return exitCode as never; // This will never be reached but makes TypeScript happy
+}
+
+// Set up global error handlers
+process.on('uncaughtException', async (err) => {
+  try {
+    log(`UNCAUGHT EXCEPTION: ${err.message}\nStack: ${err.stack}`, 'error');
+    await safeExit(1);
+  } catch (e) {
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', async (reason, promise) => {
+  try {
+    log(`UNHANDLED REJECTION: ${reason}`, 'error');
+    await safeExit(1);
+  } catch (e) {
+    process.exit(1);
+  }
+});
+
+// EPIPE error handler
+process.stdout.on('error', (err) => {
+  if (err && (err as any).code === 'EPIPE') {
+    // Silently handle broken pipe - this is expected in some cases
+    process.exit(0);
+  }
+});
+
 // Run the main function if script is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   main()
-    .then(() => {
+    .then(async () => {
       log("\n=== Minimal Reconciliation Tool Complete ===", 'success');
-      process.exit(0);
+      await safeExit(0);
     })
-    .catch(error => {
-      log(`Fatal error: ${error}`, 'error');
-      process.exit(1);
+    .catch(async (error) => {
+      try {
+        log(`Fatal error: ${error}`, 'error');
+      } catch (logError) {
+        // If even logging fails, write to stderr directly
+        process.stderr.write(`Fatal error: ${error}\n`);
+      }
+      await safeExit(1);
     });
 }
 
