@@ -1,86 +1,69 @@
-# Comprehensive Reconciliation Plan
+# Comprehensive Bitcoin Calculation Reconciliation Plan
 
-## Current Status
-As of our analysis, we have identified the following gaps in Bitcoin calculation data:
+## Project Status Summary
+We've confirmed that the reconciliation approach works well for individual dates. Processing 2023-10-15 was successful, adding 1008 Bitcoin calculations (336 curtailment records × 3 miner models). 
 
-| Year | Curtailment Records | Bitcoin Calculations | Expected Calculations | Completion % | Status |
-|------|--------------------|--------------------|----------------------|------------|--------|
-| 2022 | 205,883 | 103,387 | 617,649 | 16.74% | Incomplete |
-| 2023 | 130,699 | 234 | 392,097 | 0.06% | Incomplete |
-| 2024 | 278,434 | 678,951 | 835,302 | 81.28% | Incomplete |
-| 2025 | 80,677 | 119,913 | 242,031 | 49.54% | Incomplete |
+Current completion rates by year:
+- 2023: 0.32% (1,242/392,097)
+- 2022: 16.74% (103,387/617,649)
+- 2025: 49.54% (119,913/242,031)
+- 2024: 81.28% (678,951/835,302)
 
-Total missing Bitcoin calculations: **1,184,594**
+Total missing records: 1,184,586
+
+## Technical Approach
+
+### Core Reconciliation Logic
+For each date with missing calculations:
+1. Create a temporary aggregation of curtailment records by settlement_date, settlement_period, and farm_id
+2. Insert calculation records for each miner model (S19J_PRO, S9, M20S) with appropriate difficulty values 
+3. Use ON CONFLICT to update existing records if they exist
+4. Track progress with detailed statistics
+
+### SQL Functions
+1. `process_single_date(date, difficulty)`: Process a single date directly
+2. `process_month_reconciliation(year, month, difficulty, max_dates)`: Process a batch of dates within a month
+3. `get_reconciliation_summary()`: View overall status by year
+4. `get_priority_months(max_months)`: Identify highest-priority months to process
 
 ## Implementation Strategy
 
-### 1. Prioritization
-We've prioritized the reconciliation in the following order:
-1. **2023 (Highest Priority)**: Only 0.06% complete with 391,863 missing records
-2. **2022 (Second Priority)**: 16.74% complete with 514,262 missing records
-3. **2025 (Third Priority)**: 49.54% complete with 122,118 missing records
-4. **2024 (Final Priority)**: 81.28% complete with 156,351 missing records
+### Phase 1: Date-by-Date Processing (Current Phase)
+- Process individual high-impact dates to verify approach
+- Focus on dates with most missing calculations first
+- Establish benchmarks for performance and record counts
 
-### 2. Approach
-For each year, we will:
-1. Process months in order of priority:
-   - Missing months before incomplete months
-   - Within each category, process months with higher curtailment counts first
-2. For each month, process all dates with curtailment records
-3. For each date, process all farm_id and settlement_period combinations
-4. For each record, generate Bitcoin calculations for all three miner models:
-   - S19J_PRO
-   - S9
-   - M20S
+### Phase 2: Month-by-Month Reconciliation
+- Prioritize the following high-impact months:
+  - 2023-10 (Large number of missing records, demonstrated success)
+  - 2022-03 (Target for 2022 data)
+  - 2025-02 (Current month, needs completion)
+- Process each month in smaller batches to avoid timeouts
 
-### 3. Implementation
-We have created several SQL scripts for different aspects of the reconciliation:
+### Phase 3: Year-by-Year Completion
+- Start with 2023 (lowest completion rate)
+- Process in batches of 10-20 dates at a time
+- Continue with 2022, then 2025 and 2024
 
-1. **full_reconciliation_implementation.sql**: Core functions for reconciliation
-2. **execute_full_reconciliation.sql**: Master script to run the full process
-3. **reconcile_2023_special.sql**: Specialized script for 2023 (highest priority)
-4. **reconcile_missing_months.sql**: Script to process specific missing months
-5. **reconcile_critical_dates.sql**: Script to handle specific test dates
+## Execution Plan
 
-### 4. Testing
-We tested our approach with specific dates:
-- `2023-01-15`: Added 180 Bitcoin calculation records (60 curtailment records x 3 models)
-- `2023-06-20`: Added 21 Bitcoin calculation records (7 curtailment records x 3 models)
-- `2025-02-28`: Added 12 Bitcoin calculation records (4 curtailment records x 3 models)
+### Immediate Next Steps
+1. Process top 10 dates from 2023 with most missing records
+2. Process top 10 dates from 2022 with most missing records
+3. Complete February 2025 to achieve 100% reconciliation for current month
 
-### 5. Execution Plan
+### Challenges and Solutions
+- **Database Timeouts**: Break processing into smaller batches of 10-20 dates
+- **Transaction Management**: Commit after each date to save progress
+- **Progress Tracking**: Use reconciliation_progress table to resume processing
+- **Error Handling**: Capture and log errors without failing entire batch
 
-#### Phase 1: 2023 Data Reconciliation
-- Create monthly batches prioritizing October, September, and July (highest curtailment volumes)
-- Process in batches with appropriate difficulty value: 37,935,772,752,142
-- Expected to process ~130,699 curtailment records, generating 392,097 Bitcoin calculations
+## Monitoring and Verification
+- Use SQL queries to track progress over time
+- Verify calculations with expected ratios (curtailment_count × 3)
+- Implement reporting queries to identify any remaining gaps
 
-#### Phase 2: 2022 Data Reconciliation
-- Create monthly batches, again prioritizing by missing status and curtailment volume
-- Process with difficulty value: 25,000,000,000,000
-- Expected to process ~205,883 curtailment records, generating 617,649 Bitcoin calculations
-
-#### Phase 3: 2025 Data Reconciliation
-- Process with difficulty value: 108,105,433,845,147
-- Expected to process ~80,677 curtailment records, generating 242,031 Bitcoin calculations
-
-#### Phase 4: 2024 Data Reconciliation
-- Process with difficulty value: 68,980,189,436,404
-- Expected to process ~278,434 curtailment records, generating 835,302 Bitcoin calculations
-
-### 6. Monitoring & Verification
-- Each phase includes verification steps to confirm successful completion
-- A final verification will validate 100% reconciliation has been achieved
-- Progress tracking tables record all operations for audit and reporting
-
-## Performance Considerations
-- Added DB indexes to optimize reconciliation queries
-- Implemented batch processing to avoid DB performance issues
-- Added transaction management to ensure data consistency
-- Progress tracking to enable restart in case of interruption
-
-## Risk Mitigation
-- Transaction isolation to prevent data corruption
-- Error handling to capture and log issues
-- Record-level validation to ensure data quality
-- ON CONFLICT clauses to handle potential duplicate scenarios
+## Expected Outcomes
+- Complete reconciliation (100%) for all years
+- Well-documented approach for future maintenance
+- Approximately 2,087,079 total Bitcoin calculation records when complete
