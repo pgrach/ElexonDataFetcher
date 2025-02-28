@@ -1,195 +1,153 @@
-# Bitcoin Mining Reconciliation System Guide
+# Unified Reconciliation System Guide
+
+This guide explains how to use the unified reconciliation system to ensure data consistency between `curtailment_records` and `historical_bitcoin_calculations` tables.
 
 ## Overview
 
-This guide explains how to use the Unified Reconciliation System to ensure data integrity between curtailment records and Bitcoin calculations. The system is designed to handle large datasets efficiently, provide robust error recovery, and offer comprehensive reporting on reconciliation progress.
+The unified reconciliation system provides a comprehensive solution for detecting and fixing mismatches between the `curtailment_records` and `historical_bitcoin_calculations` tables. It combines efficient batch processing, intelligent retry logic, and comprehensive logging to ensure 100% data reconciliation.
 
-## When to Use Reconciliation
+## Prerequisites
 
-Reconciliation should be performed in the following scenarios:
+- Node.js 16.x or higher
+- Access to the PostgreSQL database
+- Required environment variables (especially DATABASE_URL)
 
-1. When curtailment data is updated but Bitcoin calculations might be missing
-2. When historical Bitcoin difficulty data is updated
-3. After system maintenance or database migrations
-4. On a regular schedule (daily/weekly) to ensure ongoing data integrity
-5. When investigating discrepancies in Bitcoin mining analytics
+## Quick Start
 
-## Available Tools
-
-### 1. Unified Reconciliation System
-
-The primary tool for managing reconciliation is the `unified_reconciliation.ts` script, which can be run directly or through the `unified_reconcile.sh` wrapper.
+The simplest way to use the system is through the shell wrapper:
 
 ```bash
-# Using the TypeScript script directly
-npx tsx unified_reconciliation.ts [command] [options]
+# Check current reconciliation status
+./unified_reconcile.sh status
 
-# Using the shell wrapper (recommended)
-./unified_reconcile.sh [command] [options]
+# Analyze any reconciliation issues
+./unified_reconcile.sh analyze
+
+# Run reconciliation with default batch size
+./unified_reconcile.sh reconcile
+
+# Process a specific date
+./unified_reconcile.sh date 2025-02-15
+
+# Process a date range
+./unified_reconcile.sh range 2025-02-01 2025-02-15
 ```
 
-### 2. Legacy Tools (for reference only)
-
-The following tools are maintained for backward compatibility but should be phased out in favor of the unified system:
-
-- `minimal_reconciliation.ts` - For problematic dates with timeout issues
-- `efficient_reconciliation.ts` - Original batch-based reconciliation system
-- `check_reconciliation_status.ts` - Simple status checker
-- `daily_reconciliation_check.ts` - Automated daily check system
-
-## Commands and Options
+## Command Reference
 
 ### Status Check
-
-Get an overview of the current reconciliation status:
 
 ```bash
 ./unified_reconcile.sh status
 ```
 
-This shows:
-- Total curtailment records vs. Bitcoin calculations
-- Complete, partial, and missing dates
-- Overall completion rate
+Shows the current reconciliation status, including:
+- Overall completion percentage
+- Total records in each table
+- Missing calculations count
+- Recent problematic dates
 
 ### Analysis
-
-Perform a detailed analysis of the reconciliation status with recommendations:
 
 ```bash
 ./unified_reconcile.sh analyze
 ```
 
-This provides:
-- Database connection health check
-- Long-running query detection
-- Critical dates that need attention
-- Recommended actions based on the analysis
+Provides a detailed analysis of reconciliation issues:
+- Patterns in missing calculations
+- Problematic dates and time periods
+- Recommendations for targeted fixes
 
 ### Full Reconciliation
-
-Process all missing calculations with specified batch size:
 
 ```bash
 ./unified_reconcile.sh reconcile [batchSize]
 ```
 
-The optional `batchSize` parameter controls how many records are processed concurrently (default: 10).
+Processes all missing calculations with optional batch size parameter (default: 10):
+- Fetches dates with missing calculations
+- Processes them in batches with configurable concurrency
+- Implements exponential backoff for connection failures
+- Maintains checkpoints for resumability
 
-### Process Specific Date
-
-Fix or verify a specific date:
+### Date-Specific Processing
 
 ```bash
 ./unified_reconcile.sh date YYYY-MM-DD
 ```
 
-### Process Date Range
+Processes a specific date, with:
+- Comprehensive error handling
+- Multiple retry attempts
+- Detailed logging
 
-Fix or verify a range of dates:
+### Date Range Processing
 
 ```bash
 ./unified_reconcile.sh range YYYY-MM-DD YYYY-MM-DD [batchSize]
 ```
 
-### Handle Critical Dates
+Processes a range of dates with optional batch size parameter:
+- Automatically breaks processing into manageable batches
+- Reports progress throughout execution
 
-For dates with persistent timeout issues, use critical mode with extra safeguards:
+### Critical Date Handling
 
 ```bash
 ./unified_reconcile.sh critical YYYY-MM-DD
 ```
 
-This processes the date one record at a time with extended timeout protection and careful connection management.
+Processes a problematic date with extra safeguards:
+- Uses minimal batch size
+- Implements extended timeout parameters
+- Adds additional verification steps
 
-### Spot Fix
-
-For targeted fixes of specific problematic records:
+### Spot Fixes
 
 ```bash
-./unified_reconcile.sh spot-fix YYYY-MM-DD PERIOD FARM_ID
+./unified_reconcile.sh spot-fix DATE PERIOD FARM
 ```
 
-## Understanding the Logs
+Fixes a specific date-period-farm combination:
+- Useful for targeted repairs of known issues
+- Provides detailed diagnostic information
 
-The reconciliation system creates detailed logs in the following files:
+## Advanced Configuration
 
-- `reconciliation.log` - Primary log file with all operations
-- `reconciliation_checkpoint.json` - Progress tracking for resumability
-- `reconciliation_dashboard.log` - Summary statistics for reporting
+The system supports several configuration options that can be adjusted in the `unified_reconciliation.ts` file:
+
+- `DEFAULT_BATCH_SIZE`: Default number of dates to process in a batch
+- `MAX_CONCURRENCY`: Maximum number of concurrent date processing jobs
+- `MAX_RETRIES`: Maximum number of retry attempts for failed operations
+- `CHECKPOINT_INTERVAL`: How often to save processing checkpoints (ms)
 
 ## Troubleshooting
 
-### Connection Timeouts
+If you encounter issues with the reconciliation process:
 
-If you experience database connection timeouts:
+1. Check the log file at `reconciliation.log` for detailed error messages
+2. Try processing a single problematic date with the critical mode
+3. Verify database connectivity and timeout settings
+4. Check for locked database resources that might be causing conflicts
 
-1. Reduce batch size to decrease database load
-2. Use the `critical` command for problematic dates
-3. Check for long-running queries with `analyze`
-4. Consider using `spot-fix` for specific problematic records
+## Integration with Other Systems
 
-### Data Discrepancies
+The unified reconciliation system integrates with other parts of the platform:
 
-If Bitcoin calculations don't match expected values:
+- **Daily Checks**: Automated via `daily_reconciliation_check.ts`
+- **Data Updater Service**: Uses reconciliation utilities for real-time updates
+- **Dashboard**: The `reconciliation_dashboard.ts` script provides visualization
 
-1. Verify the difficulty data is correct
-2. Check the curtailment record volume values
-3. Ensure all miner models are being processed
-4. Use `analyze` to identify patterns in missing data
+## Development Guidelines
 
-### Performance Optimization
+When extending or modifying the reconciliation system:
 
-For best performance when processing large datasets:
+1. Maintain backward compatibility with existing scripts
+2. Preserve the checkpoint system for resumable operations
+3. Add comprehensive logging for any new functionality
+4. Test thoroughly with small batches before full-scale execution
+5. Document any new commands or options
 
-1. Start with a smaller batch size and gradually increase
-2. Process date ranges instead of all dates at once
-3. Run reconciliation during off-peak hours
-4. Use the checkpoint system to resume interrupted operations
+## License
 
-## Scheduling Reconciliation
-
-For ongoing data integrity, set up scheduled reconciliation:
-
-```bash
-# Add to crontab for daily check at 3 AM
-0 3 * * * cd /path/to/project && ./unified_reconcile.sh reconcile > /path/to/logs/daily_reconcile.log 2>&1
-```
-
-## Best Practices
-
-1. Always run `analyze` before starting reconciliation to understand the scope
-2. Start with critical dates that have the largest discrepancies
-3. Use appropriate batch sizes based on database capacity
-4. Monitor logs for patterns in failures or timeouts
-5. Keep the reconciliation system updated with the latest features
-
-## Advanced Features
-
-### Checkpoint-Based Recovery
-
-The system automatically saves progress to `reconciliation_checkpoint.json`, allowing interrupted operations to be resumed later.
-
-### Adaptive Batch Sizing
-
-The system can automatically adjust batch sizes based on database performance to prevent timeouts.
-
-### Exponential Backoff
-
-When operations fail, the system uses an exponential backoff strategy for retries to prevent overwhelming the database.
-
-## Command Reference
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| status | Show current reconciliation status | `./unified_reconcile.sh status` |
-| analyze | Analyze missing calculations | `./unified_reconcile.sh analyze` |
-| reconcile | Process all missing calculations | `./unified_reconcile.sh reconcile 5` |
-| date | Process a specific date | `./unified_reconcile.sh date 2025-02-28` |
-| range | Process a date range | `./unified_reconcile.sh range 2025-02-01 2025-02-28` |
-| critical | Process problematic date | `./unified_reconcile.sh critical 2025-02-15` |
-| spot-fix | Fix specific record | `./unified_reconcile.sh spot-fix 2025-02-28 30 T_VKNGW-1` |
-
-## Contact
-
-For issues or enhancement requests, please contact the development team.
+This software is proprietary and confidential.

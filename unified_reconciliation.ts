@@ -1120,7 +1120,8 @@ async function main() {
 }
 
 // Run the main function if this script is executed directly
-if (require.main === module) {
+// Using import.meta.url instead of require.main for ES modules
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(err => {
     console.error('Unhandled error:', err);
     process.exit(1);
