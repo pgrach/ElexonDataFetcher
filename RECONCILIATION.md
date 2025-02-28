@@ -1,120 +1,101 @@
-# Bitcoin Mining Data Reconciliation Guide
+# Bitcoin Reconciliation System
 
-This document provides comprehensive guidelines for ensuring 100% reconciliation between the `curtailment_records` and `historical_bitcoin_calculations` tables in our Bitcoin mining analytics platform.
+This document outlines the comprehensive reconciliation system that ensures 100% consistency between curtailment records (primary source of truth) and Bitcoin calculations.
 
-## Understanding Reconciliation
+## Overview
 
-Reconciliation in our context means ensuring that every unique combination of `settlement_date`, `settlement_period`, and `farm_id` in the `curtailment_records` table has corresponding Bitcoin mining calculations for each miner model in the `historical_bitcoin_calculations` table.
+The reconciliation system ensures that for each unique combination of `(settlement_date, settlement_period, farm_id)` in the `curtailment_records` table, there are exactly three corresponding records in the `historical_bitcoin_calculations` table - one for each miner model (S19J_PRO, S9, M20S).
 
-For each curtailment record, we expect exactly three Bitcoin calculations (one per miner model: S19J_PRO, S9, M20S).
+## Key Components
 
-## Using the Comprehensive Reconciliation Tool
+### 1. Daily Automated Checks
 
-We've created a new tool (`comprehensive_reconcile.ts`) specifically for ensuring 100% reconciliation. This tool offers various commands for checking and fixing reconciliation issues.
+The system automatically runs daily reconciliation checks as part of the data update process:
 
-### Basic Usage
+```typescript
+// From server/services/dataUpdater.ts
+async function updateLatestData() {
+  // Process current date data
+  // ...
+  
+  // Ensure Bitcoin calculations are up-to-date
+  await reconcileDay(today);
+  
+  // Verification check
+  const verificationResult = await getVerificationSummary(today);
+  console.log(`Verification Check for ${today}: ${JSON.stringify(verificationResult)}`);
+}
+```
+
+### 2. Core Reconciliation Tools
+
+Three main tools are available:
+
+1. **Daily Check**: Automatic verification for the current day
+   ```bash
+   npx tsx daily_reconciliation_check.ts
+   ```
+
+2. **Comprehensive Check**: Checks and fixes reconciliation for any date range
+   ```bash
+   npx tsx comprehensive_reconcile.ts check-date YYYY-MM-DD
+   npx tsx comprehensive_reconcile.ts fix-date YYYY-MM-DD
+   npx tsx comprehensive_reconcile.ts fix-range YYYY-MM-DD YYYY-MM-DD
+   ```
+
+3. **Accelerated Reconciliation**: High-performance parallel processing for historical data
+   ```bash
+   npx tsx accelerated_reconcile.ts
+   ```
+
+### 3. Reconciliation Service
+
+The core reconciliation function `reconcileDay` in `server/services/historicalReconciliation.ts`:
+
+```typescript
+export async function reconcileDay(date: string): Promise<void> {
+  // Get all curtailment records for the specified date
+  // For each unique period-farm combination:
+  //   Calculate Bitcoin for each miner model
+  //   Insert or update calculations in historical_bitcoin_calculations
+  // Verify all combinations have been processed
+}
+```
+
+## Performance Optimized Reconciliation
+
+The accelerated reconciliation system can process all historical data in 4-8 hours using:
+
+1. Optimized database indices and query planning
+2. Massive parallel processing (multiple worker processes)
+3. Efficient batching and bulk operations
+4. Dynamic resource management to prevent system overload
+
+## Monitoring and Reporting
+
+The system provides real-time progress tracking:
 
 ```bash
-# Check overall reconciliation status
-npx tsx comprehensive_reconcile.ts status
+# Check current reconciliation status
+npx tsx reconciliation.ts status
 
-# Check reconciliation for a specific date
-npx tsx comprehensive_reconcile.ts check-date 2025-02-28
-
-# Fix reconciliation for a specific date
-npx tsx comprehensive_reconcile.ts fix-date 2025-02-28
-
-# Fix all dates with missing calculations
-npx tsx comprehensive_reconcile.ts fix-all
-
-# Fix a specific date range
-npx tsx comprehensive_reconcile.ts fix-range 2025-02-01 2025-02-28
+# Get comprehensive report
+npx tsx comprehensive_reconcile.ts report
 ```
 
-### When to Use
+## Reconciliation Rules
 
-1. **Daily Verification**: Run the `status` command daily to ensure ongoing reconciliation
-2. **After Data Ingestion**: After importing new curtailment data, run the appropriate fix command
-3. **Data Audits**: Monthly run a full reconciliation using `fix-all`
-4. **Issue Investigations**: Use `check-date` to investigate specific problem dates
+1. Each curtailment record must have Bitcoin calculations for all three miner models
+2. Calculations must use the correct Bitcoin network difficulty for the date
+3. Reconciliation is complete only when 100% of records have calculations
+4. Settlement date/period and farm ID must match exactly between tables
 
-## Reconciliation Process
+## Troubleshooting
 
-The reconciliation process follows these steps:
+If discrepancies are detected:
 
-1. **Verification**: Check if all curtailment records have corresponding Bitcoin calculations
-2. **Identification**: Identify dates, periods, and farms with missing calculations
-3. **Processing**: Calculate missing Bitcoin mining values based on curtailment records
-4. **Validation**: Verify that all expected calculations have been created
-
-## Troubleshooting Common Issues
-
-### Missing Calculations
-
-If you notice dates with missing calculations, check:
-
-1. **Curtailment Data**: Ensure curtailment data is complete for the date
-2. **API Access**: Verify API access for difficulty data
-3. **Processing Errors**: Check logs for any processing errors during calculation
-
-Use the `fix-date` command for the specific problematic date:
-
-```bash
-npx tsx comprehensive_reconcile.ts fix-date 2023-12-25
-```
-
-### Discrepancies in Totals
-
-If reconciliation percentages are inconsistent:
-
-1. Check for database indices that might be affecting query performance
-2. Verify there are no duplicate records in either table
-3. Ensure difficulty data is available for all dates
-
-## Best Practices for Maintaining Reconciliation
-
-1. **Regular Checks**: Schedule daily reconciliation checks
-2. **Immediate Fixes**: Address any reconciliation issues as soon as they're detected
-3. **Batch Processing**: For large historical fixes, use the date range command
-4. **Logging**: Monitor logs for errors during calculation processes
-5. **Data Validation**: Validate new curtailment data before processing
-
-## Monthly Reconciliation Procedure
-
-For a thorough monthly reconciliation:
-
-1. Check the current status: `npx tsx comprehensive_reconcile.ts status`
-2. Identify any problem dates
-3. Run a full reconciliation: `npx tsx comprehensive_reconcile.ts fix-all`
-4. Verify 100% reconciliation has been achieved
-5. Document any issues encountered and their resolutions
-
-## Technical Details
-
-### Key Database Tables
-
-- `curtailment_records`: Primary source of truth for curtailment data
-  - Contains settlement date, period, farm ID, volume, and payment data
-  
-- `historical_bitcoin_calculations`: Bitcoin mining calculations
-  - Contains settlement date, period, farm ID, miner model, and Bitcoin mined
-  
-### Reconciliation Logic
-
-For 100% reconciliation, this condition must be satisfied:
-
-```
-Number of unique (date-period-farm) combinations in curtailment_records × 3 miner models
-= 
-Number of records in historical_bitcoin_calculations
-```
-
-## Support Tools
-
-In addition to the comprehensive reconciliation tool, these existing tools can help with specific scenarios:
-
-- `reconcile.ts`: Basic reconciliation script
-- `reconciliation.ts`: Consolidated reconciliation system with CLI interface
-- `fix_december_2023.ts`: Specialized tool for December 2023 issues
-
-When in doubt, prefer using the new `comprehensive_reconcile.ts` tool as it incorporates the best features of all previous tools.
+1. Run comprehensive check: `npx tsx comprehensive_reconcile.ts check-date YYYY-MM-DD`
+2. Fix specific date: `npx tsx comprehensive_reconcile.ts fix-date YYYY-MM-DD`
+3. Check logs for any calculation errors
+4. Verify Bitcoin difficulty data in DynamoDB for the date
+5. For persistent issues, run deep verification: `npx tsx test_reconcile_date.ts`
