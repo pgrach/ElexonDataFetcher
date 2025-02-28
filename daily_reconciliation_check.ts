@@ -10,7 +10,7 @@
 
 import { format, subDays } from "date-fns";
 import pg from "pg";
-import { auditAndFixBitcoinCalculations } from "./server/services/historicalReconciliation";
+import { fixDate } from "./simple_reconcile";
 
 const RECENT_DAYS_TO_CHECK = 2; // Check today and yesterday
 
@@ -117,7 +117,7 @@ async function runDailyCheck() {
   for (const { date } of missingDates) {
     console.log(`\nProcessing ${date}...`);
     try {
-      const result = await auditAndFixBitcoinCalculations(date);
+      const result = await fixDate(date);
       results.push(result);
       
       if (result.success) {
