@@ -9,6 +9,15 @@ import { db } from './db';
 import { sql } from 'drizzle-orm';
 import { format } from 'date-fns';
 import * as fs from 'fs';
+import pg from 'pg';
+
+// Create a connection pool for direct pg queries when needed
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 5,
+  idleTimeoutMillis: 30000, 
+  connectionTimeoutMillis: 10000
+});
 
 const LOG_FILE = 'reconciliation_dashboard.log';
 
@@ -314,43 +323,44 @@ async function getTopMissingDates(limit: number = 10) {
  * Get recent dates status
  */
 async function getRecentDatesStatus(days: number = 7) {
+  let client: pg.PoolClient | null = null;
+  
   try {
     log(`Fetching status for the last ${days} days...`);
     
     // Use direct client.query method from pg module to avoid parameter binding issues
-    const client = await pool.connect();
+    client = await pool.connect();
     
-    try {
-      const query = `
-        WITH date_expected AS (
-          SELECT
-            settlement_date,
-            COUNT(*) AS expected
-          FROM curtailment_records
-          WHERE settlement_date >= CURRENT_DATE - INTERVAL '${days} days'
-          GROUP BY settlement_date
-        ),
-        date_actual AS (
-          SELECT
-            settlement_date,
-            COUNT(*) AS actual
-          FROM historical_bitcoin_calculations
-          WHERE settlement_date >= CURRENT_DATE - INTERVAL '${days} days'
-          GROUP BY settlement_date
-        )
+    const query = `
+      WITH date_expected AS (
         SELECT
-          e.settlement_date,
-          e.expected,
-          COALESCE(a.actual, 0) AS actual,
-          e.expected - COALESCE(a.actual, 0) AS missing,
-          ROUND((COALESCE(a.actual, 0)::numeric / e.expected::numeric) * 100, 2) AS completion
-        FROM date_expected e
-        LEFT JOIN date_actual a ON e.settlement_date = a.settlement_date
-        ORDER BY e.settlement_date DESC
-      `;
-      
-      const result = await client.query(query);
+          settlement_date,
+          COUNT(*) AS expected
+        FROM curtailment_records
+        WHERE settlement_date >= CURRENT_DATE - INTERVAL '${days} days'
+        GROUP BY settlement_date
+      ),
+      date_actual AS (
+        SELECT
+          settlement_date,
+          COUNT(*) AS actual
+        FROM historical_bitcoin_calculations
+        WHERE settlement_date >= CURRENT_DATE - INTERVAL '${days} days'
+        GROUP BY settlement_date
+      )
+      SELECT
+        e.settlement_date,
+        e.expected,
+        COALESCE(a.actual, 0) AS actual,
+        e.expected - COALESCE(a.actual, 0) AS missing,
+        ROUND((COALESCE(a.actual, 0)::numeric / e.expected::numeric) * 100, 2) AS completion
+      FROM date_expected e
+      LEFT JOIN date_actual a ON e.settlement_date = a.settlement_date
+      ORDER BY e.settlement_date DESC
+    `;
     
+    const result = await client.query(query);
+  
     log(`Status for the Last ${days} Days:`, 'info');
     const resultArray = safeResultArray(result);
     
@@ -369,6 +379,10 @@ async function getRecentDatesStatus(days: number = 7) {
   } catch (error) {
     log(`Error fetching recent dates status: ${error}`, 'error');
     throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 }
 
@@ -451,7 +465,8 @@ if (isMainModule) {
   generateDashboard();
 }
 
-export {
+// Export the functions for use in other modules
+module.exports = {
   getOverallStatus,
   getStatusByMinerModel,
   getStatusByMonth,
