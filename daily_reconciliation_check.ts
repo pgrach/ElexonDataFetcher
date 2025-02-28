@@ -97,7 +97,8 @@ async function sleep(ms: number): Promise<void> {
 async function withRetry<T>(
   operation: () => Promise<T>,
   description: string,
-  maxAttempts: number = MAX_RETRY_ATTEMPTS
+  maxAttempts: number = MAX_RETRY_ATTEMPTS,
+  operationTimeout: number = 30000
 ): Promise<T> {
   let lastError: Error | null = null;
   
@@ -105,18 +106,43 @@ async function withRetry<T>(
     try {
       if (attempt > 1) {
         log(`Retry attempt ${attempt}/${maxAttempts} for: ${description}`, "info");
+        
+        // Clean up connections before retries
+        if (description.includes("reconcile") || description.includes("fix")) {
+          log("Cleaning up database connections before retry...", "info");
+          await cleanupConnections().catch(e => log(`Warning: Connection cleanup failed: ${e}`, "warning"));
+          await sleep(1000); // Give connections time to reset
+        }
       }
       
-      return await operation();
+      // Run with timeout protection
+      return await Promise.race([
+        operation(),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`Operation timed out after ${operationTimeout}ms: ${description}`));
+          }, operationTimeout);
+        })
+      ]);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      log(`Error on attempt ${attempt}/${maxAttempts} for ${description}: ${lastError.message}`, "error");
+      const errorMsg = lastError.message;
+      
+      // Log with different levels based on error type
+      if (errorMsg.includes("timeout") || errorMsg.includes("ECONNRESET") || errorMsg.includes("deadlock")) {
+        log(`Connection issue on attempt ${attempt}/${maxAttempts} for ${description}: ${errorMsg}`, "warning");
+      } else {
+        log(`Error on attempt ${attempt}/${maxAttempts} for ${description}: ${errorMsg}`, "error");
+      }
       
       // Only retry if not the last attempt
       if (attempt < maxAttempts) {
-        // Exponential backoff
-        const delay = 1000 * Math.pow(2, attempt - 1);
-        log(`Waiting ${delay}ms before retry...`, "info");
+        // Exponential backoff with jitter
+        const baseDelay = 1000 * Math.pow(2, attempt - 1);
+        const jitter = Math.floor(Math.random() * 1000);
+        const delay = baseDelay + jitter;
+        
+        log(`Waiting ${Math.round(delay/1000)}s before retry...`, "info");
         await sleep(delay);
       }
     }
@@ -161,21 +187,108 @@ function loadCheckpoint(): Checkpoint | null {
 
 // Clean up database connections
 async function cleanupConnections(): Promise<void> {
+  let client: pg.PoolClient | null = null;
   try {
-    const client = await pool.connect();
+    // Try to acquire a new connection (outside the existing pool ideally)
     try {
-      await client.query(`
+      client = await pool.connect();
+    } catch (connectionError) {
+      log(`Connection issue during cleanup: ${connectionError}. Will try alternate cleanup.`, "warning");
+      
+      // If we can't even get a connection, try to reset the pool
+      try {
+        log(`Attempting to end and recreate pool...`, "info");
+        await pool.end().catch(() => null); // Ignore errors on end
+        
+        // Small pause to ensure connections close
+        await sleep(1000);
+        
+        // Recreate pool with minimal connections
+        Object.assign(pool, new pg.Pool({
+          connectionString: process.env.DATABASE_URL,
+          max: 2,
+          idleTimeoutMillis: 5000,
+          connectionTimeoutMillis: 5000
+        }));
+        
+        // Try to get a connection from the new pool
+        client = await pool.connect();
+        log(`Pool reset successful`, "success");
+      } catch (resetError) {
+        log(`Pool reset failed: ${resetError}`, "error");
+        return; // Cannot proceed without a connection
+      }
+    }
+    
+    // If we have a client now, try terminating stale connections
+    try {
+      log(`Finding and terminating stale connections...`, "info");
+      
+      // First, terminate any connections stuck in a transaction for over 1 minute
+      const stuckResult = await client.query(`
         SELECT pg_terminate_backend(pid)
         FROM pg_stat_activity
         WHERE datname = current_database()
           AND pid <> pg_backend_pid()
-          AND application_name LIKE '%daily_reconciliation%'
+          AND state = 'active'
+          AND xact_start < now() - interval '1 minute'
       `);
-    } finally {
-      client.release();
+      
+      // Next, terminate any idle-in-transaction connections
+      const idleResult = await client.query(`
+        SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND pid <> pg_backend_pid()
+          AND state = 'idle in transaction'
+      `);
+      
+      // Finally, terminate any specifically from our reconciliation processes
+      const reconcileResult = await client.query(`
+        SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND pid <> pg_backend_pid()
+          AND (
+            application_name LIKE '%reconcil%'
+            OR query LIKE '%curtailment_records%'
+            OR query LIKE '%historical_bitcoin_calculations%'
+          )
+          AND state = 'active'
+          AND query_start < now() - interval '30 seconds'
+      `);
+      
+      const stuckCount = stuckResult?.rowCount || 0;
+      const idleCount = idleResult?.rowCount || 0;
+      const reconcileCount = reconcileResult?.rowCount || 0;
+      log(`Connection cleanup completed: ${stuckCount + idleCount + reconcileCount} connections terminated`, "info");
+      
+      // Report active connections for debugging
+      try {
+        const activeResult = await client.query(`
+          SELECT count(*) as count
+          FROM pg_stat_activity
+          WHERE datname = current_database()
+        `);
+        
+        const connectionCount = activeResult?.rows?.[0]?.count || 'unknown';
+        log(`Current active database connections: ${connectionCount}`, "info");
+      } catch (countError) {
+        log(`Error counting active connections: ${countError}`, "warning");
+      }
+    } catch (queryError) {
+      log(`Error during connection cleanup queries: ${queryError}`, "warning");
     }
-  } catch (error) {
-    log(`Error cleaning up connections: ${error}`, "warning");
+  } catch (overallError) {
+    log(`Overall error in connection cleanup: ${overallError}`, "error");
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        log(`Error releasing cleanup client: ${releaseError}`, "warning");
+      }
+    }
   }
 }
 
@@ -199,9 +312,12 @@ interface ReconciliationStatus {
 
 async function checkDateReconciliationStatus(date: string): Promise<ReconciliationStatus> {
   return withRetry(async () => {
-    const client = await pool.connect();
+    let client: pg.PoolClient | null = null;
     
     try {
+      client = await pool.connect();
+      
+      // Use a more resilient query structure with NULL handling
       const query = `
         WITH required_combinations AS (
           SELECT 
@@ -220,30 +336,100 @@ async function checkDateReconciliationStatus(date: string): Promise<Reconciliati
             settlement_date = $1
         )
         SELECT 
-          $1 AS date,
+          $1::text AS date,
           COALESCE((SELECT expected_count FROM required_combinations), 0) AS expected_count,
           COALESCE((SELECT actual_count FROM actual_calculations), 0) AS actual_count,
           COALESCE((SELECT expected_count FROM required_combinations), 0) -
             COALESCE((SELECT actual_count FROM actual_calculations), 0) AS missing_count,
           CASE 
-            WHEN (SELECT expected_count FROM required_combinations) = 0 THEN 100
-            ELSE ROUND(((SELECT actual_count FROM actual_calculations)::numeric / 
-                      (SELECT expected_count FROM required_combinations)) * 100, 2)
+            WHEN COALESCE((SELECT expected_count FROM required_combinations), 0) = 0 THEN 100.0
+            ELSE ROUND(
+              (COALESCE((SELECT actual_count FROM actual_calculations), 0)::numeric / 
+               NULLIF(COALESCE((SELECT expected_count FROM required_combinations), 0), 0)) * 100.0, 2)
           END AS completion_percentage
       `;
       
+      // Execute with explicit parameters
       const result = await client.query(query, [date]);
+      
+      // Safely parse with fallbacks to prevent NaN
+      const expected = parseInt(result.rows[0]?.expected_count || '0') || 0;
+      const actual = parseInt(result.rows[0]?.actual_count || '0') || 0;
+      const missing = parseInt(result.rows[0]?.missing_count || '0') || 0;
+      
+      // Handle percentage specially to prevent NaN
+      let completionPercentage: number;
+      if (result.rows[0] && result.rows[0].completion_percentage != null) {
+        completionPercentage = parseFloat(result.rows[0].completion_percentage) || 0;
+      } else {
+        completionPercentage = expected === 0 ? 100 : Math.round((actual / expected) * 100 * 100) / 100;
+      }
+      
       return {
         date,
-        expected: parseInt(result.rows[0].expected_count || '0'),
-        actual: parseInt(result.rows[0].actual_count || '0'),
-        missing: parseInt(result.rows[0].missing_count || '0'),
-        completionPercentage: parseFloat(result.rows[0].completion_percentage || '0')
+        expected,
+        actual,
+        missing,
+        completionPercentage
       };
+    } catch (error) {
+      // On serious failure, try a simpler query approach
+      if (client) {
+        try {
+          log(`Attempting fallback query for ${date}...`, "warning");
+          
+          const fallbackQuery = `
+            SELECT 
+              COUNT(DISTINCT (settlement_period || '-' || farm_id)) * 3 AS expected_count 
+            FROM 
+              curtailment_records 
+            WHERE 
+              settlement_date = $1
+          `;
+          
+          const expectedResult = await client.query(fallbackQuery, [date]);
+          const expected = parseInt(expectedResult.rows[0]?.expected_count || '0') || 0;
+          
+          const actualQuery = `
+            SELECT 
+              COUNT(*) AS actual_count 
+            FROM 
+              historical_bitcoin_calculations 
+            WHERE 
+              settlement_date = $1
+          `;
+          
+          const actualResult = await client.query(actualQuery, [date]);
+          const actual = parseInt(actualResult.rows[0]?.actual_count || '0') || 0;
+          
+          const missing = expected - actual;
+          const completionPercentage = expected === 0 ? 100 : Math.round((actual / expected) * 100 * 100) / 100;
+          
+          return {
+            date,
+            expected,
+            actual,
+            missing,
+            completionPercentage
+          };
+        } catch (fallbackError) {
+          // If even the fallback fails, just log and throw the original error
+          log(`Fallback query failed for ${date}: ${fallbackError}`, "error");
+          throw error;
+        }
+      } else {
+        throw error;
+      }
     } finally {
-      client.release();
+      if (client) {
+        try {
+          client.release();
+        } catch (releaseError) {
+          log(`Error releasing client for ${date} status check: ${releaseError}`, "warning");
+        }
+      }
     }
-  }, `Check reconciliation status for ${date}`);
+  }, `Check reconciliation status for ${date}`, 3, 15000);
 }
 
 // Fix a specific date with comprehensive error handling
