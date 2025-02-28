@@ -75,7 +75,19 @@ We've developed several specialized tools to address reconciliation challenges:
 
 ### Analysis and Monitoring
 
-1. **connection_timeout_analyzer.ts**
+1. **reconciliation_dashboard.ts**
+   - Comprehensive dashboard for viewing reconciliation status across different dimensions
+   - Displays metrics by date, miner model, and time period
+   - Usage: `npx tsx reconciliation_dashboard.ts`
+   - Or use the interactive script: `./generate_dashboard.sh`
+
+2. **generate_dashboard.sh**
+   - Interactive dashboard with menu-driven reconciliation operations
+   - Combines status reporting with execution capabilities
+   - Provides options to fix critical dates, run auto reconciliation, and check daily status
+   - Usage: `./generate_dashboard.sh`
+
+3. **connection_timeout_analyzer.ts**
    - Analyzes database connection timeouts and provides diagnostics
    - Usage: `npx tsx connection_timeout_analyzer.ts [command]`
    - Commands:
@@ -83,15 +95,23 @@ We've developed several specialized tools to address reconciliation challenges:
      - `monitor` - Start monitoring connections in real-time
      - `test` - Test connection with various query complexities
 
-2. **reconciliation_progress_check.ts**
+4. **daily_reconciliation_check.ts**
+   - Enhanced daily monitoring script with checkpoint-based processing
+   - Verifies and fixes reconciliation for recent dates
+   - Usage: `npx tsx daily_reconciliation_check.ts [days=2] [forceProcess=false]`
+   - Parameters:
+     - `days` - Number of recent days to check (default: 2)
+     - `forceProcess` - Force processing even if fully reconciled (default: false)
+
+5. **reconciliation_progress_check.ts**
    - Quick overview of current reconciliation status and completion percentages
    - Usage: `npx tsx reconciliation_progress_check.ts`
 
-3. **reconciliation_progress_report.ts**
+6. **reconciliation_progress_report.ts**
    - Detailed report on reconciliation status with comprehensive statistics
    - Usage: `npx tsx reconciliation_progress_report.ts`
 
-4. **reconciliation_visualization.ts**
+7. **reconciliation_visualization.ts**
    - Visual representation of reconciliation progress
    - Helps identify patterns and priority areas
    - Usage: `npx tsx reconciliation_visualization.ts`
