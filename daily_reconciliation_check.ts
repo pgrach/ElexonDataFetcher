@@ -293,8 +293,15 @@ async function fixDateComprehensive(date: string): Promise<{
         2
       );
       
-      log(`Audit and fix result: ${auditResult.fixed} fixed, ${auditResult.missing} still missing`, 
-        auditResult.missing === 0 ? "success" : "warning");
+      // Get current status after audit fixes
+      const currentStatus = await checkDateReconciliationStatus(date);
+      
+      const statusMessage = auditResult.fixed ? 
+        `Fixed some calculations - ${auditResult.message}` : 
+        `No fixes needed - ${auditResult.message}`;
+      
+      log(`Audit and fix result: ${statusMessage}`, 
+        currentStatus.missing === 0 ? "success" : "warning");
     }
     
     // Get final status
