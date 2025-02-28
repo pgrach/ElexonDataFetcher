@@ -116,6 +116,12 @@ async function getOverallStatus() {
     
     // Use our helper function to safely cast the result
     const resultArray = safeResultArray(result);
+    
+    if (resultArray.length === 0 || !resultArray[0]) {
+      log('No reconciliation data found', 'warning');
+      return { expected: 0, actual: 0, completion_percentage: 0 };
+    }
+    
     const { expected, actual, completion_percentage } = resultArray[0];
     
     log('Overall Reconciliation Status:', 'success');
@@ -160,6 +166,12 @@ async function getStatusByMinerModel() {
     
     log('Status By Miner Model:', 'success');
     const resultArray = safeResultArray(result);
+    
+    if (resultArray.length === 0) {
+      log('No miner model data found', 'warning');
+      return [];
+    }
+    
     resultArray.forEach(row => {
       log(`${row.miner_model}: ${formatNumber(row.count)} / ${formatNumber(row.expected_total)} (${formatPercentage(row.percentage)})`, 'info');
     });
@@ -206,6 +218,12 @@ async function getStatusByMonth() {
     
     log('Monthly Reconciliation Progress (Last 24 months):', 'success');
     const resultArray = safeResultArray(result);
+    
+    if (resultArray.length === 0) {
+      log('No monthly reconciliation data found', 'warning');
+      return [];
+    }
+    
     resultArray.forEach(row => {
       const completion = row.completion_percentage;
       const level = completion >= 95 ? 'success' : (completion >= 50 ? 'warning' : 'error');
@@ -256,6 +274,12 @@ async function getTopMissingDates(limit: number = 10) {
     
     log(`Top ${limit} Dates with Missing Calculations:`, 'warning');
     const resultArray = safeResultArray(result);
+    
+    if (resultArray.length === 0) {
+      log('No missing calculations found', 'success');
+      return [];
+    }
+    
     resultArray.forEach((row, index) => {
       log(`${index + 1}. ${format(new Date(row.date), 'yyyy-MM-dd')}: ${formatNumber(row.missing)} missing (${formatNumber(row.actual)} / ${formatNumber(row.expected)}, ${formatPercentage(row.completion)})`, 'warning');
     });
@@ -304,6 +328,12 @@ async function getRecentDatesStatus(days: number = 7) {
     
     log(`Status for the Last ${days} Days:`, 'info');
     const resultArray = safeResultArray(result);
+    
+    if (resultArray.length === 0) {
+      log(`No data found for the last ${days} days`, 'warning');
+      return [];
+    }
+    
     resultArray.forEach(row => {
       const completion = row.completion;
       const level = completion >= 95 ? 'success' : (completion >= 50 ? 'warning' : 'error');
@@ -339,6 +369,12 @@ async function getDatabaseStatistics() {
     
     log('Database Table Statistics:', 'info');
     const statsArray = safeResultArray(tableStats);
+    
+    if (statsArray.length === 0) {
+      log('No database statistics found', 'warning');
+      return [];
+    }
+    
     statsArray.forEach(row => {
       log(`${row.table_name}: ${formatNumber(row.row_count)} rows (${row.table_size})`, 'info');
     });
