@@ -12,6 +12,13 @@ import * as fs from 'fs';
 
 const LOG_FILE = 'reconciliation_dashboard.log';
 
+/**
+ * Helper function to safely cast query results to an array of records
+ */
+function safeResultArray<T = Record<string, any>>(result: any): Array<T> {
+  return result as unknown as Array<T>;
+}
+
 // Color constants for console output
 const COLORS = {
   reset: '\x1b[0m',
@@ -107,8 +114,8 @@ async function getOverallStatus() {
       FROM expected_calcs e, actual_calcs a
     `);
     
-    // Cast result to proper type
-    const resultArray = result as unknown as Array<Record<string, any>>;
+    // Use our helper function to safely cast the result
+    const resultArray = safeResultArray(result);
     const { expected, actual, completion_percentage } = resultArray[0];
     
     log('Overall Reconciliation Status:', 'success');
@@ -152,7 +159,7 @@ async function getStatusByMinerModel() {
     `);
     
     log('Status By Miner Model:', 'success');
-    const resultArray = result as unknown as Array<Record<string, any>>;
+    const resultArray = safeResultArray(result);
     resultArray.forEach(row => {
       log(`${row.miner_model}: ${formatNumber(row.count)} / ${formatNumber(row.expected_total)} (${formatPercentage(row.percentage)})`, 'info');
     });
@@ -198,7 +205,7 @@ async function getStatusByMonth() {
     `);
     
     log('Monthly Reconciliation Progress (Last 24 months):', 'success');
-    const resultArray = result as unknown as Array<Record<string, any>>;
+    const resultArray = safeResultArray(result);
     resultArray.forEach(row => {
       const completion = row.completion_percentage;
       const level = completion >= 95 ? 'success' : (completion >= 50 ? 'warning' : 'error');
@@ -248,7 +255,7 @@ async function getTopMissingDates(limit: number = 10) {
     `);
     
     log(`Top ${limit} Dates with Missing Calculations:`, 'warning');
-    const resultArray = result as unknown as Array<Record<string, any>>;
+    const resultArray = safeResultArray(result);
     resultArray.forEach((row, index) => {
       log(`${index + 1}. ${format(new Date(row.date), 'yyyy-MM-dd')}: ${formatNumber(row.missing)} missing (${formatNumber(row.actual)} / ${formatNumber(row.expected)}, ${formatPercentage(row.completion)})`, 'warning');
     });
@@ -296,7 +303,7 @@ async function getRecentDatesStatus(days: number = 7) {
     `);
     
     log(`Status for the Last ${days} Days:`, 'info');
-    const resultArray = result as unknown as Array<Record<string, any>>;
+    const resultArray = safeResultArray(result);
     resultArray.forEach(row => {
       const completion = row.completion;
       const level = completion >= 95 ? 'success' : (completion >= 50 ? 'warning' : 'error');
@@ -331,11 +338,12 @@ async function getDatabaseStatistics() {
     `);
     
     log('Database Table Statistics:', 'info');
-    (tableStats as any[]).forEach(row => {
+    const statsArray = safeResultArray(tableStats);
+    statsArray.forEach(row => {
       log(`${row.table_name}: ${formatNumber(row.row_count)} rows (${row.table_size})`, 'info');
     });
     
-    return tableStats;
+    return statsArray;
   } catch (error) {
     log(`Error fetching database statistics: ${error}`, 'error');
     throw error;
@@ -376,8 +384,9 @@ async function generateDashboard() {
   }
 }
 
-// Only run if this file is executed directly
-if (require.main === module) {
+// Only run if this file is executed directly (ESM compatible)
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
   generateDashboard();
 }
 
