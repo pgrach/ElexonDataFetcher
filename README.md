@@ -12,33 +12,30 @@ An advanced Bitcoin mining analytics platform that provides comprehensive insigh
 
 ## Reconciliation Status
 
-Currently, the platform shows a 65.02% reconciliation rate (984,547 calculations out of 1,514,223 expected) across three miner models:
-- S19J_PRO: 328,189 calculations
-- S9: 328,179 calculations
-- M20S: 328,179 calculations
+Currently, the platform shows a 68.46% reconciliation rate (1,035,073 calculations out of 1,511,934 expected) across three miner models:
+- S19J_PRO: 345,031 calculations
+- S9: 345,021 calculations
+- M20S: 345,021 calculations
 
-The primary gaps in reconciliation are in December 2023.
+December 2023 reconciliation is now 100% complete. The current focus is on November 2023.
 
 ## Reconciliation Process
 
 ### 1. Daily Reconciliation
 - Automated daily process to reconcile the previous day's curtailment records with Bitcoin calculations
-- Uses `historicalReconciliation.reconcileDay()` function
+- Uses `daily_reconciliation_check.ts` script
 
-### 2. Monthly Reconciliation
-- Scheduled process on the 1st of each month
-- Uses `historicalReconciliation.reconcilePreviousMonth()` function
+### 2. Core Reconciliation Tools
+- `npx tsx simple_reconcile.ts status` - Check current reconciliation status
+- `npx tsx simple_reconcile.ts find` - Find dates with missing calculations
+- `npx tsx simple_reconcile.ts date YYYY-MM-DD` - Fix a specific date
+- `npx tsx simple_reconcile.ts december` - Fix December 2023 specifically
+- `npx tsx simple_reconcile.ts all` - Fix all missing dates (use with caution)
 
-### 3. Manual Reconciliation Tools
-- `npx tsx reconciliation.ts status` - Check current reconciliation status
-- `npx tsx reconciliation.ts find` - Find dates with missing calculations
-- `npx tsx reconciliation.ts reconcile` - Fix all missing calculations
-- `npx tsx reconciliation.ts date YYYY-MM-DD` - Fix a specific date
-
-### 4. Special Tools
+### 3. Advanced Reconciliation Options
+- `npx tsx reconciliation.ts` - Comprehensive reconciliation system with additional options
 - `npx tsx check_reconciliation_status.ts` - Quick status check tool
-- `npx tsx run_reconciliation.ts` - Focused tool for December 2023 reconciliation
-- `npx tsx test_reconcile_date.ts` - Test tool for a specific date
+- `npx tsx reconciliation_progress_report.ts` - Generate detailed progress reports
 
 ## Data Model
 
@@ -55,7 +52,10 @@ The reconciliation process focuses on these key entities:
 ## Development
 
 ### Core Files
-- `reconciliation.ts` - Main reconciliation tool
+- `simple_reconcile.ts` - Streamlined reconciliation tool
+- `reconciliation.ts` - Comprehensive reconciliation system
+- `daily_reconciliation_check.ts` - Automated daily reconciliation
+- `reconciliation_progress_report.ts` - Status reporting tool
 - `reconciliation.sql` - Consolidated SQL queries
 - `server/services/historicalReconciliation.ts` - Core service for reconciliation logic
 - `server/services/bitcoinService.ts` - Bitcoin calculation logic
