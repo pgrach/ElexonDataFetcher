@@ -1,8 +1,8 @@
 /**
- * Date-Period Combination Reconciliation Tool
+ * Batch-Limited Reconciliation Tool
  * 
- * This script efficiently reconciles specific combinations of dates and periods
- * that are missing calculations, allowing for targeted fixes of problematic data.
+ * This script processes a limited number of missing bitcoin calculations per run,
+ * making it suitable for environments with execution time limits.
  */
 
 import pg from 'pg';
@@ -27,6 +27,14 @@ const DIFFICULTY_TABLE = 'asics-dynamodb-DifficultyTable-DQ308ID3POT6';
 
 // Sleep utility
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Define a combination type
+interface Combination {
+  date: string;
+  period: number;
+  farmId: string;
+  minerModel: string;
+}
 
 /**
  * Get difficulty data for a specific date from DynamoDB
@@ -96,85 +104,54 @@ async function getDifficultyData(date: string): Promise<number> {
 }
 
 /**
- * Get missing combinations for a date and period
+ * Get missing combinations for a specific date
  */
-async function getMissingCombinations(date: string, period: number): Promise<Array<{farmId: string, minerModel: string}>> {
+async function getMissingCombinations(date: string, limit: number = 10): Promise<Combination[]> {
   const client = await pool.connect();
   try {
-    // This query finds farms that have curtailment records but no bitcoin calculations
-    // for the specified miner model, date, and period
+    // This query finds specific date/period/farm/model combinations that are missing
     const query = `
-      WITH farm_curtailment AS (
+      WITH curtailment_by_period AS (
         SELECT 
-          cr.farm_id,
           cr.settlement_date,
-          cr.settlement_period
+          cr.settlement_period,
+          cr.farm_id
         FROM 
           curtailment_records cr
         WHERE 
           cr.settlement_date = $1
-          AND cr.settlement_period = $2
       )
       
       SELECT 
-        fc.farm_id,
-        'S19J_PRO' as miner_model
-      FROM 
-        farm_curtailment fc
-      WHERE 
-        NOT EXISTS (
-          SELECT 1 
-          FROM historical_bitcoin_calculations hbc
-          WHERE 
-            hbc.settlement_date = fc.settlement_date
-            AND hbc.settlement_period = fc.settlement_period
-            AND hbc.farm_id = fc.farm_id
-            AND hbc.miner_model = 'S19J_PRO'
-        )
-      
-      UNION ALL
-      
-      SELECT 
-        fc.farm_id,
-        'S9' as miner_model
-      FROM 
-        farm_curtailment fc
-      WHERE 
-        NOT EXISTS (
-          SELECT 1 
-          FROM historical_bitcoin_calculations hbc
-          WHERE 
-            hbc.settlement_date = fc.settlement_date
-            AND hbc.settlement_period = fc.settlement_period
-            AND hbc.farm_id = fc.farm_id
-            AND hbc.miner_model = 'S9'
-        )
-      
-      UNION ALL
-      
-      SELECT 
-        fc.farm_id,
+        cp.settlement_date as date,
+        cp.settlement_period as period,
+        cp.farm_id as farm_id,
         'M20S' as miner_model
       FROM 
-        farm_curtailment fc
+        curtailment_by_period cp
       WHERE 
         NOT EXISTS (
           SELECT 1 
           FROM historical_bitcoin_calculations hbc
           WHERE 
-            hbc.settlement_date = fc.settlement_date
-            AND hbc.settlement_period = fc.settlement_period
-            AND hbc.farm_id = fc.farm_id
+            hbc.settlement_date = cp.settlement_date
+            AND hbc.settlement_period = cp.settlement_period
+            AND hbc.farm_id = cp.farm_id
             AND hbc.miner_model = 'M20S'
         )
-      ORDER BY farm_id, miner_model
+      ORDER BY cp.settlement_period, cp.farm_id
+      LIMIT $2;
     `;
     
-    const result = await client.query(query, [date, period]);
+    const result = await client.query(query, [date, limit]);
+    
     return result.rows.map(row => ({
+      date: row.date as string,
+      period: row.period as number,
       farmId: row.farm_id as string,
       minerModel: row.miner_model as string
     }));
+    
   } catch (error) {
     console.error('Error getting missing combinations:', error);
     return [];
@@ -202,29 +179,45 @@ async function getCurtailmentRecord(client: PoolClient, date: string, period: nu
 /**
  * Process a specific combination
  */
-async function processCombination(
-  date: string, 
-  period: number, 
-  farmId: string, 
-  minerModel: string
-): Promise<boolean> {
+async function processCombination(combo: Combination): Promise<boolean> {
   const client = await pool.connect();
   try {
-    console.log(`\n=== Processing ${date} Period ${period} Farm ${farmId} Model ${minerModel} ===\n`);
+    console.log(`\n=== Processing ${combo.date} Period ${combo.period} Farm ${combo.farmId} Model ${combo.minerModel} ===\n`);
     
     // Get curtailment record
-    const curtailmentRecord = await getCurtailmentRecord(client, date, period, farmId);
+    const curtailmentRecord = await getCurtailmentRecord(client, combo.date, combo.period, combo.farmId);
     
     if (!curtailmentRecord) {
-      console.log(`No curtailment record found for ${date} Period ${period} Farm ${farmId}`);
+      console.log(`No curtailment record found for ${combo.date} Period ${combo.period} Farm ${combo.farmId}`);
       return false;
     }
     
     console.log('Curtailment record found:');
     console.log(curtailmentRecord);
     
+    // Check if record already exists to avoid duplicates
+    const existsQuery = `
+      SELECT id FROM historical_bitcoin_calculations
+      WHERE settlement_date = $1
+        AND settlement_period = $2
+        AND farm_id = $3
+        AND miner_model = $4
+    `;
+    
+    const existsResult = await client.query(existsQuery, [
+      combo.date, 
+      combo.period, 
+      combo.farmId, 
+      combo.minerModel
+    ]);
+    
+    if (existsResult.rows.length > 0) {
+      console.log(`Record already exists for this combination with ID: ${existsResult.rows[0].id}`);
+      return true;
+    }
+    
     // Get difficulty
-    const difficulty = await getDifficultyData(date);
+    const difficulty = await getDifficultyData(combo.date);
     console.log(`Using difficulty: ${difficulty}`);
     
     // Insert the record
@@ -238,10 +231,10 @@ async function processCombination(
     `;
     
     const insertResult = await client.query(insertQuery, [
-      date, 
-      period, 
-      farmId, 
-      minerModel, 
+      combo.date, 
+      combo.period, 
+      combo.farmId, 
+      combo.minerModel, 
       difficulty.toString(), 
       "0", // Bitcoin mined placeholder - will be updated later
       new Date()
@@ -263,31 +256,17 @@ async function processCombination(
 }
 
 /**
- * Main reconciliation function for a date and period
+ * Process a batch of combinations
  */
-async function reconcileDatePeriod(date: string, period: number): Promise<void> {
-  console.log(`\n========== Reconciling ${date} Period ${period} ==========\n`);
-  
-  // Get missing combinations
-  const missingCombinations = await getMissingCombinations(date, period);
-  
-  if (missingCombinations.length === 0) {
-    console.log(`No missing combinations found for ${date} Period ${period}`);
-    return;
-  }
-  
-  console.log(`Found ${missingCombinations.length} missing combinations for ${date} Period ${period}:`);
-  console.table(missingCombinations);
-  
-  // Process each combination
+async function processBatch(combinations: Combination[]): Promise<{ success: number, failure: number }> {
   let successCount = 0;
   let failureCount = 0;
   
-  for (const combo of missingCombinations) {
+  for (const combo of combinations) {
     // Add slight delay to avoid overwhelming the database
     await sleep(100);
     
-    const success = await processCombination(date, period, combo.farmId, combo.minerModel);
+    const success = await processCombination(combo);
     if (success) {
       successCount++;
     } else {
@@ -295,23 +274,36 @@ async function reconcileDatePeriod(date: string, period: number): Promise<void> 
     }
   }
   
-  console.log(`\n===== Reconciliation Summary for ${date} Period ${period} =====`);
-  console.log(`Total combinations: ${missingCombinations.length}`);
-  console.log(`Successfully processed: ${successCount}`);
-  console.log(`Failed: ${failureCount}`);
+  return { success: successCount, failure: failureCount };
 }
 
 /**
- * Process specific date with multiple periods
+ * Main reconciliation function
  */
-async function reconcileDate(date: string, periods: number[]): Promise<void> {
-  console.log(`\n=========== Reconciling ${date} for Periods ${periods.join(', ')} ===========\n`);
+async function reconcileBatchForDate(date: string, batchSize: number = 10): Promise<void> {
+  console.log(`\n========== Reconciling batch for ${date} (limit: ${batchSize}) ==========\n`);
   
-  for (const period of periods) {
-    await reconcileDatePeriod(date, period);
+  // Get missing combinations
+  const missingCombinations = await getMissingCombinations(date, batchSize);
+  
+  if (missingCombinations.length === 0) {
+    console.log(`No missing combinations found for ${date}`);
+    return;
   }
   
-  console.log(`\nCompleted reconciliation for ${date}`);
+  console.log(`Found ${missingCombinations.length} missing combinations for ${date}:`);
+  missingCombinations.forEach((combo, index) => {
+    console.log(`${index + 1}. Date: ${combo.date}, Period: ${combo.period}, Farm: ${combo.farmId}, Model: ${combo.minerModel}`);
+  });
+  
+  // Process the batch
+  const result = await processBatch(missingCombinations);
+  
+  // Print summary
+  console.log(`\n===== Reconciliation Summary for ${date} =====`);
+  console.log(`Total combinations: ${missingCombinations.length}`);
+  console.log(`Successfully processed: ${result.success}`);
+  console.log(`Failed: ${result.failure}`);
 }
 
 /**
@@ -323,17 +315,15 @@ async function main(): Promise<void> {
     const args = process.argv.slice(2);
     
     if (args.length < 1) {
-      console.error('Usage: npx tsx reconcile_date_period_combination.ts <date> [period1,period2,...]');
-      console.error('Example: npx tsx reconcile_date_period_combination.ts 2023-12-21 7,8,9');
+      console.error('Usage: npx tsx reconcile_batch_limit.ts <date> [batch_size]');
+      console.error('Example: npx tsx reconcile_batch_limit.ts 2023-12-21 5');
       process.exit(1);
     }
     
     const date = args[0];
-    const periods = args.length > 1 ? 
-      args[1].split(',').map(p => parseInt(p.trim())) : 
-      Array.from({ length: 48 }, (_, i) => i + 1); // All 48 periods if not specified
+    const batchSize = args.length > 1 ? parseInt(args[1]) : 10;
     
-    await reconcileDate(date, periods);
+    await reconcileBatchForDate(date, batchSize);
     
   } catch (error) {
     console.error('Fatal error:', error);
@@ -346,7 +336,7 @@ async function main(): Promise<void> {
 // Run the script
 main()
   .then(() => {
-    console.log('\nReconciliation completed successfully');
+    console.log('\nBatch reconciliation completed successfully');
     process.exit(0);
   })
   .catch(error => {
