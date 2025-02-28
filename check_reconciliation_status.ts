@@ -3,18 +3,19 @@
  * between curtailment_records and historical_bitcoin_calculations tables.
  */
 
-import { getReconciliationStatus, findDatesWithMissingCalculations } from './reconcile';
+import { getReconciliationStatus, findDatesWithMissingCalculations } from "./reconcile";
 
 async function main() {
-  console.log("\n===== BITCOIN CALCULATION RECONCILIATION STATUS =====");
+  console.log("=== Bitcoin Calculations Reconciliation Status ===\n");
   
   try {
-    // Get current reconciliation status
+    // Get overall status
     console.log("Checking current reconciliation status...");
     const status = await getReconciliationStatus();
     
-    console.log("\n=== Status ===");
+    console.log("\n=== Overall Status ===");
     console.log(`Curtailment Records: ${status.totalCurtailmentRecords}`);
+    console.log(`Unique Period-Farm Combinations: ${status.uniqueDatePeriodFarmCombinations}`);
     console.log(`Bitcoin Calculations: ${status.totalBitcoinCalculations}`);
     console.log(`Expected Calculations: ${status.expectedBitcoinCalculations}`);
     console.log(`Missing Calculations: ${status.missingCalculations}`);
@@ -25,30 +26,34 @@ async function main() {
       console.log(`- ${model}: ${count}`);
     }
     
-    // If not at 100%, find dates with missing calculations
+    // If not at 100%, find problematic dates
     if (status.reconciliationPercentage < 100) {
       console.log("\nFinding dates with missing calculations...");
       const missingDates = await findDatesWithMissingCalculations();
       
       if (missingDates.length === 0) {
-        console.log("No dates with missing calculations found!");
+        console.log("No specific dates with missing calculations found.");
       } else {
         console.log(`\nFound ${missingDates.length} dates with missing calculations:`);
-        missingDates.forEach(d => {
+        missingDates.slice(0, 10).forEach(d => {
           console.log(`- ${d.date}: ${d.actual}/${d.expected} (${d.completionPercentage}%)`);
         });
         
-        console.log("\nTo fix these issues, run the reconciliation script:");
-        console.log("npx tsx run_reconciliation.ts");
+        if (missingDates.length > 10) {
+          console.log(`... and ${missingDates.length - 10} more dates`);
+        }
+        
+        console.log("\nTo fix missing calculations, run:");
+        console.log("npx tsx reconcile.ts");
       }
     } else {
-      console.log("\n✅ At 100% reconciliation! No action needed.");
+      console.log("\n✅ Reconciliation is at 100%. All calculations are up to date!");
     }
-    
   } catch (error) {
     console.error("Error checking reconciliation status:", error);
     process.exit(1);
   }
 }
 
+// Run the script
 main().catch(console.error);

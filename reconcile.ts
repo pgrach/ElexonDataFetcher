@@ -20,6 +20,18 @@ const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
  * Get summary statistics about reconciliation status
  */
 async function getReconciliationStatus() {
+  // Count unique date-period-farm combinations
+  const uniqueCombosResult = await db.execute(sql`
+    WITH unique_combos AS (
+      SELECT DISTINCT settlement_date, settlement_period, farm_id
+      FROM curtailment_records
+    )
+    SELECT COUNT(*) as unique_combo_count
+    FROM unique_combos
+  `);
+  
+  const uniqueCombinations = Number(uniqueCombosResult.rows[0]?.unique_combo_count || 0);
+  
   // Get total curtailment records count
   const curtailmentResult = await db
     .select({ count: sql<number>`COUNT(*)` })
@@ -40,13 +52,19 @@ async function getReconciliationStatus() {
   }
   
   // Expected Bitcoin calculation count for 100% reconciliation
-  // For each curtailment record, we should have one calculation per miner model
-  const expectedTotal = totalCurtailmentRecords * MINER_MODELS.length;
-  const actualTotal = Object.values(bitcoinCounts).reduce((sum, count) => sum + count, 0);
-  const reconciliationPercentage = expectedTotal > 0 ? (actualTotal / expectedTotal) * 100 : 100;
+  // For each unique date-period-farm combination, we should have one calculation per miner model
+  const expectedTotal = uniqueCombinations * MINER_MODELS.length;
+  const actualTotal = Object.values(bitcoinCounts).reduce((sum, count) => sum + Number(count), 0);
+  
+  // Calculate reconciliation percentage with safety checks
+  let reconciliationPercentage = 100;
+  if (expectedTotal > 0) {
+    reconciliationPercentage = Math.min((actualTotal / expectedTotal) * 100, 100);
+  }
   
   return {
     totalCurtailmentRecords,
+    uniqueDatePeriodFarmCombinations: uniqueCombinations,
     bitcoinCalculationsByModel: bitcoinCounts,
     totalBitcoinCalculations: actualTotal,
     expectedBitcoinCalculations: expectedTotal,
@@ -65,19 +83,23 @@ async function findDatesWithMissingCalculations() {
       FROM curtailment_records
       ORDER BY settlement_date DESC
     ),
+    unique_date_combos AS (
+      SELECT 
+        settlement_date,
+        COUNT(DISTINCT (settlement_period || '-' || farm_id)) as unique_combinations
+      FROM curtailment_records
+      GROUP BY settlement_date
+    ),
     date_calculations AS (
       SELECT 
         c.settlement_date,
         COUNT(DISTINCT b.id) as calculation_count,
-        (
-          SELECT COUNT(*) 
-          FROM curtailment_records cr 
-          WHERE cr.settlement_date = c.settlement_date
-        ) * ${MINER_MODELS.length} as expected_count
+        u.unique_combinations * ${MINER_MODELS.length} as expected_count
       FROM dates_with_curtailment c
+      JOIN unique_date_combos u ON c.settlement_date = u.settlement_date
       LEFT JOIN historical_bitcoin_calculations b 
         ON c.settlement_date = b.settlement_date
-      GROUP BY c.settlement_date
+      GROUP BY c.settlement_date, u.unique_combinations
     )
     SELECT 
       settlement_date::text as date,
@@ -91,10 +113,10 @@ async function findDatesWithMissingCalculations() {
   `);
   
   return result.rows.map(row => ({
-    date: row.date,
-    actual: parseInt(row.calculation_count),
-    expected: parseInt(row.expected_count),
-    completionPercentage: parseFloat(row.completion_percentage)
+    date: String(row.date),
+    actual: Number(row.calculation_count),
+    expected: Number(row.expected_count),
+    completionPercentage: Number(row.completion_percentage)
   }));
 }
 

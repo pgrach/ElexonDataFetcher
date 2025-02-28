@@ -11,6 +11,19 @@ import { auditAndFixBitcoinCalculations } from "./server/services/historicalReco
 const TARGET_DATE = "2025-02-28";
 
 async function getReconciliationStatusForDate(date: string) {
+  // First, analyze the unique combinations of period-farm pairs
+  const uniqueCombosResult = await db.execute(sql`
+    WITH unique_combos AS (
+      SELECT DISTINCT settlement_period, farm_id
+      FROM curtailment_records
+      WHERE settlement_date = ${date}::date
+    )
+    SELECT COUNT(*) as unique_combo_count
+    FROM unique_combos
+  `);
+  
+  const uniqueCombinations = Number(uniqueCombosResult.rows[0]?.unique_combo_count || 0);
+  
   // Get curtailment count for the date
   const curtailmentResult = await db
     .select({ count: sql<number>`COUNT(*)` })
@@ -35,7 +48,29 @@ async function getReconciliationStatusForDate(date: string) {
   }, {} as Record<string, number>);
   
   const totalCalculations = bitcoinResult.reduce((sum, { count }) => sum + Number(count), 0);
-  const expectedCalculations = curtailmentCount * 3; // 3 miner models
+  
+  // The expected calculations should be based on unique period-farm combinations
+  // Each unique combination needs one calculation per miner model
+  const MINER_MODELS = 3; // S19J_PRO, S9, M20S
+  const expectedCalculations = uniqueCombinations * MINER_MODELS;
+  
+  // Also get the calculation distribution
+  const calculationDistributionResult = await db.execute(sql`
+    SELECT 
+      hbc.settlement_period,
+      hbc.farm_id,
+      COUNT(DISTINCT hbc.miner_model) as model_count
+    FROM historical_bitcoin_calculations hbc
+    WHERE hbc.settlement_date = ${date}::date
+    GROUP BY hbc.settlement_period, hbc.farm_id
+  `);
+  
+  const calculationDistribution = calculationDistributionResult.rows.map(row => ({
+    period: Number(row.settlement_period),
+    farmId: row.farm_id,
+    modelCount: Number(row.model_count)
+  }));
+  
   const reconciliationPercentage = expectedCalculations > 0 
     ? (totalCalculations / expectedCalculations) * 100 
     : 100;
@@ -43,9 +78,11 @@ async function getReconciliationStatusForDate(date: string) {
   return {
     date,
     curtailmentCount,
+    uniquePeriodFarmCombinations: uniqueCombinations,
     modelCounts,
     totalCalculations,
     expectedCalculations,
+    calculationDistribution,
     reconciliationPercentage: Math.round(reconciliationPercentage * 100) / 100
   };
 }
