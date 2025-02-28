@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Process Critical Date Script
-# Focused script to process a single critical date with minimal reconciliation tool
+# Focuses on reconciling a single critical date with careful error handling
 
-# Usage: ./process_critical_date.sh <date>
-# Example: ./process_critical_date.sh 2022-10-06
+# Default date is 2022-10-06 (most critical) if none provided
+CRITICAL_DATE=${1:-"2022-10-06"}
 
 # Log setup
-LOG_FILE="./logs/critical_date_$(date +%Y-%m-%d).log"
+LOG_FILE="./logs/critical_date_$CRITICAL_DATE.log"
 
 # Create logs directory if it doesn't exist
 mkdir -p ./logs
@@ -25,31 +25,45 @@ log_section() {
   log "============================================================"
 }
 
-# Get the date to process
-DATE="${1:-2022-10-06}"  # Default to 2022-10-06 if no date provided
+check_status() {
+  log "Current status for $CRITICAL_DATE:"
+  npx tsx minimal_reconciliation.ts date-status "$CRITICAL_DATE" 2>/dev/null || log "⚠️ Status check failed"
+}
 
-# Process the critical date with minimal tool
-log_section "Starting Critical Date Processing for $DATE"
+# Main function
+main() {
+  log_section "Starting Critical Date Processing for $CRITICAL_DATE"
+  log "Date: $(date)"
+  
+  # Check initial status
+  log_section "Initial Status"
+  check_status
+  
+  # First try to get missing combinations
+  log_section "Analyzing Missing Combinations"
+  npx tsx minimal_reconciliation.ts analyze "$CRITICAL_DATE" | tee -a "$LOG_FILE"
+  
+  # Process the date with extreme caution (one record at a time)
+  log_section "Processing with Critical Safeguards"
+  log "Using critical-date mode with minimal reconnection..."
+  npx tsx minimal_reconciliation.ts critical-date "$CRITICAL_DATE" | tee -a "$LOG_FILE"
+  
+  # Check progress after first pass
+  log_section "Status After First Pass"
+  check_status
+  
+  # Try to process any remaining records with sequence mode
+  log_section "Processing Remaining Records"
+  log "Using sequence mode with batch size of 1..."
+  timeout 1800 npx tsx minimal_reconciliation.ts sequence "$CRITICAL_DATE" 1 | tee -a "$LOG_FILE" || log "⚠️ Sequence processing timed out after 30 minutes"
+  
+  # Final status check
+  log_section "Final Status"
+  check_status
+  
+  log_section "Processing Complete for $CRITICAL_DATE"
+  log "Check $LOG_FILE for complete details"
+}
 
-log "Using minimal_reconciliation.ts with sequence mode for $DATE"
-log "This processes records one-by-one with careful error handling"
-
-# Execute with a 30-minute timeout
-timeout 1800 npx tsx minimal_reconciliation.ts sequence "$DATE" 1
-
-result=$?
-if [ $result -eq 124 ]; then
-  log "⚠️ Process timed out after 30 minutes but may have made progress"
-elif [ $result -eq 0 ]; then
-  log "✅ Process completed successfully"
-else
-  log "❌ Process failed with exit code $result"
-fi
-
-# Check current status
-log_section "Checking Current Status"
-npx tsx reconciliation_progress_check.ts | tee -a "$LOG_FILE"
-
-log_section "Processing Complete"
-log "Date processed: $DATE"
-log "Check the logs and reconciliation progress for details"
+# Run the main function
+main
