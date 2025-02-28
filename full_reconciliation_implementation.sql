@@ -1,9 +1,10 @@
--- Reconciliation Script for Missing Months
--- This script focuses on entirely missing months (0% reconciliation)
+-- Full Reconciliation Implementation
+-- This script implements the complete reconciliation process with optimized performance for large datasets
 
 -- Create progress tracking table
-CREATE TEMPORARY TABLE IF NOT EXISTS missing_month_progress (
-    year_month TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS reconciliation_progress (
+    id SERIAL PRIMARY KEY,
+    year_month TEXT,
     start_time TIMESTAMP,
     end_time TIMESTAMP,
     curtailment_count INTEGER,
@@ -14,12 +15,11 @@ CREATE TEMPORARY TABLE IF NOT EXISTS missing_month_progress (
     error_message TEXT
 );
 
--- Function to process a specific month
-CREATE OR REPLACE FUNCTION reconcile_missing_month(
+-- Function to process dates in a specific month
+CREATE OR REPLACE FUNCTION reconcile_month(
     target_month TEXT,
-    difficulty_value NUMERIC DEFAULT 37935772752142,
-    batch_size INTEGER DEFAULT 5,
-    max_days INTEGER DEFAULT NULL
+    difficulty_value NUMERIC,
+    batch_size INTEGER DEFAULT 5
 ) RETURNS void AS $$
 DECLARE
     year_part TEXT;
@@ -33,7 +33,6 @@ DECLARE
     days_processed INTEGER := 0;
     date_cursor REFCURSOR;
     error_message TEXT;
-    target_dates TEXT[];
     last_processed_date DATE := NULL;
 BEGIN
     -- Extract year and month from target_month (format 'YYYY-MM')
@@ -54,7 +53,7 @@ BEGIN
     WHERE settlement_date BETWEEN start_date AND end_date;
     
     -- Store initial information in progress tracking table
-    INSERT INTO missing_month_progress (
+    INSERT INTO reconciliation_progress (
         year_month, 
         start_time, 
         curtailment_count, 
@@ -67,22 +66,12 @@ BEGIN
         total_curtailment_records, 
         initial_bitcoin_records,
         'In Progress'
-    )
-    ON CONFLICT (year_month) 
-    DO UPDATE SET 
-        start_time = EXCLUDED.start_time,
-        curtailment_count = EXCLUDED.curtailment_count,
-        initial_bitcoin_count = EXCLUDED.initial_bitcoin_count,
-        status = EXCLUDED.status,
-        end_time = NULL,
-        final_bitcoin_count = NULL,
-        processed_dates = NULL,
-        error_message = NULL;
+    );
     
     RAISE NOTICE 'Starting reconciliation for % with difficulty %: % curtailment records, % bitcoin records', 
         target_month, difficulty_value, total_curtailment_records, initial_bitcoin_records;
     
-    -- Get all dates in this month that have curtailment records but no bitcoin calculations
+    -- Get all dates in this month that have curtailment records but incomplete bitcoin calculations
     OPEN date_cursor FOR
     WITH date_curtailment AS (
         SELECT 
@@ -95,33 +84,41 @@ BEGIN
     date_bitcoin AS (
         SELECT 
             settlement_date,
+            miner_model,
             COUNT(*) as bitcoin_count
         FROM historical_bitcoin_calculations
         WHERE to_char(settlement_date, 'YYYY-MM') = target_month
-        GROUP BY settlement_date
+        GROUP BY settlement_date, miner_model
     ),
-    missing_dates AS (
+    model_counts AS (
         SELECT 
             dc.settlement_date,
             dc.curtailment_count,
-            COALESCE(db.bitcoin_count, 0) as bitcoin_count,
+            COALESCE((SELECT bitcoin_count FROM date_bitcoin WHERE settlement_date = dc.settlement_date AND miner_model = 'S19J_PRO'), 0) as s19j_pro_count,
+            COALESCE((SELECT bitcoin_count FROM date_bitcoin WHERE settlement_date = dc.settlement_date AND miner_model = 'S9'), 0) as s9_count,
+            COALESCE((SELECT bitcoin_count FROM date_bitcoin WHERE settlement_date = dc.settlement_date AND miner_model = 'M20S'), 0) as m20s_count
+        FROM date_curtailment dc
+    ),
+    incomplete_dates AS (
+        SELECT 
+            settlement_date,
+            curtailment_count,
             CASE
-                WHEN COALESCE(db.bitcoin_count, 0) = 0 THEN 'Missing'
-                WHEN COALESCE(db.bitcoin_count, 0) < dc.curtailment_count * 3 THEN 'Incomplete'
+                WHEN s19j_pro_count = 0 AND s9_count = 0 AND m20s_count = 0 THEN 'Missing'
+                WHEN s19j_pro_count < curtailment_count OR s9_count < curtailment_count OR m20s_count < curtailment_count THEN 'Incomplete'
                 ELSE 'Complete'
             END as status
-        FROM date_curtailment dc
-        LEFT JOIN date_bitcoin db ON dc.settlement_date = db.settlement_date
-        WHERE COALESCE(db.bitcoin_count, 0) < dc.curtailment_count * 3
+        FROM model_counts
+        WHERE s19j_pro_count < curtailment_count OR s9_count < curtailment_count OR m20s_count < curtailment_count
         ORDER BY 
             CASE 
-                WHEN COALESCE(db.bitcoin_count, 0) = 0 THEN 1  -- Missing dates first
-                ELSE 2                                         -- Then incomplete dates
+                WHEN s19j_pro_count = 0 AND s9_count = 0 AND m20s_count = 0 THEN 1  -- Missing dates first
+                ELSE 2                                                              -- Then incomplete dates
             END,
-            dc.curtailment_count DESC                          -- Highest curtailment count first
+            curtailment_count DESC                                                   -- Highest curtailment count first
     )
     SELECT settlement_date
-    FROM missing_dates;
+    FROM incomplete_dates;
     
     -- Process dates in batches
     BEGIN
@@ -129,7 +126,7 @@ BEGIN
             -- Process a batch of dates
             FOR i IN 1..batch_size LOOP
                 FETCH date_cursor INTO process_date;
-                EXIT WHEN NOT FOUND OR (max_days IS NOT NULL AND days_processed >= max_days);
+                EXIT WHEN NOT FOUND;
                 
                 -- Process this date
                 BEGIN
@@ -215,11 +212,11 @@ BEGIN
                     last_processed_date := process_date;
                     
                     -- Save progress after each date
-                    UPDATE missing_month_progress
+                    UPDATE reconciliation_progress
                     SET 
                         processed_dates = days_processed,
                         status = 'Processing: ' || process_date::TEXT
-                    WHERE year_month = target_month;
+                    WHERE year_month = target_month AND end_time IS NULL;
                     
                 EXCEPTION WHEN OTHERS THEN
                     -- Log error for this date but continue with others
@@ -232,27 +229,23 @@ BEGIN
             -- Start a new transaction for the next batch
             BEGIN;
             
-            -- Exit if we've processed all dates or reached the max days limit
-            EXIT WHEN NOT FOUND OR (max_days IS NOT NULL AND days_processed >= max_days);
+            -- Exit if we've processed all dates
+            EXIT WHEN NOT FOUND;
         END LOOP;
         
         -- Get final count of bitcoin records
-        SELECT COUNT(*) INTO total_curtailment_records
-        FROM curtailment_records
-        WHERE settlement_date BETWEEN start_date AND end_date;
-        
         SELECT COUNT(*) INTO initial_bitcoin_records
         FROM historical_bitcoin_calculations
         WHERE settlement_date BETWEEN start_date AND end_date;
         
         -- Update progress with success
-        UPDATE missing_month_progress
+        UPDATE reconciliation_progress
         SET 
             end_time = NOW(),
             final_bitcoin_count = initial_bitcoin_records,
             processed_dates = days_processed,
             status = 'Completed'
-        WHERE year_month = target_month;
+        WHERE year_month = target_month AND end_time IS NULL;
         
         RAISE NOTICE 'Reconciliation complete for %: Processed % dates', target_month, days_processed;
             
@@ -261,7 +254,7 @@ BEGIN
         error_message := SQLERRM;
         RAISE NOTICE 'Error during reconciliation of %: %', target_month, error_message;
         
-        UPDATE missing_month_progress
+        UPDATE reconciliation_progress
         SET 
             end_time = NOW(),
             final_bitcoin_count = (
@@ -272,7 +265,7 @@ BEGIN
             processed_dates = days_processed,
             status = 'Failed',
             error_message = error_message
-        WHERE year_month = target_month;
+        WHERE year_month = target_month AND end_time IS NULL;
     END;
     
     -- Close cursor
@@ -280,15 +273,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to get month reconciliation status
-CREATE OR REPLACE FUNCTION get_month_status(target_month TEXT) RETURNS TABLE (
+-- Function to check monthly reconciliation status
+CREATE OR REPLACE FUNCTION check_month_status(target_month TEXT) RETURNS TABLE (
     year_month TEXT,
     status TEXT,
     completion_percentage NUMERIC,
     curtailment_count INTEGER,
     bitcoin_count INTEGER,
     expected_count INTEGER,
-    missing_count INTEGER
+    missing_count INTEGER,
+    s19j_pro_count INTEGER,
+    s9_count INTEGER,
+    m20s_count INTEGER
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -297,6 +293,14 @@ BEGIN
             COUNT(*) as curtailment_count
         FROM curtailment_records
         WHERE to_char(settlement_date, 'YYYY-MM') = target_month
+    ),
+    month_bitcoin_models AS (
+        SELECT 
+            miner_model,
+            COUNT(*) as model_count
+        FROM historical_bitcoin_calculations
+        WHERE to_char(settlement_date, 'YYYY-MM') = target_month
+        GROUP BY miner_model
     ),
     month_bitcoin AS (
         SELECT 
@@ -318,124 +322,151 @@ BEGIN
         mc.curtailment_count,
         mb.bitcoin_count,
         mc.curtailment_count * 3 as expected_count,
-        (mc.curtailment_count * 3) - mb.bitcoin_count as missing_count
+        (mc.curtailment_count * 3) - mb.bitcoin_count as missing_count,
+        COALESCE((SELECT model_count FROM month_bitcoin_models WHERE miner_model = 'S19J_PRO'), 0) as s19_count,
+        COALESCE((SELECT model_count FROM month_bitcoin_models WHERE miner_model = 'S9'), 0) as s9_count,
+        COALESCE((SELECT model_count FROM month_bitcoin_models WHERE miner_model = 'M20S'), 0) as m20s_count
     FROM month_curtailment mc, month_bitcoin mb;
 END;
 $$ LANGUAGE plpgsql;
 
--- Main execution section
-BEGIN;
-
--- Find months with missing data (focus on 2023)
-\echo 'Months with missing or incomplete Bitcoin calculations in 2023:';
-WITH monthly_data AS (
-    WITH monthly_curtailment AS (
-      SELECT 
-        to_char(settlement_date, 'YYYY-MM') as year_month,
-        COUNT(*) as curtailment_count
-      FROM curtailment_records
-      WHERE EXTRACT(YEAR FROM settlement_date) = 2023
-      GROUP BY to_char(settlement_date, 'YYYY-MM')
+-- Function to reconcile a specific year
+CREATE OR REPLACE FUNCTION reconcile_year(
+    target_year TEXT,
+    difficulty_value NUMERIC,
+    batch_size INTEGER DEFAULT 5,
+    max_months INTEGER DEFAULT NULL
+) RETURNS void AS $$
+DECLARE
+    months_to_process TEXT[];
+    current_month TEXT;
+    months_processed INTEGER := 0;
+BEGIN
+    -- Get months to process for this year (ordered by priority)
+    WITH year_months AS (
+        SELECT DISTINCT to_char(settlement_date, 'YYYY-MM') as year_month
+        FROM curtailment_records
+        WHERE EXTRACT(YEAR FROM settlement_date) = target_year::INTEGER
     ),
-    monthly_bitcoin AS (
-      SELECT 
-        to_char(settlement_date, 'YYYY-MM') as year_month,
-        COUNT(*) as bitcoin_count
-      FROM historical_bitcoin_calculations
-      WHERE EXTRACT(YEAR FROM settlement_date) = 2023
-      GROUP BY to_char(settlement_date, 'YYYY-MM')
+    month_status AS (
+        SELECT 
+            ym.year_month,
+            COALESCE((
+                SELECT COUNT(*)
+                FROM historical_bitcoin_calculations
+                WHERE to_char(settlement_date, 'YYYY-MM') = ym.year_month
+            ), 0) as bitcoin_count,
+            COALESCE((
+                SELECT COUNT(*)
+                FROM curtailment_records
+                WHERE to_char(settlement_date, 'YYYY-MM') = ym.year_month
+            ), 0) as curtailment_count
+        FROM year_months ym
+    )
+    SELECT array_agg(year_month ORDER BY 
+        CASE 
+            WHEN bitcoin_count = 0 THEN 1                  -- Missing months first
+            WHEN bitcoin_count < curtailment_count * 3 THEN 2  -- Then incomplete months
+            ELSE 3                                              -- Then complete months
+        END,
+        curtailment_count DESC                               -- Highest curtailment count first
+    ) INTO months_to_process
+    FROM month_status
+    WHERE bitcoin_count < curtailment_count * 3;
+    
+    RAISE NOTICE 'Processing year % with % months to reconcile', target_year, array_length(months_to_process, 1);
+    
+    -- Process each month
+    FOREACH current_month IN ARRAY months_to_process
+    LOOP
+        -- Exit if we've reached the max months limit
+        IF max_months IS NOT NULL AND months_processed >= max_months THEN
+            EXIT;
+        END IF;
+        
+        RAISE NOTICE 'Reconciling month: %', current_month;
+        
+        -- Process this month
+        PERFORM reconcile_month(current_month, difficulty_value, batch_size);
+        
+        months_processed := months_processed + 1;
+    END LOOP;
+    
+    RAISE NOTICE 'Completed reconciliation of % for % months', target_year, months_processed;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to check yearly reconciliation status
+CREATE OR REPLACE FUNCTION check_year_status(target_year TEXT) RETURNS TABLE (
+    year TEXT,
+    status TEXT,
+    completion_percentage NUMERIC,
+    curtailment_count INTEGER,
+    bitcoin_count INTEGER,
+    expected_count INTEGER,
+    missing_count INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH year_curtailment AS (
+        SELECT 
+            COUNT(*) as curtailment_count
+        FROM curtailment_records
+        WHERE EXTRACT(YEAR FROM settlement_date) = target_year::INTEGER
+    ),
+    year_bitcoin AS (
+        SELECT 
+            COUNT(*) as bitcoin_count
+        FROM historical_bitcoin_calculations
+        WHERE EXTRACT(YEAR FROM settlement_date) = target_year::INTEGER
     )
     SELECT 
-      mc.year_month,
-      mc.curtailment_count,
-      COALESCE(mb.bitcoin_count, 0) as bitcoin_count,
-      mc.curtailment_count * 3 as expected_bitcoin_count,
-      CASE
-        WHEN COALESCE(mb.bitcoin_count, 0) = 0 THEN 'Missing'
-        WHEN COALESCE(mb.bitcoin_count, 0) < mc.curtailment_count * 3 THEN 'Incomplete'
-        ELSE 'Complete'
-      END as status,
-      ROUND(
-        COALESCE(mb.bitcoin_count, 0)::NUMERIC * 100 / 
-        (mc.curtailment_count * 3)::NUMERIC,
-        2
-      ) as completion_percentage
-    FROM monthly_curtailment mc
-    LEFT JOIN monthly_bitcoin mb ON mc.year_month = mb.year_month
-)
-SELECT * 
-FROM monthly_data 
-WHERE status IN ('Missing', 'Incomplete')
-ORDER BY 
-    CASE 
-        WHEN status = 'Missing' THEN 1
-        ELSE 2
-    END,
-    curtailment_count DESC;
-    
--- Process a few completely missing months in 2023 as a test
--- This would typically be expanded to process all missing months
+        target_year,
+        CASE
+            WHEN yc.curtailment_count * 3 = yb.bitcoin_count THEN 'Complete'
+            WHEN yb.bitcoin_count = 0 THEN 'Missing'
+            ELSE 'Incomplete'
+        END,
+        ROUND(
+            yb.bitcoin_count * 100.0 / (yc.curtailment_count * 3),
+            2
+        ),
+        yc.curtailment_count,
+        yb.bitcoin_count,
+        yc.curtailment_count * 3 as expected_count,
+        (yc.curtailment_count * 3) - yb.bitcoin_count as missing_count
+    FROM year_curtailment yc, year_bitcoin yb;
+END;
+$$ LANGUAGE plpgsql;
 
--- Set specific difficulty values for 2023 by month
-SET LOCAL reconciliation.difficulty_2023_02 = 37935772752142;
-SET LOCAL reconciliation.difficulty_2023_03 = 37935772752142;
+-- Create index to speed up reconciliation operations
+CREATE INDEX IF NOT EXISTS curtailment_settlement_date_idx ON curtailment_records(settlement_date);
+CREATE INDEX IF NOT EXISTS bitcoin_settlement_date_idx ON historical_bitcoin_calculations(settlement_date);
+CREATE INDEX IF NOT EXISTS bitcoin_settlement_date_model_idx ON historical_bitcoin_calculations(settlement_date, miner_model);
 
--- Process February 2023 (completely missing)
-\echo 'Processing February 2023 (limited to 5 days as a test)';
-SELECT reconcile_missing_month('2023-02', 37935772752142, 5, 5);
-SELECT * FROM get_month_status('2023-02');
+-- Add documentation on how to use this script
 
--- Process March 2023 (completely missing)
-\echo 'Processing March 2023 (limited to 5 days as a test)';
-SELECT reconcile_missing_month('2023-03', 37935772752142, 5, 5);
-SELECT * FROM get_month_status('2023-03');
+/*
+USAGE EXAMPLES:
 
--- Display progress log
-\echo 'Missing month reconciliation progress:';
-SELECT 
-    year_month,
-    curtailment_count,
-    initial_bitcoin_count,
-    final_bitcoin_count,
-    CASE 
-        WHEN final_bitcoin_count IS NOT NULL AND curtailment_count > 0 THEN
-            ROUND((final_bitcoin_count::NUMERIC / (curtailment_count * 3)) * 100, 2)
-        ELSE 0
-    END as completion_percentage,
-    processed_dates,
-    status,
-    start_time,
-    end_time,
-    CASE 
-        WHEN start_time IS NOT NULL AND end_time IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (end_time - start_time))::INTEGER
-        ELSE NULL
-    END as duration_seconds,
-    error_message
-FROM missing_month_progress
-ORDER BY year_month;
+1. Check status of a specific month:
+   SELECT * FROM check_month_status('2023-06');
 
--- Final validation query to check overall 2023 status
-\echo 'Overall 2023 reconciliation status:';
-WITH year_curtailment AS (
-    SELECT COUNT(*) as count
-    FROM curtailment_records 
-    WHERE EXTRACT(YEAR FROM settlement_date) = 2023
-),
-year_bitcoin AS (
-    SELECT COUNT(*) as count 
-    FROM historical_bitcoin_calculations
-    WHERE EXTRACT(YEAR FROM settlement_date) = 2023
-)
-SELECT 
-    yc.count as curtailment_count,
-    yb.count as bitcoin_count,
-    yc.count * 3 as expected_bitcoin_count,
-    ROUND((yb.count * 100.0) / (yc.count * 3), 2) as completion_percentage
-FROM year_curtailment yc, year_bitcoin yb;
+2. Check status of a specific year:
+   SELECT * FROM check_year_status('2023');
 
-COMMIT;
+3. Reconcile a specific month:
+   SELECT reconcile_month('2023-06', 37935772752142);
 
--- Cleanup
-DROP FUNCTION IF EXISTS reconcile_missing_month(TEXT, NUMERIC, INTEGER, INTEGER);
-DROP FUNCTION IF EXISTS get_month_status(TEXT);
+4. Reconcile a specific year (all months):
+   SELECT reconcile_year('2023', 37935772752142);
+
+5. View reconciliation progress:
+   SELECT * FROM reconciliation_progress ORDER BY start_time DESC;
+
+Difficulty values by year:
+- 2022: 25000000000000
+- 2023: 37935772752142
+- 2024: 68980189436404
+- 2025: 108105433845147
+*/
