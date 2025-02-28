@@ -25,7 +25,7 @@
  */
 
 import { db } from "./db";
-import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
+import { curtailmentRecords, historicalBitcoinCalculations } from "./db/schema";
 import { sql, eq, and } from "drizzle-orm";
 import pg from 'pg';
 import fs from 'fs';
@@ -257,7 +257,7 @@ async function getReconciliationStatus() {
     console.log(`Complete Dates: ${formatNumber(status.complete_dates)}`);
     console.log(`Partial Dates: ${formatNumber(status.partial_dates)}`);
     console.log(`Missing Dates: ${formatNumber(status.missing_dates)}`);
-    console.log(`Completion Rate: ${formatPercentage(status.complete_dates / status.curtailment_dates * 100)}%`);
+    console.log(`Completion Rate: ${formatPercentage(Number(status.complete_dates) / Number(status.curtailment_dates) * 100)}%`);
     
     return status;
   } catch (error) {
@@ -361,25 +361,33 @@ async function findDatesWithMissingCalculations(limit: number = 100) {
     
     console.log('\n=== Dates with Missing Calculations ===');
     result.rows.slice(0, 10).forEach((row, index) => {
-      console.log(`${index + 1}. ${row.date}: Missing ${row.missing_models.length > 0 ? row.missing_models.join(', ') : 'none'}, ` +
-                  `Periods: ${row.min_calculated_periods || 0}/${row.required_period_count} (${formatPercentage((row.min_calculated_periods || 0) / row.required_period_count * 100)})`);
+      const missingModels = Array.isArray(row.missing_models) ? row.missing_models : [];
+      const minPeriods = Number(row.min_calculated_periods || 0);
+      const requiredPeriods = Number(row.required_period_count || 0);
+      console.log(`${index + 1}. ${row.date}: Missing ${missingModels.length > 0 ? missingModels.join(', ') : 'none'}, ` +
+                  `Periods: ${minPeriods}/${requiredPeriods} (${formatPercentage(requiredPeriods > 0 ? minPeriods / requiredPeriods * 100 : 0)})`);
     });
     
     if (result.rows.length > 10) {
       console.log(`... and ${result.rows.length - 10} more dates`);
     }
     
-    return result.rows.map(row => ({
-      date: row.date,
-      curtailmentPeriods: row.curtailment_periods,
-      requiredPeriodCount: row.required_period_count,
-      farmCount: row.farm_count,
-      totalVolume: row.total_volume,
-      missingModels: row.missing_models,
-      minCalculatedPeriods: row.min_calculated_periods || 0,
-      maxCalculatedPeriods: row.max_calculated_periods || 0,
-      completionRate: formatPercentage((row.min_calculated_periods || 0) / row.required_period_count * 100)
-    }));
+    return result.rows.map(row => {
+      const minPeriods = Number(row.min_calculated_periods || 0);
+      const requiredPeriods = Number(row.required_period_count || 0);
+      
+      return {
+        date: row.date,
+        curtailmentPeriods: row.curtailment_periods,
+        requiredPeriodCount: requiredPeriods,
+        farmCount: row.farm_count,
+        totalVolume: row.total_volume,
+        missingModels: Array.isArray(row.missing_models) ? row.missing_models : [],
+        minCalculatedPeriods: minPeriods,
+        maxCalculatedPeriods: Number(row.max_calculated_periods || 0),
+        completionRate: formatPercentage(requiredPeriods > 0 ? minPeriods / requiredPeriods * 100 : 0)
+      };
+    });
   } catch (error) {
     log(`Error finding dates with missing calculations: ${error}`, 'error');
     throw error;
@@ -914,7 +922,7 @@ async function analyzeReconciliationStatus(): Promise<void> {
     console.log('\n=== Reconciliation Analysis ===');
     console.log(`Database connection: ${connectionStatus}`);
     console.log(`Long-running queries: ${longRunningQueries}`);
-    console.log(`Completion rate: ${formatPercentage(status.complete_dates / status.curtailment_dates * 100)}`);
+    console.log(`Completion rate: ${formatPercentage(Number(status.complete_dates) / Number(status.curtailment_dates) * 100)}`);
     
     console.log('\n=== Recommendations ===');
     
@@ -1030,7 +1038,7 @@ async function main() {
           break;
         }
         
-        const dates = missingDates.map(d => d.date);
+        const dates = missingDates.map(d => d.date as string);
         await processDates(dates, batchSize);
         break;
       }
