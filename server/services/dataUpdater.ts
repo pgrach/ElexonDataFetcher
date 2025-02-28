@@ -8,6 +8,7 @@ import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
 import { processSingleDay } from "./bitcoinService";
 import { reconcileDay } from "./historicalReconciliation";
+import { runDailyCheck } from "../../daily_reconciliation_check";
 
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const STARTUP_DELAY = 5000; // 5 second delay before starting data updates
@@ -185,6 +186,44 @@ export function startDataUpdateService() {
         }
       }
     }, 60 * 60 * 1000); // Every hour
+    
+    // Schedule daily reconciliation check at midnight
+    const setupDailyReconciliationCheck = () => {
+      const now = new Date();
+      const currentHour = now.getHours();
+      
+      // Calculate milliseconds until next midnight
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      const msUntilMidnight = midnight.getTime() - now.getTime();
+      
+      console.log(`Scheduling daily reconciliation check to run at midnight (in ${Math.round(msUntilMidnight / 3600000)} hours)`);
+      
+      // Schedule the first run
+      setTimeout(() => {
+        console.log("\n=== Running scheduled daily reconciliation check ===");
+        runDailyCheck()
+          .then(result => {
+            console.log("Daily reconciliation check completed:", {
+              datesChecked: result.dates.length,
+              missingDates: result.missingDates.length,
+              fixedDates: result.fixedDates.length,
+              status: result.status
+            });
+            
+            // Setup the next day's check
+            setupDailyReconciliationCheck();
+          })
+          .catch(error => {
+            console.error("Error during daily reconciliation check:", error);
+            // Still setup next check even if there was an error
+            setupDailyReconciliationCheck();
+          });
+      }, msUntilMidnight);
+    };
+    
+    // Start the daily reconciliation check scheduling
+    setupDailyReconciliationCheck();
 
     return intervalId;
   }, STARTUP_DELAY);
