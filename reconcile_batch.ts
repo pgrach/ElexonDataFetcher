@@ -9,8 +9,8 @@ import { auditAndFixBitcoinCalculations, reconcileDay } from "./server/services/
 
 // Configure the batch to process - change these dates for each batch
 const BATCH_DATES = [
-  '2023-12-22', // 4671 missing
   '2023-12-21', // 4329 missing
+  '2023-12-23', // 3258 missing
   '2023-12-17'  // 3258 missing
 ];
 
