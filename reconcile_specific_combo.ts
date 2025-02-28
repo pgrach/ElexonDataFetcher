@@ -92,13 +92,13 @@ async function reconcileSpecificCombo() {
     const difficulty = await getDifficultyData(TARGET_DATE);
     console.log(`Using difficulty: ${difficulty}`);
     
-    // Insert the record
+    // Insert the record - note: actual schema doesn't have curtailed_energy or lead_party_name
     const insertQuery = `
       INSERT INTO historical_bitcoin_calculations 
         (settlement_date, settlement_period, farm_id, miner_model, 
-         curtailed_energy, difficulty, bitcoin_mined, calculated_at, lead_party_name)
+         difficulty, bitcoin_mined, calculated_at)
       VALUES 
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id;
     `;
     
@@ -107,11 +107,9 @@ async function reconcileSpecificCombo() {
       TARGET_PERIOD, 
       TARGET_FARM, 
       TARGET_MODEL, 
-      volumeMWh.toString(), 
       difficulty.toString(), 
       "0", // Placeholder, will be updated in batch
-      new Date(),
-      lead_party_name || null
+      new Date()
     ]);
     
     if (insertResult && insertResult.rowCount && insertResult.rowCount > 0) {
@@ -122,7 +120,7 @@ async function reconcileSpecificCombo() {
     
     // Verify the insertion
     const verifyQuery = `
-      SELECT id, settlement_date, settlement_period, farm_id, miner_model, curtailed_energy, difficulty
+      SELECT id, settlement_date, settlement_period, farm_id, miner_model, difficulty, bitcoin_mined
       FROM historical_bitcoin_calculations
       WHERE settlement_date = $1
         AND settlement_period = $2
