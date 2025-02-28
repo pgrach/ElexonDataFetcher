@@ -44,6 +44,11 @@ async function getCurrentPeriod(): Promise<{ date: string; period: number }> {
   };
 }
 
+/**
+ * Updates latest data using the consolidated reconciliation system.
+ * This function checks and updates both curtailment records and Bitcoin calculations
+ * for the current date, using services from the historicalReconciliation module.
+ */
 async function updateLatestData(retryAttempt = 0) {
   if (isUpdating) {
     console.log("Update already in progress, skipping...");
@@ -60,25 +65,57 @@ async function updateLatestData(retryAttempt = 0) {
     console.log(`Service Running Since: ${serviceStartTime?.toISOString()}`);
     console.log(`Retry Attempt: ${retryAttempt}/${MAX_RETRY_ATTEMPTS}`);
 
-    // Instead of managing updates directly, use the reconciliation service
+    // Step 1: Check if the date needs processing
+    console.log(`Checking if ${date} needs reprocessing...`);
+    
+    // Get current daily summary for logging purposes
+    const dailySummaryCheck = await db
+      .select({
+        totalEnergy: sql<string>`SUM(ABS(volume::numeric))::text`,
+        totalPayment: sql<string>`SUM(payment::numeric)::text`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date));
+    
+    const currentSummary = {
+      energy: `${Number(dailySummaryCheck[0]?.totalEnergy || 0).toFixed(2)} MWh`,
+      payment: `£${Number(dailySummaryCheck[0]?.totalPayment || 0).toFixed(2)}`
+    };
+    
+    console.log(`Current daily summary for ${date}:`, currentSummary);
+
+    // Step 2: Use the reconciliation system to check and update if needed
+    // This consolidates curtailment data processing and Bitcoin calculation
     await reconcileDay(date);
 
-    // Verify the update was successful
-    const verificationCheck = await db
+    // Step 3: Verify the update was successful by checking both curtailment and Bitcoin data
+    const curtailmentCheck = await db
       .select({
         recordCount: sql<number>`COUNT(*)`,
         periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
+        farmCount: sql<number>`COUNT(DISTINCT farm_id)`,
         totalVolume: sql<string>`SUM(ABS(volume::numeric))`,
         totalPayment: sql<string>`SUM(payment::numeric)`
       })
       .from(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, date));
 
+    // Record update results
+    const updateResults = {
+      curtailment: {
+        records: curtailmentCheck[0]?.recordCount || 0,
+        periods: curtailmentCheck[0]?.periodCount || 0,
+        farms: curtailmentCheck[0]?.farmCount || 0,
+        volume: Number(curtailmentCheck[0]?.totalVolume || 0).toFixed(2),
+        payment: Number(curtailmentCheck[0]?.totalPayment || 0).toFixed(2)
+      }
+    };
+
     console.log(`\nVerification Check for ${date}:`, {
-      records: verificationCheck[0]?.recordCount || 0,
-      periods: verificationCheck[0]?.periodCount || 0,
-      volume: Number(verificationCheck[0]?.totalVolume || 0).toFixed(2),
-      payment: Number(verificationCheck[0]?.totalPayment || 0).toFixed(2)
+      records: updateResults.curtailment.records,
+      periods: updateResults.curtailment.periods,
+      volume: updateResults.curtailment.volume,
+      payment: updateResults.curtailment.payment
     });
 
     lastSuccessfulUpdate = new Date();
@@ -87,6 +124,8 @@ async function updateLatestData(retryAttempt = 0) {
     const duration = (Date.now() - startTime) / 1000;
     console.log(`\n=== Update Summary ===`);
     console.log(`Duration: ${duration.toFixed(1)}s`);
+
+    return updateResults;
 
   } catch (error) {
     console.error("Error updating latest data:", error);

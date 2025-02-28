@@ -58,12 +58,18 @@ async function processMissingDates() {
       
       // Process each date in the batch with detailed information
       const batchResults = await Promise.allSettled(
-        batch.map(async (dateInfo) => {
-          const { date, missingModels, requiredPeriodCount, minCalculatedPeriods } = dateInfo;
+        batch.map(async (dateInfo: any) => {
+          // Cast all properties to appropriate types to satisfy TypeScript
+          const date = String(dateInfo.date);
+          const missingModels = Array.isArray(dateInfo.missingModels) 
+            ? dateInfo.missingModels.map(String) 
+            : [];
+          const requiredPeriodCount = Number(dateInfo.requiredPeriodCount) || 0;
+          const minCalculatedPeriods = Number(dateInfo.minCalculatedPeriods) || 0;
           
           console.log(`\n- Processing Date: ${date}`);
           console.log(`  Status: ${3 - missingModels.length}/3 miner models, ` +
-                     `${minCalculatedPeriods || 0}/${requiredPeriodCount} periods processed`);
+                     `${minCalculatedPeriods}/${requiredPeriodCount} periods processed`);
           console.log(`  Missing models: ${missingModels.join(', ')}`);
           
           // Use the consolidated audit and fix function
@@ -77,23 +83,26 @@ async function processMissingDates() {
       // Track results
       batchResults.forEach((result, index) => {
         if (result.status === 'fulfilled') {
-          const dateInfo = result.value;
-          // Type assertion to help TypeScript understand the structure
-          const date = dateInfo.date as string;
-          const auditResult = dateInfo.result;
+          const dateInfo = result.value as { 
+            date: string; 
+            result: { 
+              success: boolean; 
+              message: string;
+            }
+          };
           
-          if (auditResult.success) {
-            results.success.push(date);
+          if (dateInfo.result.success) {
+            results.success.push(dateInfo.date);
           } else {
             results.failed.push({
-              date,
-              error: auditResult.message
+              date: dateInfo.date,
+              error: dateInfo.result.message
             });
           }
         } else {
           // If the promise was rejected, use the date from the original batch
-          const dateInfo = batch[index];
-          const date = dateInfo.date as string;
+          const dateInfo = batch[index] as any;
+          const date = String(dateInfo.date);
           
           results.failed.push({
             date,
