@@ -263,3 +263,14 @@ Note: If you encounter repeated timeouts, try smaller batch sizes
 [2025-02-28T16:25:03.978Z] [INFO] Processing batch 7/16
 [2025-02-28T16:25:03.978Z] [INFO] Processing date 2023-10-13 (Attempt 1/3)
 [2025-02-28T16:25:03.978Z] [INFO] Processing date 2023-10-14 (Attempt 1/3)
+[2025-02-28T16:27:45.635Z] [INFO] Starting efficient reconciliation tool with command: status
+[2025-02-28T16:27:45.636Z] [INFO] Checkpoint loaded. Resuming from 2023-10-12
+[2025-02-28T16:27:45.636Z] [WARNING] Found existing checkpoint. Run with 'reset' to start fresh, or 'resume' to continue.
+[2025-02-28T16:27:45.636Z] [INFO] Checking current reconciliation status...
+[2025-02-28T16:28:10.934Z] [INFO] Starting efficient reconciliation tool with command: reset
+[2025-02-28T16:28:10.935Z] [INFO] Checkpoint loaded. Resuming from 2023-10-12
+[2025-02-28T16:28:10.936Z] [INFO] Checkpoint reset
+[2025-02-28T16:28:10.936Z] [SUCCESS] Checkpoint and progress data reset successfully
+[2025-02-28T16:28:10.937Z] [INFO] Database connection pool closed
+[2025-02-28T16:28:10.937Z] [SUCCESS] 
+=== Efficient Reconciliation Tool Complete ===

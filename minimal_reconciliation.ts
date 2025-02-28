@@ -37,7 +37,7 @@ const pool = new pg.Pool({
 });
 
 // Logging utility
-function log(message: string, type: 'info' | 'error' | 'success' = 'info'): void {
+function log(message: string, type: 'info' | 'error' | 'success' | 'warning' = 'info'): void {
   const timestamp = new Date().toISOString();
   const formatted = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
   console.log(formatted);
@@ -541,7 +541,7 @@ async function spotFix(date: string, period: number, farmId: string): Promise<vo
     await sleep(1000);
   }
   
-  log(`Spot fix complete: ${success} successful, ${failed} failed`, success === 3 ? 'success' : 'warning');
+  log(`Spot fix complete: ${success} successful, ${failed} failed`, success === 3 ? 'success' : (failed > 0 ? 'warning' : 'info'));
 }
 
 /**

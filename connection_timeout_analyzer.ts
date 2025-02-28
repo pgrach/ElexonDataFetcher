@@ -172,7 +172,7 @@ async function testConcurrentConnections(count: number = 3): Promise<{
   errors: any[]
 }> {
   const start = performance.now();
-  const promises = [];
+  const promises: Promise<any>[] = [];
   
   for (let i = 0; i < count; i++) {
     promises.push(
