@@ -1,10 +1,10 @@
 # Bitcoin Calculation Reconciliation Tools Guide
 
-This guide provides an overview of the various reconciliation tools available in this project to help ensure 100% data integrity between `curtailment_records` and `historical_bitcoin_calculations` tables.
+This guide provides an overview of the core reconciliation tools available in this project to help ensure 100% data integrity between `curtailment_records` and `historical_bitcoin_calculations` tables.
 
 ## Tool Overview
 
-### Main Reconciliation Tools
+### Core Reconciliation Tools
 
 1. **simple_reconcile.ts**  
    A streamlined tool for checking and fixing reconciliation issues:
@@ -35,27 +35,31 @@ This guide provides an overview of the various reconciliation tools available in
    npx tsx daily_reconciliation_check.ts
    ```
 
-### Advanced Reconciliation Tools
+### Status and Monitoring Tools
 
-4. **comprehensive_reconcile.ts**  
-   A detailed reconciliation tool with deep verification:
-   ```bash 
-   npx tsx comprehensive_reconcile.ts status  # Check overall status
-   npx tsx comprehensive_reconcile.ts check-date YYYY-MM-DD # Check specific date
-   npx tsx comprehensive_reconcile.ts fix-date YYYY-MM-DD # Fix specific date
-   npx tsx comprehensive_reconcile.ts fix-all [limit] # Fix all missing with optional limit
-   npx tsx comprehensive_reconcile.ts fix-range START END # Fix date range
-   ```
-
-5. **optimized_reconcile.ts**  
-   Memory-efficient approach for handling large datasets:
+4. **check_reconciliation_status.ts**  
+   A simple utility to quickly check overall reconciliation status:
    ```bash
-   npx tsx optimized_reconcile.ts             # Run optimized reconciliation
-   npx tsx optimized_reconcile.ts month 2023-11 # Reconcile specific month
+   npx tsx check_reconciliation_status.ts
    ```
 
-6. **accelerated_reconcile.ts**  
-   A parallel processing system for high-performance reconciliation.
+5. **reconciliation_progress_report.ts**  
+   Generates detailed reports on reconciliation progress:
+   ```bash
+   npx tsx reconciliation_progress_report.ts
+   ```
+
+6. **reconciliation_progress_check.ts**  
+   Provides a quick overview of current reconciliation status:
+   ```bash
+   npx tsx reconciliation_progress_check.ts
+   ```
+
+7. **reconciliation_visualization.ts**  
+   Generates visual representations of reconciliation progress:
+   ```bash
+   npx tsx reconciliation_visualization.ts
+   ```
 
 ## Data Model
 
