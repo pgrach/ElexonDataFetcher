@@ -200,11 +200,26 @@ function isTimeoutError(error: any): boolean {
 /**
  * Get summary statistics about reconciliation status
  */
-async function getReconciliationStatus() {
+async function getReconciliationStatus(): Promise<{
+  overview: {
+    totalRecords: number;
+    totalCalculations: number;
+    missingCalculations: number;
+    completionPercentage: number;
+  };
+  dateStats: Array<{
+    date: string;
+    expected: number;
+    actual: number;
+    missing: number;
+    completionPercentage: number;
+  }>;
+}> {
   try {
     log('Fetching reconciliation status...', 'info');
     
-    const query = `
+    // Get overview data
+    const overviewQuery = `
       WITH curtailment_stats AS (
         SELECT 
           COUNT(DISTINCT settlement_date) as total_dates,
@@ -245,21 +260,89 @@ async function getReconciliationStatus() {
         curtailment_stats cs, bitcoin_stats bs
     `;
     
-    const result = await db.execute(sql.raw(query));
-    const status = result.rows[0];
+    const overviewResult = await db.execute(sql.raw(overviewQuery));
+    const overview = overviewResult.rows[0];
     
+    // Get date-specific statistics
+    const dateStatsQuery = `
+      WITH required_combinations AS (
+        SELECT 
+          settlement_date,
+          COUNT(DISTINCT (settlement_period || '-' || farm_id)) * 3 AS expected_count
+        FROM 
+          curtailment_records
+        GROUP BY 
+          settlement_date
+        ORDER BY 
+          settlement_date DESC
+      ),
+      actual_calculations AS (
+        SELECT 
+          settlement_date,
+          COUNT(*) AS actual_count
+        FROM 
+          historical_bitcoin_calculations
+        GROUP BY 
+          settlement_date
+      )
+      SELECT 
+        rc.settlement_date as date,
+        rc.expected_count as expected,
+        COALESCE(ac.actual_count, 0) AS actual,
+        rc.expected_count - COALESCE(ac.actual_count, 0) AS missing,
+        CASE 
+          WHEN rc.expected_count = 0 THEN 100
+          ELSE ROUND((COALESCE(ac.actual_count, 0)::numeric / rc.expected_count) * 100, 2)
+        END AS completion_percentage
+      FROM 
+        required_combinations rc
+      LEFT JOIN 
+        actual_calculations ac ON rc.settlement_date = ac.settlement_date
+      ORDER BY 
+        rc.settlement_date DESC
+      LIMIT 100
+    `;
+    
+    const dateStatsResult = await db.execute(sql.raw(dateStatsQuery));
+    const dateStats = dateStatsResult.rows;
+    
+    // Calculate total expected and actual calculations
+    const totalRecords = parseInt(String(overview.curtailment_records));
+    const totalCalculations = parseInt(String(overview.bitcoin_records));
+    const expectedCalculations = parseInt(String(overview.curtailment_records)) * 3 / 20; // Approximate based on period/farm combinations
+    const missingCalculations = Math.max(0, expectedCalculations - totalCalculations);
+    const completionPercentage = expectedCalculations > 0 
+      ? (totalCalculations / expectedCalculations) * 100 
+      : 100;
+    
+    // Log summary information
     console.log('\n=== Reconciliation Status ===');
-    console.log(`Curtailment Records: ${formatNumber(status.curtailment_records)}`);
-    console.log(`Bitcoin Calculations: ${formatNumber(status.bitcoin_records)}`);
-    console.log(`Total Curtailed Energy: ${formatNumber(status.total_curtailed_volume)} MWh`);
-    console.log(`Total Bitcoin Mined: ${formatNumber(status.total_bitcoin_mined)} BTC`);
+    console.log(`Curtailment Records: ${formatNumber(overview.curtailment_records)}`);
+    console.log(`Bitcoin Calculations: ${formatNumber(overview.bitcoin_records)}`);
+    console.log(`Total Curtailed Energy: ${formatNumber(overview.total_curtailed_volume)} MWh`);
+    console.log(`Total Bitcoin Mined: ${formatNumber(overview.total_bitcoin_mined)} BTC`);
     console.log('\n=== Date Completion ===');
-    console.log(`Complete Dates: ${formatNumber(status.complete_dates)}`);
-    console.log(`Partial Dates: ${formatNumber(status.partial_dates)}`);
-    console.log(`Missing Dates: ${formatNumber(status.missing_dates)}`);
-    console.log(`Completion Rate: ${formatPercentage(Number(status.complete_dates) / Number(status.curtailment_dates) * 100)}%`);
+    console.log(`Complete Dates: ${formatNumber(overview.complete_dates)}`);
+    console.log(`Partial Dates: ${formatNumber(overview.partial_dates)}`);
+    console.log(`Missing Dates: ${formatNumber(overview.missing_dates)}`);
+    console.log(`Completion Rate: ${formatPercentage(Number(overview.complete_dates) / Number(overview.curtailment_dates) * 100)}%`);
     
-    return status;
+    // Return data in the format expected by daily_reconciliation_check.ts
+    return {
+      overview: {
+        totalRecords,
+        totalCalculations,
+        missingCalculations,
+        completionPercentage
+      },
+      dateStats: dateStats.map(row => ({
+        date: String(row.date),
+        expected: Number(row.expected || 0),
+        actual: Number(row.actual || 0),
+        missing: Number(row.missing || 0),
+        completionPercentage: Number(row.completion_percentage || 0)
+      }))
+    };
   } catch (error) {
     log(`Error getting reconciliation status: ${error}`, 'error');
     throw error;
@@ -922,7 +1005,7 @@ async function analyzeReconciliationStatus(): Promise<void> {
     console.log('\n=== Reconciliation Analysis ===');
     console.log(`Database connection: ${connectionStatus}`);
     console.log(`Long-running queries: ${longRunningQueries}`);
-    console.log(`Completion rate: ${formatPercentage(Number(status.complete_dates) / Number(status.curtailment_dates) * 100)}`);
+    console.log(`Completion rate: ${formatPercentage(status.overview.completionPercentage)}`);
     
     console.log('\n=== Recommendations ===');
     

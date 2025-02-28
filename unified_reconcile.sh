@@ -1,132 +1,126 @@
 #!/bin/bash
 
-# Unified Reconciliation Runner
-# A simple wrapper around the unified_reconciliation.ts script
+# Unified Reconciliation System Shell Script
+# This script simplifies running the unified_reconciliation.ts module
 
-set -e  # Exit on error
-
-# Terminal colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Logging function
-log() {
-  echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] $1${NC}"
+# Display help message
+function show_help {
+  echo "Usage: ./unified_reconcile.sh [command] [options]"
+  echo ""
+  echo "Commands:"
+  echo "  status                 - Show current reconciliation status"
+  echo "  analyze                - Analyze missing calculations and detect issues"
+  echo "  reconcile [batchSize]  - Process all missing calculations with specified batch size"
+  echo "  date YYYY-MM-DD        - Process a specific date"
+  echo "  range YYYY-MM-DD YYYY-MM-DD [batchSize] - Process a date range"
+  echo "  critical DATE          - Process a problematic date with extra safeguards"
+  echo "  spot-fix DATE PERIOD FARM - Fix a specific date-period-farm combination"
+  echo "  help                   - Show this help message"
+  echo ""
+  echo "Examples:"
+  echo "  ./unified_reconcile.sh status"
+  echo "  ./unified_reconcile.sh date 2025-02-25"
+  echo "  ./unified_reconcile.sh reconcile 10"
+  echo "  ./unified_reconcile.sh range 2025-02-01 2025-02-28 5"
 }
 
-# Error logging function
-error() {
-  echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}" >&2
-}
-
-# Success logging function
-success() {
-  echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1${NC}"
-}
-
-# Warning logging function
-warning() {
-  echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"
-}
-
-# Check if npx and tsx are available
+# Check if npx is available
 if ! command -v npx &> /dev/null; then
-  error "npx not found. Please make sure Node.js is installed properly."
+  echo "Error: npx is required but not found. Please ensure Node.js is installed correctly."
   exit 1
 fi
 
-# Check that unified_reconciliation.ts exists
-if [ ! -f "unified_reconciliation.ts" ]; then
-  error "unified_reconciliation.ts not found. Please run this script from the project root directory."
+# Check if tsx is available via npx
+if ! npx tsx --version &> /dev/null; then
+  echo "Error: tsx is required but not found. It may not be installed."
+  echo "You can install it with: npm install -g tsx"
   exit 1
 fi
 
-# Print header
-echo -e "${BLUE}=========================================${NC}"
-echo -e "${BLUE}       Unified Reconciliation Tool      ${NC}"
-echo -e "${BLUE}=========================================${NC}"
-echo
+# Parse command line arguments
+if [ $# -eq 0 ] || [ "$1" == "help" ]; then
+  show_help
+  exit 0
+fi
 
-# Command handling
-case "$1" in
-  "status")
-    log "Checking reconciliation status..."
+command="$1"
+shift
+
+# Execute the command
+case "$command" in
+  status)
+    echo "Fetching reconciliation status..."
     npx tsx unified_reconciliation.ts status
     ;;
     
-  "analyze")
-    log "Analyzing reconciliation data..."
+  analyze)
+    echo "Analyzing reconciliation status..."
     npx tsx unified_reconciliation.ts analyze
     ;;
     
-  "reconcile")
-    BATCH_SIZE="${2:-10}"
-    log "Starting reconciliation with batch size $BATCH_SIZE..."
-    npx tsx unified_reconciliation.ts reconcile "$BATCH_SIZE"
+  reconcile)
+    batch_size=${1:-5}
+    echo "Running reconciliation with batch size $batch_size..."
+    npx tsx unified_reconciliation.ts reconcile "$batch_size"
     ;;
     
-  "date")
-    if [ -z "$2" ]; then
-      error "Date is required (format: YYYY-MM-DD)"
-      echo "Usage: $0 date YYYY-MM-DD"
+  date)
+    if [ -z "$1" ]; then
+      echo "Error: Date is required"
+      show_help
       exit 1
     fi
     
-    log "Processing date $2..."
-    npx tsx unified_reconciliation.ts date "$2"
+    echo "Processing date $1..."
+    npx tsx unified_reconciliation.ts date "$1"
     ;;
     
-  "range")
-    if [ -z "$2" ] || [ -z "$3" ]; then
-      error "Start and end dates are required (format: YYYY-MM-DD)"
-      echo "Usage: $0 range YYYY-MM-DD YYYY-MM-DD [batchSize]"
+  range)
+    if [ -z "$1" ] || [ -z "$2" ]; then
+      echo "Error: Start and end dates are required"
+      show_help
       exit 1
     fi
     
-    BATCH_SIZE="${4:-10}"
-    log "Processing date range from $2 to $3 with batch size $BATCH_SIZE..."
-    npx tsx unified_reconciliation.ts range "$2" "$3" "$BATCH_SIZE"
+    start_date="$1"
+    end_date="$2"
+    batch_size=${3:-5}
+    
+    echo "Processing date range from $start_date to $end_date with batch size $batch_size..."
+    npx tsx unified_reconciliation.ts range "$start_date" "$end_date" "$batch_size"
     ;;
     
-  "critical")
-    if [ -z "$2" ]; then
-      error "Date is required (format: YYYY-MM-DD)"
-      echo "Usage: $0 critical YYYY-MM-DD"
+  critical)
+    if [ -z "$1" ]; then
+      echo "Error: Date is required"
+      show_help
       exit 1
     fi
     
-    log "Processing critical date $2..."
-    npx tsx unified_reconciliation.ts critical "$2"
+    echo "Processing critical date $1 with extra safeguards..."
+    npx tsx unified_reconciliation.ts critical "$1"
     ;;
     
-  "spot-fix")
-    if [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ]; then
-      error "Date, period, and farm ID are required"
-      echo "Usage: $0 spot-fix YYYY-MM-DD PERIOD FARM_ID"
+  spot-fix)
+    if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ]; then
+      echo "Error: Date, period, and farm ID are required"
+      show_help
       exit 1
     fi
     
-    log "Spot fixing $2 period $3 farm $4..."
-    npx tsx unified_reconciliation.ts spot-fix "$2" "$3" "$4"
+    date="$1"
+    period="$2"
+    farm_id="$3"
+    
+    echo "Fixing specific date-period-farm combination: $date P$period $farm_id..."
+    npx tsx unified_reconciliation.ts spot-fix "$date" "$period" "$farm_id"
     ;;
     
-  "help"|*)
-    echo "Usage: $0 [command] [options]"
-    echo
-    echo "Commands:"
-    echo "  status                - Show current reconciliation status"
-    echo "  analyze               - Analyze missing calculations and detect issues"
-    echo "  reconcile [batchSize] - Process all missing calculations (default batch size: 10)"
-    echo "  date YYYY-MM-DD       - Process a specific date"
-    echo "  range YYYY-MM-DD YYYY-MM-DD [batchSize] - Process a date range"
-    echo "  critical DATE         - Process a problematic date with extra safeguards"
-    echo "  spot-fix DATE PERIOD FARM - Fix a specific date-period-farm combination"
-    echo "  help                  - Show this help message"
+  *)
+    echo "Error: Unknown command '$command'"
+    show_help
+    exit 1
     ;;
 esac
 
-echo
-success "Operation completed"
+exit 0

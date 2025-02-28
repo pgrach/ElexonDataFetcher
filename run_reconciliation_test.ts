@@ -52,10 +52,29 @@ async function runAnalysisTest() {
   const startTime = Date.now();
   const status = await getReconciliationStatus();
   
-  console.log(`\nStatus: ${formatPercentage(status.overview.completionPercentage)} complete`);
-  console.log(`Total Records: ${formatNumber(status.overview.totalRecords)}`);
-  console.log(`Total Calculations: ${formatNumber(status.overview.totalCalculations)}`);
-  console.log(`Missing Calculations: ${formatNumber(status.overview.missingCalculations)}`);
+  // Explicitly type the status to fix TypeScript issues
+  type ReconciliationStatus = {
+    overview: {
+      totalRecords: number;
+      totalCalculations: number;
+      missingCalculations: number;
+      completionPercentage: number;
+    };
+    dateStats: Array<{
+      date: string;
+      expected: number;
+      actual: number;
+      missing: number;
+      completionPercentage: number;
+    }>;
+  };
+  
+  const typedStatus = status as ReconciliationStatus;
+  
+  console.log(`\nStatus: ${formatPercentage(typedStatus.overview.completionPercentage)} complete`);
+  console.log(`Total Records: ${formatNumber(typedStatus.overview.totalRecords)}`);
+  console.log(`Total Calculations: ${formatNumber(typedStatus.overview.totalCalculations)}`);
+  console.log(`Missing Calculations: ${formatNumber(typedStatus.overview.missingCalculations)}`);
   console.log(`Time: ${formatElapsedTime(startTime)}`);
   
   // Find dates with missing calculations (limit to 5)
@@ -68,11 +87,14 @@ async function runAnalysisTest() {
   } else {
     console.log(`Found ${missingDates.length} dates with missing calculations:`);
     missingDates.forEach(date => {
-      const dateStats = status.dateStats.find(stat => stat.date === date);
+      // Extract date string from object if it's an object
+      const dateStr = typeof date === 'string' ? date : (date as any).date || '';
+      
+      const dateStats = typedStatus.dateStats.find(stat => stat.date === dateStr);
       if (dateStats) {
-        console.log(`- ${date}: ${dateStats.actual}/${dateStats.expected} (${formatPercentage(dateStats.completionPercentage)})`);
+        console.log(`- ${dateStr}: ${dateStats.actual}/${dateStats.expected} (${formatPercentage(dateStats.completionPercentage)})`);
       } else {
-        console.log(`- ${date}`);
+        console.log(`- ${dateStr}`);
       }
     });
   }
