@@ -317,33 +317,39 @@ async function getRecentDatesStatus(days: number = 7) {
   try {
     log(`Fetching status for the last ${days} days...`);
     
-    const result = await db.execute(sql`
-      WITH date_expected AS (
+    // Use direct client.query method from pg module to avoid parameter binding issues
+    const client = await pool.connect();
+    
+    try {
+      const query = `
+        WITH date_expected AS (
+          SELECT
+            settlement_date,
+            COUNT(*) AS expected
+          FROM curtailment_records
+          WHERE settlement_date >= CURRENT_DATE - INTERVAL '${days} days'
+          GROUP BY settlement_date
+        ),
+        date_actual AS (
+          SELECT
+            settlement_date,
+            COUNT(*) AS actual
+          FROM historical_bitcoin_calculations
+          WHERE settlement_date >= CURRENT_DATE - INTERVAL '${days} days'
+          GROUP BY settlement_date
+        )
         SELECT
-          date,
-          COUNT(*) AS expected
-        FROM curtailment_records
-        WHERE date >= CURRENT_DATE - INTERVAL '${days} days'
-        GROUP BY date
-      ),
-      date_actual AS (
-        SELECT
-          date,
-          COUNT(*) AS actual
-        FROM historical_bitcoin_calculations
-        WHERE date >= CURRENT_DATE - INTERVAL '${days} days'
-        GROUP BY date
-      )
-      SELECT
-        e.date,
-        e.expected,
-        COALESCE(a.actual, 0) AS actual,
-        e.expected - COALESCE(a.actual, 0) AS missing,
-        ROUND((COALESCE(a.actual, 0)::numeric / e.expected::numeric) * 100, 2) AS completion
-      FROM date_expected e
-      LEFT JOIN date_actual a ON e.date = a.date
-      ORDER BY e.date DESC
-    `);
+          e.settlement_date,
+          e.expected,
+          COALESCE(a.actual, 0) AS actual,
+          e.expected - COALESCE(a.actual, 0) AS missing,
+          ROUND((COALESCE(a.actual, 0)::numeric / e.expected::numeric) * 100, 2) AS completion
+        FROM date_expected e
+        LEFT JOIN date_actual a ON e.settlement_date = a.settlement_date
+        ORDER BY e.settlement_date DESC
+      `;
+      
+      const result = await client.query(query);
     
     log(`Status for the Last ${days} Days:`, 'info');
     const resultArray = safeResultArray(result);
@@ -356,7 +362,7 @@ async function getRecentDatesStatus(days: number = 7) {
     resultArray.forEach(row => {
       const completion = row.completion;
       const level = completion >= 95 ? 'success' : (completion >= 50 ? 'warning' : 'error');
-      log(`${format(new Date(row.date), 'yyyy-MM-dd')}: ${formatNumber(row.actual)} / ${formatNumber(row.expected)} (${formatPercentage(row.completion)})`, level);
+      log(`${format(new Date(row.settlement_date), 'yyyy-MM-dd')}: ${formatNumber(row.actual)} / ${formatNumber(row.expected)} (${formatPercentage(row.completion)})`, level);
     });
     
     return resultArray;
