@@ -1,50 +1,170 @@
--- Run a targeted test to verify the reconciliation process
-\i full_reconciliation_script.sql
+-- Quick Test Reconciliation Script for Bitcoin Mining Calculations
+-- This script processes 2023-10-15 with known curtailment records but missing Bitcoin calculations
 
--- Check current reconciliation status
-\echo '------ Current Reconciliation Status ------'
-SELECT jsonb_pretty(check_reconciliation_status());
-
--- Process a few test dates
-\echo '\n------ Process Test Date: 2023-01-15 ------'
-SELECT jsonb_pretty(process_single_date('2023-01-15', 37935772752142, 'TEST-2023-01-15'));
-
-\echo '\n------ Process Test Date: 2022-03-15 ------'
-SELECT jsonb_pretty(process_single_date('2022-03-15', 25000000000000, 'TEST-2022-03-15'));
-
-\echo '\n------ Process Test Date: 2025-02-28 ------'
-SELECT jsonb_pretty(process_single_date('2025-02-28', 108105433845147, 'TEST-2025-02-28'));
-
--- Check status after test dates
-\echo '\n------ Reconciliation Status After Test Dates ------'
-SELECT jsonb_pretty(check_reconciliation_status());
-
--- Process a test month with limited days (October 2023, 3 days)
-\echo '\n------ Process Test Month: 2023-10 (3 days) ------'
-SELECT jsonb_pretty(process_month('2023-10', 37935772752142, 3, 'TEST-2023-10'));
-
--- Process a test year with limited months (2023, 1 month, 2 days per month)
-\echo '\n------ Process Test Year: 2023 (1 month, 2 days) ------'
-SELECT jsonb_pretty(process_year('2023', 37935772752142, 1, 2, 'TEST-2023'));
-
--- Check tracking records
-\echo '\n------ Reconciliation Tracking Records ------'
+-- First, check the current reconciliation status
+WITH years AS (
+  SELECT DISTINCT EXTRACT(YEAR FROM settlement_date)::INTEGER as year
+  FROM curtailment_records
+  ORDER BY year
+),
+year_stats AS (
+  SELECT 
+    y.year,
+    (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as curtailment_count,
+    (SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as bitcoin_count,
+    (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) * 3 as expected_bitcoin_count
+  FROM years y
+)
 SELECT 
-  id, 
-  batch_id, 
-  year_value, 
-  year_month, 
-  process_date, 
-  curtailment_count, 
-  initial_bitcoin_count, 
-  final_bitcoin_count, 
-  records_added, 
-  status, 
-  EXTRACT(EPOCH FROM (process_end - process_start)) * 1000 as duration_ms
-FROM reconciliation_tracking
-ORDER BY process_start DESC
-LIMIT 10;
+  year,
+  curtailment_count,
+  bitcoin_count,
+  expected_bitcoin_count,
+  ROUND(bitcoin_count * 100.0 / NULLIF(expected_bitcoin_count, 0), 2) as completion_percentage,
+  expected_bitcoin_count - bitcoin_count as missing_records
+FROM year_stats
+ORDER BY completion_percentage ASC, year ASC;
 
--- Check final status
-\echo '\n------ Final Reconciliation Status ------'
-SELECT jsonb_pretty(check_reconciliation_status());
+-- Get detailed information about the selected test date
+SELECT 
+  '2023-10-15'::TEXT as date,
+  (SELECT COUNT(*) FROM curtailment_records WHERE settlement_date = '2023-10-15'::DATE) as curtailment_count,
+  (SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE settlement_date = '2023-10-15'::DATE) as bitcoin_count,
+  (SELECT COUNT(*) FROM curtailment_records WHERE settlement_date = '2023-10-15'::DATE) * 3 as expected_bitcoin_count,
+  ROUND((SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE settlement_date = '2023-10-15'::DATE) * 100.0 / 
+        ((SELECT COUNT(*) FROM curtailment_records WHERE settlement_date = '2023-10-15'::DATE) * 3), 2) as completion_percentage,
+  (SELECT COUNT(*) FROM curtailment_records WHERE settlement_date = '2023-10-15'::DATE) * 3 -
+  (SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE settlement_date = '2023-10-15'::DATE) as missing_records;
+
+-- Process specific date 2023-10-15
+DO $$
+DECLARE
+  difficulty_value NUMERIC := 37935772752142;  -- 2023 difficulty
+  curtailment_count INTEGER;
+  bitcoin_before INTEGER;
+  bitcoin_after INTEGER;
+BEGIN
+  -- Get original counts
+  SELECT COUNT(*) INTO curtailment_count FROM curtailment_records WHERE settlement_date = '2023-10-15';
+  SELECT COUNT(*) INTO bitcoin_before FROM historical_bitcoin_calculations WHERE settlement_date = '2023-10-15';
+  
+  -- Process the date
+  -- Create temporary table for this date
+  CREATE TEMPORARY TABLE temp_date_curtailment AS
+  SELECT 
+    settlement_date,
+    settlement_period,
+    farm_id,
+    SUM(volume) AS total_volume
+  FROM curtailment_records
+  WHERE settlement_date = '2023-10-15'
+  GROUP BY settlement_date, settlement_period, farm_id;
+  
+  -- Insert S19J_PRO calculations
+  INSERT INTO historical_bitcoin_calculations (
+    settlement_date, settlement_period, farm_id, miner_model,
+    bitcoin_mined, calculated_at, difficulty
+  )
+  SELECT
+    settlement_date,
+    settlement_period,
+    farm_id,
+    'S19J_PRO',
+    ABS(total_volume) * 0.00021 * (50000000000000 / difficulty_value),
+    NOW(),
+    difficulty_value
+  FROM temp_date_curtailment
+  WHERE ABS(total_volume) > 0
+  ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
+  DO UPDATE SET 
+    bitcoin_mined = EXCLUDED.bitcoin_mined,
+    calculated_at = EXCLUDED.calculated_at,
+    difficulty = EXCLUDED.difficulty;
+    
+  -- Insert S9 calculations
+  INSERT INTO historical_bitcoin_calculations (
+    settlement_date, settlement_period, farm_id, miner_model,
+    bitcoin_mined, calculated_at, difficulty
+  )
+  SELECT
+    settlement_date,
+    settlement_period,
+    farm_id,
+    'S9',
+    ABS(total_volume) * 0.00011 * (50000000000000 / difficulty_value),
+    NOW(),
+    difficulty_value
+  FROM temp_date_curtailment
+  WHERE ABS(total_volume) > 0
+  ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
+  DO UPDATE SET 
+    bitcoin_mined = EXCLUDED.bitcoin_mined,
+    calculated_at = EXCLUDED.calculated_at,
+    difficulty = EXCLUDED.difficulty;
+    
+  -- Insert M20S calculations
+  INSERT INTO historical_bitcoin_calculations (
+    settlement_date, settlement_period, farm_id, miner_model,
+    bitcoin_mined, calculated_at, difficulty
+  )
+  SELECT
+    settlement_date,
+    settlement_period,
+    farm_id,
+    'M20S',
+    ABS(total_volume) * 0.00016 * (50000000000000 / difficulty_value),
+    NOW(),
+    difficulty_value
+  FROM temp_date_curtailment
+  WHERE ABS(total_volume) > 0
+  ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
+  DO UPDATE SET 
+    bitcoin_mined = EXCLUDED.bitcoin_mined,
+    calculated_at = EXCLUDED.calculated_at,
+    difficulty = EXCLUDED.difficulty;
+  
+  -- Drop temporary table
+  DROP TABLE temp_date_curtailment;
+  
+  -- Get final Bitcoin count
+  SELECT COUNT(*) INTO bitcoin_after FROM historical_bitcoin_calculations WHERE settlement_date = '2023-10-15';
+  
+  -- Report results
+  RAISE NOTICE 'Processed date 2023-10-15: % curtailment records, % Bitcoin calculations before, % after, added %',
+    curtailment_count, bitcoin_before, bitcoin_after, bitcoin_after - bitcoin_before;
+END $$;
+
+-- Now check the status again for verification
+WITH years AS (
+  SELECT DISTINCT EXTRACT(YEAR FROM settlement_date)::INTEGER as year
+  FROM curtailment_records
+  ORDER BY year
+),
+year_stats AS (
+  SELECT 
+    y.year,
+    (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as curtailment_count,
+    (SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as bitcoin_count,
+    (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) * 3 as expected_bitcoin_count
+  FROM years y
+)
+SELECT 
+  year,
+  curtailment_count,
+  bitcoin_count,
+  expected_bitcoin_count,
+  ROUND(bitcoin_count * 100.0 / NULLIF(expected_bitcoin_count, 0), 2) as completion_percentage,
+  expected_bitcoin_count - bitcoin_count as missing_records
+FROM year_stats
+ORDER BY completion_percentage ASC, year ASC;
+
+-- Get detailed information about the selected test date after processing
+SELECT 
+  '2023-10-15' as date,
+  (SELECT COUNT(*) FROM curtailment_records WHERE settlement_date = '2023-10-15') as curtailment_count,
+  (SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE settlement_date = '2023-10-15') as bitcoin_count,
+  (SELECT COUNT(*) FROM curtailment_records WHERE settlement_date = '2023-10-15') * 3 as expected_bitcoin_count,
+  ROUND((SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE settlement_date = '2023-10-15') * 100.0 / 
+        (SELECT COUNT(*) FROM curtailment_records WHERE settlement_date = '2023-10-15' * 3), 2) as completion_percentage,
+  (SELECT COUNT(*) FROM curtailment_records WHERE settlement_date = '2023-10-15') * 3 -
+  (SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE settlement_date = '2023-10-15') as missing_records;

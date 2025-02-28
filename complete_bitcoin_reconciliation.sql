@@ -1,552 +1,500 @@
--- Complete Bitcoin Reconciliation Implementation
--- This script implements a single-file approach for complete reconciliation
+-- Complete Bitcoin Reconciliation Solution
+-- This script provides a comprehensive solution for reconciling Bitcoin calculations 
+-- across all years with detailed tracking and error handling
 
--- Create temporary table for progress tracking
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_tables WHERE tablename = 'reconciliation_progress') THEN
-    CREATE TABLE reconciliation_progress (
-      id SERIAL PRIMARY KEY,
-      run_date TIMESTAMP DEFAULT NOW(),
-      year_month TEXT,
-      target_date DATE,
-      curtailment_count INTEGER,
-      bitcoin_before INTEGER,
-      bitcoin_after INTEGER,
-      records_added INTEGER,
-      status TEXT,
-      duration_ms INTEGER
-    );
-  END IF;
-END $$;
+-- First, create a table to track reconciliation progress if it doesn't exist
+CREATE TABLE IF NOT EXISTS reconciliation_progress (
+  id SERIAL PRIMARY KEY,
+  batch_id TEXT UNIQUE NOT NULL,
+  process_start TIMESTAMP DEFAULT NOW(),
+  process_end TIMESTAMP,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  target_dates INTEGER,
+  dates_processed INTEGER DEFAULT 0,
+  records_processed INTEGER DEFAULT 0,
+  bitcoin_added INTEGER DEFAULT 0,
+  difficulty NUMERIC,
+  status TEXT DEFAULT 'In Progress',
+  error_message TEXT
+);
 
--- Main function to reconcile a specific date
-CREATE OR REPLACE FUNCTION reconcile_single_date(
-  target_date DATE,
-  difficulty_value NUMERIC
-) RETURNS TABLE (
-  date DATE, 
-  curtailment_count INTEGER,
-  bitcoin_before INTEGER,
-  bitcoin_after INTEGER,
-  records_added INTEGER,
-  status TEXT
-) AS $$
+-- Create a table to store date-level progress details if it doesn't exist
+CREATE TABLE IF NOT EXISTS reconciliation_date_details (
+  id SERIAL PRIMARY KEY,
+  batch_id TEXT REFERENCES reconciliation_progress(batch_id),
+  date_processed DATE NOT NULL,
+  curtailment_count INTEGER NOT NULL,
+  bitcoin_before INTEGER NOT NULL,
+  bitcoin_after INTEGER NOT NULL,
+  expected_count INTEGER NOT NULL,
+  duration_ms NUMERIC,
+  status TEXT NOT NULL,
+  error_message TEXT,
+  processed_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(batch_id, date_processed)
+);
+
+-- Function for processing a single date
+CREATE OR REPLACE FUNCTION process_single_date(
+  date_to_process DATE,
+  difficulty_value NUMERIC DEFAULT 108105433845147,
+  batch_id TEXT DEFAULT NULL
+) RETURNS JSONB AS $$
 DECLARE
-  start_time TIMESTAMP;
-  end_time TIMESTAMP;
   curtailment_count INTEGER;
   bitcoin_before INTEGER;
   bitcoin_after INTEGER;
-  records_added INTEGER;
-  execution_status TEXT := 'Success';
+  start_time TIMESTAMP;
+  end_time TIMESTAMP;
+  result_json JSONB;
+  status TEXT := 'Success';
+  error_msg TEXT := NULL;
 BEGIN
-  -- Record start time
-  start_time := clock_timestamp();
+  start_time := NOW();
   
-  -- Get initial counts
+  -- Count records for this date
   SELECT COUNT(*) INTO curtailment_count
   FROM curtailment_records
-  WHERE settlement_date = target_date;
+  WHERE settlement_date = date_to_process;
   
+  -- Get initial Bitcoin count
   SELECT COUNT(*) INTO bitcoin_before
   FROM historical_bitcoin_calculations
-  WHERE settlement_date = target_date;
+  WHERE settlement_date = date_to_process;
   
-  -- Begin transaction
   BEGIN
-    -- Process each curtailment record
-    FOR curt_rec IN 
-      SELECT 
-        settlement_date,
-        settlement_period,
-        farm_id,
-        SUM(volume) AS total_volume
-      FROM curtailment_records
-      WHERE settlement_date = target_date
-      GROUP BY settlement_date, settlement_period, farm_id
-    LOOP
-      -- Skip zero volume records
-      IF ABS(curt_rec.total_volume) > 0 THEN
-        -- Insert S19J_PRO calculation
-        INSERT INTO historical_bitcoin_calculations (
-          settlement_date, settlement_period, farm_id, miner_model,
-          bitcoin_mined, calculated_at, difficulty
-        )
-        VALUES (
-          curt_rec.settlement_date,
-          curt_rec.settlement_period,
-          curt_rec.farm_id,
-          'S19J_PRO',
-          ABS(curt_rec.total_volume) * 0.00021 * (50000000000000 / difficulty_value),
-          NOW(),
-          difficulty_value
-        )
-        ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
-        DO UPDATE SET 
-          bitcoin_mined = EXCLUDED.bitcoin_mined,
-          calculated_at = EXCLUDED.calculated_at,
-          difficulty = EXCLUDED.difficulty;
-          
-        -- Insert S9 calculation
-        INSERT INTO historical_bitcoin_calculations (
-          settlement_date, settlement_period, farm_id, miner_model,
-          bitcoin_mined, calculated_at, difficulty
-        )
-        VALUES (
-          curt_rec.settlement_date,
-          curt_rec.settlement_period,
-          curt_rec.farm_id,
-          'S9',
-          ABS(curt_rec.total_volume) * 0.00011 * (50000000000000 / difficulty_value),
-          NOW(),
-          difficulty_value
-        )
-        ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
-        DO UPDATE SET 
-          bitcoin_mined = EXCLUDED.bitcoin_mined,
-          calculated_at = EXCLUDED.calculated_at,
-          difficulty = EXCLUDED.difficulty;
-          
-        -- Insert M20S calculation
-        INSERT INTO historical_bitcoin_calculations (
-          settlement_date, settlement_period, farm_id, miner_model,
-          bitcoin_mined, calculated_at, difficulty
-        )
-        VALUES (
-          curt_rec.settlement_date,
-          curt_rec.settlement_period,
-          curt_rec.farm_id,
-          'M20S',
-          ABS(curt_rec.total_volume) * 0.00016 * (50000000000000 / difficulty_value),
-          NOW(),
-          difficulty_value
-        )
-        ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
-        DO UPDATE SET 
-          bitcoin_mined = EXCLUDED.bitcoin_mined,
-          calculated_at = EXCLUDED.calculated_at,
-          difficulty = EXCLUDED.difficulty;
-      END IF;
-    END LOOP;
+    -- Process the date
+    -- Create temporary table for this date
+    CREATE TEMPORARY TABLE IF NOT EXISTS temp_date_curtailment AS
+    SELECT 
+      settlement_date,
+      settlement_period,
+      farm_id,
+      SUM(volume) AS total_volume
+    FROM curtailment_records
+    WHERE settlement_date = date_to_process
+    GROUP BY settlement_date, settlement_period, farm_id;
     
-    -- Get final count
-    SELECT COUNT(*) INTO bitcoin_after
-    FROM historical_bitcoin_calculations
-    WHERE settlement_date = target_date;
+    -- Insert S19J_PRO calculations
+    INSERT INTO historical_bitcoin_calculations (
+      settlement_date, settlement_period, farm_id, miner_model,
+      bitcoin_mined, calculated_at, difficulty
+    )
+    SELECT
+      settlement_date,
+      settlement_period,
+      farm_id,
+      'S19J_PRO',
+      ABS(total_volume) * 0.00021 * (50000000000000 / difficulty_value),
+      NOW(),
+      difficulty_value
+    FROM temp_date_curtailment
+    WHERE ABS(total_volume) > 0
+    ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
+    DO UPDATE SET 
+      bitcoin_mined = EXCLUDED.bitcoin_mined,
+      calculated_at = EXCLUDED.calculated_at,
+      difficulty = EXCLUDED.difficulty;
+      
+    -- Insert S9 calculations
+    INSERT INTO historical_bitcoin_calculations (
+      settlement_date, settlement_period, farm_id, miner_model,
+      bitcoin_mined, calculated_at, difficulty
+    )
+    SELECT
+      settlement_date,
+      settlement_period,
+      farm_id,
+      'S9',
+      ABS(total_volume) * 0.00011 * (50000000000000 / difficulty_value),
+      NOW(),
+      difficulty_value
+    FROM temp_date_curtailment
+    WHERE ABS(total_volume) > 0
+    ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
+    DO UPDATE SET 
+      bitcoin_mined = EXCLUDED.bitcoin_mined,
+      calculated_at = EXCLUDED.calculated_at,
+      difficulty = EXCLUDED.difficulty;
+      
+    -- Insert M20S calculations
+    INSERT INTO historical_bitcoin_calculations (
+      settlement_date, settlement_period, farm_id, miner_model,
+      bitcoin_mined, calculated_at, difficulty
+    )
+    SELECT
+      settlement_date,
+      settlement_period,
+      farm_id,
+      'M20S',
+      ABS(total_volume) * 0.00016 * (50000000000000 / difficulty_value),
+      NOW(),
+      difficulty_value
+    FROM temp_date_curtailment
+    WHERE ABS(total_volume) > 0
+    ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
+    DO UPDATE SET 
+      bitcoin_mined = EXCLUDED.bitcoin_mined,
+      calculated_at = EXCLUDED.calculated_at,
+      difficulty = EXCLUDED.difficulty;
     
-    records_added := bitcoin_after - bitcoin_before;
-    
-    -- Record end time
-    end_time := clock_timestamp();
-    
-    -- Record progress in tracking table
-    INSERT INTO reconciliation_progress (
-      year_month, 
-      target_date, 
-      curtailment_count, 
-      bitcoin_before, 
-      bitcoin_after, 
-      records_added, 
-      status, 
-      duration_ms
-    ) VALUES (
-      to_char(target_date, 'YYYY-MM'),
-      target_date,
-      curtailment_count,
-      bitcoin_before,
-      bitcoin_after,
-      records_added,
-      execution_status,
-      EXTRACT(EPOCH FROM (end_time - start_time)) * 1000
-    );
-    
+    -- Drop temporary table
+    DROP TABLE IF EXISTS temp_date_curtailment;
+  
   EXCEPTION WHEN OTHERS THEN
-    execution_status := 'Error: ' || SQLERRM;
-    
-    -- Record failed attempt
-    INSERT INTO reconciliation_progress (
-      year_month, 
-      target_date, 
-      curtailment_count, 
-      bitcoin_before, 
-      bitcoin_after, 
-      records_added, 
-      status, 
-      duration_ms
-    ) VALUES (
-      to_char(target_date, 'YYYY-MM'),
-      target_date,
-      curtailment_count,
-      bitcoin_before,
-      0,
-      0,
-      execution_status,
-      EXTRACT(EPOCH FROM (clock_timestamp() - start_time)) * 1000
-    );
+    -- Capture error information
+    status := 'Error';
+    error_msg := SQLERRM;
+    -- Clean up in case of error
+    DROP TABLE IF EXISTS temp_date_curtailment;
   END;
   
-  RETURN QUERY SELECT 
-    target_date, 
-    curtailment_count, 
-    bitcoin_before, 
-    bitcoin_after, 
-    records_added, 
-    execution_status;
+  -- Get final Bitcoin count
+  SELECT COUNT(*) INTO bitcoin_after
+  FROM historical_bitcoin_calculations
+  WHERE settlement_date = date_to_process;
+  
+  end_time := NOW();
+  
+  -- Log the date processing details if batch_id is provided
+  IF batch_id IS NOT NULL THEN
+    INSERT INTO reconciliation_date_details (
+      batch_id, date_processed, curtailment_count, bitcoin_before,
+      bitcoin_after, expected_count, duration_ms, status, error_message
+    ) VALUES (
+      batch_id, 
+      date_to_process, 
+      curtailment_count, 
+      bitcoin_before, 
+      bitcoin_after, 
+      curtailment_count * 3, 
+      EXTRACT(EPOCH FROM (end_time - start_time)) * 1000,
+      status,
+      error_msg
+    ) ON CONFLICT (batch_id, date_processed) 
+    DO UPDATE SET 
+      bitcoin_after = EXCLUDED.bitcoin_after,
+      duration_ms = EXCLUDED.duration_ms,
+      status = EXCLUDED.status,
+      error_message = EXCLUDED.error_message;
+  END IF;
+  
+  -- Build result JSON
+  result_json := jsonb_build_object(
+    'date', date_to_process,
+    'curtailment_count', curtailment_count,
+    'bitcoin_before', bitcoin_before,
+    'bitcoin_after', bitcoin_after,
+    'bitcoin_added', bitcoin_after - bitcoin_before,
+    'expected_count', curtailment_count * 3,
+    'completion_percentage', CASE WHEN curtailment_count = 0 THEN 100.0 
+                              ELSE ROUND((bitcoin_after * 100.0) / (curtailment_count * 3), 2) END,
+    'duration_ms', EXTRACT(EPOCH FROM (end_time - start_time)) * 1000,
+    'status', status,
+    'error', error_msg
+  );
+  
+  RETURN result_json;
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to reconcile a month
-CREATE OR REPLACE FUNCTION reconcile_month(
-  year_month TEXT,
+-- Function for processing all dates within a year-month
+CREATE OR REPLACE FUNCTION process_month_reconciliation(
+  target_year INTEGER,
+  target_month INTEGER,
   difficulty_value NUMERIC,
-  limit_days INTEGER DEFAULT NULL
-) RETURNS TABLE (
-  month TEXT,
-  total_curtailment INTEGER,
-  total_bitcoin_before INTEGER,
-  total_bitcoin_after INTEGER,
-  total_added INTEGER,
-  days_processed INTEGER,
-  status TEXT
-) AS $$
+  max_dates INTEGER DEFAULT NULL
+) RETURNS JSONB AS $$
 DECLARE
-  year_part INTEGER;
-  month_part INTEGER;
+  batch_id TEXT;
   start_date DATE;
   end_date DATE;
   current_date DATE;
-  days_processed INTEGER := 0;
-  total_curtailment INTEGER := 0;
-  total_bitcoin_before INTEGER := 0;
-  total_bitcoin_after INTEGER := 0;
-  total_added INTEGER := 0;
-  execution_status TEXT := 'Success';
-  result_record RECORD;
+  dates_to_process RECORD[];
+  dates_processed INTEGER := 0;
+  records_processed INTEGER := 0;
+  bitcoin_before INTEGER := 0;
+  bitcoin_after INTEGER := 0;
+  batch_status TEXT := 'Success';
+  error_message TEXT := NULL;
+  result_json JSONB;
+  date_result JSONB;
+  total_dates INTEGER;
 BEGIN
-  -- Parse year-month
-  year_part := CAST(SPLIT_PART(year_month, '-', 1) AS INTEGER);
-  month_part := CAST(SPLIT_PART(year_month, '-', 2) AS INTEGER);
+  -- Generate batch ID
+  batch_id := 'BATCH-' || target_year || '-' || LPAD(target_month::TEXT, 2, '0') || '-' || TO_CHAR(NOW(), 'YYYYMMDD-HH24MISS');
   
   -- Calculate date range
-  start_date := make_date(year_part, month_part, 1);
+  start_date := make_date(target_year, target_month, 1);
   end_date := (start_date + INTERVAL '1 month')::DATE - INTERVAL '1 day';
   
-  -- Get dates with curtailment records
-  FOR current_date IN
-    SELECT DISTINCT settlement_date
-    FROM curtailment_records
-    WHERE 
-      settlement_date >= start_date AND 
-      settlement_date <= end_date
-    ORDER BY
-      settlement_date
-  LOOP
-    -- Exit if we've reached the limit
-    IF limit_days IS NOT NULL AND days_processed >= limit_days THEN
-      EXIT;
-    END IF;
-    
-    -- Process this date
-    SELECT * FROM reconcile_single_date(current_date, difficulty_value) INTO result_record;
-    
-    -- Accumulate totals
-    total_curtailment := total_curtailment + result_record.curtailment_count;
-    total_bitcoin_before := total_bitcoin_before + result_record.bitcoin_before;
-    total_bitcoin_after := total_bitcoin_after + result_record.bitcoin_after;
-    total_added := total_added + result_record.records_added;
-    days_processed := days_processed + 1;
-    
-    -- If any date fails, mark the month as failed but continue processing
-    IF result_record.status != 'Success' THEN
-      execution_status := 'Partial: Error on ' || current_date;
-    END IF;
-    
-    -- Commit after each date
-    COMMIT;
-  END LOOP;
-  
-  RETURN QUERY SELECT 
-    year_month, 
-    total_curtailment, 
-    total_bitcoin_before, 
-    total_bitcoin_after, 
-    total_added, 
-    days_processed, 
-    execution_status;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to reconcile a year
-CREATE OR REPLACE FUNCTION reconcile_year(
-  year_value TEXT,
-  difficulty_value NUMERIC,
-  max_months INTEGER DEFAULT NULL,
-  days_per_month INTEGER DEFAULT NULL
-) RETURNS TABLE (
-  year TEXT,
-  months_processed INTEGER,
-  total_curtailment INTEGER,
-  total_bitcoin_before INTEGER,
-  total_bitcoin_after INTEGER,
-  total_added INTEGER,
-  status TEXT
-) AS $$
-DECLARE
-  months_to_process TEXT[];
-  current_month TEXT;
-  months_processed INTEGER := 0;
-  total_curtailment INTEGER := 0;
-  total_bitcoin_before INTEGER := 0;
-  total_bitcoin_after INTEGER := 0;
-  total_added INTEGER := 0;
-  execution_status TEXT := 'Success';
-  result_record RECORD;
-BEGIN
-  -- Get months that need processing
-  WITH months_data AS (
-    SELECT DISTINCT to_char(settlement_date, 'YYYY-MM') as year_month
-    FROM curtailment_records
-    WHERE EXTRACT(YEAR FROM settlement_date) = year_value::INTEGER
-  ),
-  month_status AS (
+  -- Find dates that need processing
+  CREATE TEMPORARY TABLE dates_needing_processing AS
+  WITH date_stats AS (
     SELECT 
-      md.year_month,
-      (SELECT COUNT(*) FROM curtailment_records 
-       WHERE to_char(settlement_date, 'YYYY-MM') = md.year_month) as curtailment_count,
-      (SELECT COUNT(*) FROM historical_bitcoin_calculations 
-       WHERE to_char(settlement_date, 'YYYY-MM') = md.year_month) as bitcoin_count
-    FROM months_data md
+      c.settlement_date,
+      COUNT(DISTINCT c.id) as curtailment_count,
+      COUNT(DISTINCT h.id) as bitcoin_count
+    FROM 
+      curtailment_records c
+      LEFT JOIN historical_bitcoin_calculations h ON 
+        c.settlement_date = h.settlement_date
+    WHERE 
+      c.settlement_date >= start_date AND
+      c.settlement_date <= end_date
+    GROUP BY 
+      c.settlement_date
   )
-  SELECT array_agg(year_month ORDER BY 
-      CASE 
-        WHEN bitcoin_count = 0 THEN 1                     -- Missing months first
-        WHEN bitcoin_count < curtailment_count * 3 THEN 2 -- Then incomplete months
-        ELSE 3                                           -- Then complete months (unlikely)
-      END,
-      curtailment_count DESC                            -- Highest volume first
-  ) INTO months_to_process
-  FROM month_status
-  WHERE bitcoin_count < curtailment_count * 3;
+  SELECT 
+    settlement_date,
+    curtailment_count,
+    bitcoin_count,
+    curtailment_count * 3 as expected_bitcoin_count,
+    (bitcoin_count * 100.0 / NULLIF(curtailment_count * 3, 0)) as completion_percentage
+  FROM 
+    date_stats
+  WHERE 
+    bitcoin_count < curtailment_count * 3
+  ORDER BY 
+    curtailment_count DESC, 
+    settlement_date ASC;
   
-  -- Process each month in order
-  FOREACH current_month IN ARRAY months_to_process
+  -- Count total dates to process
+  SELECT COUNT(*) INTO total_dates FROM dates_needing_processing;
+  
+  -- Record the start of processing
+  INSERT INTO reconciliation_progress (
+    batch_id, year, month, target_dates, difficulty
+  )
+  VALUES (
+    batch_id, target_year, target_month, total_dates, difficulty_value
+  );
+  
+  -- Get initial Bitcoin calculation count
+  SELECT COUNT(*) INTO bitcoin_before
+  FROM historical_bitcoin_calculations
+  WHERE 
+    EXTRACT(YEAR FROM settlement_date) = target_year AND
+    EXTRACT(MONTH FROM settlement_date) = target_month;
+  
+  -- Process each date that needs reconciliation
+  FOR current_date IN 
+    SELECT settlement_date FROM dates_needing_processing
+    ORDER BY curtailment_count DESC
+    LIMIT max_dates
   LOOP
-    -- Exit if we've reached the limit
-    IF max_months IS NOT NULL AND months_processed >= max_months THEN
-      EXIT;
+    -- Process this date and track the result
+    date_result := process_single_date(current_date, difficulty_value, batch_id);
+    
+    -- Update counters
+    dates_processed := dates_processed + 1;
+    records_processed := records_processed + (date_result->>'curtailment_count')::INTEGER;
+    
+    -- Update progress
+    UPDATE reconciliation_progress
+    SET 
+      dates_processed = dates_processed,
+      records_processed = records_processed
+    WHERE batch_id = batch_id;
+    
+    -- Check for errors
+    IF date_result->>'status' = 'Error' THEN
+      batch_status := 'Partial';
+      error_message := 'Errors occurred during processing. Check date_details for specifics.';
     END IF;
     
-    -- Process this month
-    SELECT * FROM reconcile_month(current_month, difficulty_value, days_per_month) INTO result_record;
+    -- Commit after each date to save progress
+    COMMIT;
     
-    -- Accumulate totals
-    total_curtailment := total_curtailment + result_record.total_curtailment;
-    total_bitcoin_before := total_bitcoin_before + result_record.total_bitcoin_before;
-    total_bitcoin_after := total_bitcoin_after + result_record.total_bitcoin_after;
-    total_added := total_added + result_record.total_added;
-    months_processed := months_processed + 1;
-    
-    -- If any month fails, mark the year as degraded but continue
-    IF result_record.status != 'Success' THEN
-      execution_status := 'Degraded: Issues with ' || current_month;
-    END IF;
+    -- Start a new transaction
+    BEGIN;
   END LOOP;
   
-  RETURN QUERY SELECT 
-    year_value, 
-    months_processed, 
-    total_curtailment, 
-    total_bitcoin_before, 
-    total_bitcoin_after, 
-    total_added, 
-    execution_status;
+  -- Get final Bitcoin calculation count
+  SELECT COUNT(*) INTO bitcoin_after
+  FROM historical_bitcoin_calculations
+  WHERE 
+    EXTRACT(YEAR FROM settlement_date) = target_year AND
+    EXTRACT(MONTH FROM settlement_date) = target_month;
+  
+  -- Update progress completion
+  UPDATE reconciliation_progress
+  SET 
+    process_end = NOW(),
+    bitcoin_added = bitcoin_after - bitcoin_before,
+    status = batch_status,
+    error_message = error_message
+  WHERE batch_id = batch_id;
+  
+  -- Build result JSON
+  result_json := jsonb_build_object(
+    'batch_id', batch_id,
+    'year', target_year,
+    'month', target_month,
+    'total_dates', total_dates,
+    'dates_processed', dates_processed,
+    'records_processed', records_processed,
+    'bitcoin_before', bitcoin_before,
+    'bitcoin_after', bitcoin_after,
+    'bitcoin_added', bitcoin_after - bitcoin_before,
+    'status', batch_status,
+    'error', error_message
+  );
+  
+  -- Clean up
+  DROP TABLE IF EXISTS dates_needing_processing;
+  
+  RETURN result_json;
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to check reconciliation status for a specific date
-CREATE OR REPLACE FUNCTION check_date_status(date_value DATE) RETURNS TABLE (
-  date DATE,
-  curtailment_count INTEGER,
-  bitcoin_count INTEGER,
-  expected_count INTEGER,
-  missing_count INTEGER,
-  completion_percentage NUMERIC,
-  status TEXT
-) AS $$
-BEGIN
-  RETURN QUERY
-  WITH date_status AS (
-    SELECT
-      COUNT(*) as curtailment_count
-    FROM curtailment_records
-    WHERE settlement_date = date_value
-  ),
-  bitcoin_status AS (
-    SELECT
-      COUNT(*) as bitcoin_count
-    FROM historical_bitcoin_calculations
-    WHERE settlement_date = date_value
-  )
-  SELECT
-    date_value,
-    c.curtailment_count,
-    b.bitcoin_count,
-    c.curtailment_count * 3 as expected_count,
-    (c.curtailment_count * 3) - b.bitcoin_count as missing_count,
-    ROUND(b.bitcoin_count * 100.0 / NULLIF(c.curtailment_count * 3, 0), 2) as completion_percentage,
-    CASE
-      WHEN c.curtailment_count = 0 THEN 'No Data'
-      WHEN b.bitcoin_count = 0 THEN 'Missing'
-      WHEN b.bitcoin_count < c.curtailment_count * 3 THEN 'Incomplete'
-      ELSE 'Complete'
-    END as status
-  FROM date_status c, bitcoin_status b;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to check reconciliation status for a specific month
-CREATE OR REPLACE FUNCTION check_month_status(month_value TEXT) RETURNS TABLE (
-  month TEXT,
-  curtailment_count INTEGER,
-  bitcoin_count INTEGER,
-  expected_count INTEGER,
-  missing_count INTEGER,
-  completion_percentage NUMERIC,
-  status TEXT,
-  s19j_pro_count INTEGER,
-  s9_count INTEGER,
-  m20s_count INTEGER
-) AS $$
-BEGIN
-  RETURN QUERY
-  WITH month_status AS (
-    SELECT
-      COUNT(*) as curtailment_count
-    FROM curtailment_records
-    WHERE to_char(settlement_date, 'YYYY-MM') = month_value
-  ),
-  bitcoin_status AS (
-    SELECT
-      COUNT(*) as bitcoin_count
-    FROM historical_bitcoin_calculations
-    WHERE to_char(settlement_date, 'YYYY-MM') = month_value
-  ),
-  model_counts AS (
-    SELECT
-      miner_model,
-      COUNT(*) as model_count
-    FROM historical_bitcoin_calculations
-    WHERE to_char(settlement_date, 'YYYY-MM') = month_value
-    GROUP BY miner_model
-  )
-  SELECT
-    month_value,
-    ms.curtailment_count,
-    bs.bitcoin_count,
-    ms.curtailment_count * 3 as expected_count,
-    (ms.curtailment_count * 3) - bs.bitcoin_count as missing_count,
-    ROUND(bs.bitcoin_count * 100.0 / NULLIF(ms.curtailment_count * 3, 0), 2) as completion_percentage,
-    CASE
-      WHEN ms.curtailment_count = 0 THEN 'No Data'
-      WHEN bs.bitcoin_count = 0 THEN 'Missing'
-      WHEN bs.bitcoin_count < ms.curtailment_count * 3 THEN 'Incomplete'
-      ELSE 'Complete'
-    END as status,
-    COALESCE((SELECT model_count FROM model_counts WHERE miner_model = 'S19J_PRO'), 0) as s19j_pro_count,
-    COALESCE((SELECT model_count FROM model_counts WHERE miner_model = 'S9'), 0) as s9_count,
-    COALESCE((SELECT model_count FROM model_counts WHERE miner_model = 'M20S'), 0) as m20s_count;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to check reconciliation status for a specific year
-CREATE OR REPLACE FUNCTION check_year_status(year_value TEXT) RETURNS TABLE (
-  year TEXT,
-  curtailment_count INTEGER,
-  bitcoin_count INTEGER,
-  expected_count INTEGER,
-  missing_count INTEGER,
-  completion_percentage NUMERIC,
-  status TEXT
-) AS $$
-BEGIN
-  RETURN QUERY
-  WITH year_status AS (
-    SELECT
-      COUNT(*) as curtailment_count
-    FROM curtailment_records
-    WHERE EXTRACT(YEAR FROM settlement_date) = year_value::INTEGER
-  ),
-  bitcoin_status AS (
-    SELECT
-      COUNT(*) as bitcoin_count
-    FROM historical_bitcoin_calculations
-    WHERE EXTRACT(YEAR FROM settlement_date) = year_value::INTEGER
-  )
-  SELECT
-    year_value,
-    ys.curtailment_count,
-    bs.bitcoin_count,
-    ys.curtailment_count * 3 as expected_count,
-    (ys.curtailment_count * 3) - bs.bitcoin_count as missing_count,
-    ROUND(bs.bitcoin_count * 100.0 / NULLIF(ys.curtailment_count * 3, 0), 2) as completion_percentage,
-    CASE
-      WHEN ys.curtailment_count = 0 THEN 'No Data'
-      WHEN bs.bitcoin_count = 0 THEN 'Missing'
-      WHEN bs.bitcoin_count < ys.curtailment_count * 3 THEN 'Incomplete'
-      ELSE 'Complete'
-    END as status
-  FROM year_status ys, bitcoin_status bs;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to check overall reconciliation status
-CREATE OR REPLACE FUNCTION check_overall_status() RETURNS TABLE (
+-- Helper function to get a summary of reconciliation progress
+CREATE OR REPLACE FUNCTION get_reconciliation_summary() RETURNS TABLE (
+  year INTEGER,
   total_curtailment INTEGER,
   total_bitcoin INTEGER,
-  total_expected INTEGER,
-  missing_count INTEGER,
+  expected_bitcoin INTEGER,
   completion_percentage NUMERIC,
-  status TEXT
+  missing_records INTEGER
 ) AS $$
 BEGIN
   RETURN QUERY
-  WITH overall_status AS (
-    SELECT
-      COUNT(*) as curtailment_count
+  WITH years AS (
+    SELECT DISTINCT EXTRACT(YEAR FROM settlement_date)::INTEGER as year
     FROM curtailment_records
+    ORDER BY year
   ),
-  bitcoin_status AS (
-    SELECT
-      COUNT(*) as bitcoin_count
-    FROM historical_bitcoin_calculations
+  year_stats AS (
+    SELECT 
+      y.year,
+      (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as curtailment_count,
+      (SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as bitcoin_count,
+      (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) * 3 as expected_bitcoin_count
+    FROM years y
   )
-  SELECT
-    os.curtailment_count,
-    bs.bitcoin_count,
-    os.curtailment_count * 3 as expected_count,
-    (os.curtailment_count * 3) - bs.bitcoin_count as missing_count,
-    ROUND(bs.bitcoin_count * 100.0 / NULLIF(os.curtailment_count * 3, 0), 2) as completion_percentage,
-    CASE
-      WHEN os.curtailment_count = 0 THEN 'No Data'
-      WHEN bs.bitcoin_count = os.curtailment_count * 3 THEN '100% COMPLETE'
-      WHEN bs.bitcoin_count >= os.curtailment_count * 3 * 0.99 THEN '>99% COMPLETE'
-      ELSE 'INCOMPLETE'
-    END as status
-  FROM overall_status os, bitcoin_status bs;
+  SELECT 
+    year,
+    curtailment_count,
+    bitcoin_count,
+    expected_bitcoin_count,
+    ROUND(bitcoin_count * 100.0 / NULLIF(expected_bitcoin_count, 0), 2) as completion_percentage,
+    expected_bitcoin_count - bitcoin_count as missing_records
+  FROM year_stats
+  ORDER BY completion_percentage ASC, year ASC;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create any necessary indexes
-CREATE INDEX IF NOT EXISTS idx_curtailment_date ON curtailment_records(settlement_date);
-CREATE INDEX IF NOT EXISTS idx_bitcoin_calc_date ON historical_bitcoin_calculations(settlement_date);
-CREATE INDEX IF NOT EXISTS idx_bitcoin_calc_date_model ON historical_bitcoin_calculations(settlement_date, miner_model);
+-- Function to get priority months to process
+CREATE OR REPLACE FUNCTION get_priority_months(max_months INTEGER DEFAULT 5) RETURNS TABLE (
+  year INTEGER,
+  month INTEGER,
+  curtailment_count INTEGER,
+  bitcoin_count INTEGER,
+  expected_bitcoin INTEGER,
+  completion_percentage NUMERIC,
+  missing_records INTEGER,
+  priority INTEGER
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH month_stats AS (
+    SELECT 
+      EXTRACT(YEAR FROM c.settlement_date)::INTEGER as year,
+      EXTRACT(MONTH FROM c.settlement_date)::INTEGER as month,
+      COUNT(DISTINCT c.id) as curtailment_count,
+      COALESCE(COUNT(DISTINCT h.id), 0) as bitcoin_count,
+      COUNT(DISTINCT c.id) * 3 as expected_bitcoin_count,
+      ROUND(COALESCE(COUNT(DISTINCT h.id), 0) * 100.0 / NULLIF(COUNT(DISTINCT c.id) * 3, 0), 2) as completion_percentage,
+      (COUNT(DISTINCT c.id) * 3) - COALESCE(COUNT(DISTINCT h.id), 0) as missing_records,
+      ROW_NUMBER() OVER (ORDER BY (COUNT(DISTINCT c.id) * 3) - COALESCE(COUNT(DISTINCT h.id), 0) DESC) as priority
+    FROM 
+      curtailment_records c
+      LEFT JOIN historical_bitcoin_calculations h ON 
+        c.settlement_date = h.settlement_date
+    GROUP BY 
+      year, month
+    HAVING 
+      COALESCE(COUNT(DISTINCT h.id), 0) < COUNT(DISTINCT c.id) * 3
+  )
+  SELECT 
+    year, month, curtailment_count, bitcoin_count, expected_bitcoin_count, 
+    completion_percentage, missing_records, priority
+  FROM 
+    month_stats
+  ORDER BY 
+    priority ASC
+  LIMIT max_months;
+END;
+$$ LANGUAGE plpgsql;
 
--- Sample usage:
--- Check date status: SELECT * FROM check_date_status('2023-01-15');
--- Reconcile a single date: SELECT * FROM reconcile_single_date('2023-01-15', 37935772752142);
--- Check month status: SELECT * FROM check_month_status('2023-01');
--- Reconcile a month: SELECT * FROM reconcile_month('2023-01', 37935772752142, 5);
--- Check year status: SELECT * FROM check_year_status('2023');
--- Reconcile a year: SELECT * FROM reconcile_year('2023', 37935772752142, 2, 3);
--- Check overall status: SELECT * FROM check_overall_status();
+-- Check initial reconciliation status
+SELECT * FROM get_reconciliation_summary();
+
+-- Get the top priority months to process
+SELECT * FROM get_priority_months(10);
+
+-- Process a few high-priority months to demonstrate the solution
+SELECT jsonb_pretty(process_month_reconciliation(2023, 10, 37935772752142, 10));
+SELECT jsonb_pretty(process_month_reconciliation(2022, 3, 25000000000000, 10));
+SELECT jsonb_pretty(process_month_reconciliation(2025, 2, 110568428300952, 10));
+
+-- View processing history
+SELECT * FROM reconciliation_progress ORDER BY process_start DESC LIMIT 10;
+
+-- View detailed date processing results
+SELECT * FROM reconciliation_date_details 
+WHERE batch_id IN (SELECT batch_id FROM reconciliation_progress ORDER BY process_start DESC LIMIT 3)
+ORDER BY date_processed ASC;
+
+-- Check current reconciliation status
+SELECT * FROM get_reconciliation_summary();
+
+-- Example of how to run a full reconciliation process for 2023
+-- WARNING: This could take a long time to run
+/*
+DO $$
+DECLARE
+  current_month RECORD;
+  max_dates_per_batch INTEGER := 20;  -- Limit dates per batch to avoid timeout
+  difficulty_2023 NUMERIC := 37935772752142;
+  batch_result JSONB;
+BEGIN
+  -- Get all months in 2023 with missing calculations
+  FOR current_month IN 
+    WITH month_stats AS (
+      SELECT 
+        EXTRACT(MONTH FROM c.settlement_date)::INTEGER as month,
+        COUNT(DISTINCT c.id) as curtailment_count,
+        COALESCE(COUNT(DISTINCT h.id), 0) as bitcoin_count,
+        COUNT(DISTINCT c.id) * 3 as expected_bitcoin_count
+      FROM 
+        curtailment_records c
+        LEFT JOIN historical_bitcoin_calculations h ON 
+          c.settlement_date = h.settlement_date
+      WHERE 
+        EXTRACT(YEAR FROM c.settlement_date) = 2023
+      GROUP BY 
+        month
+      HAVING 
+        COALESCE(COUNT(DISTINCT h.id), 0) < COUNT(DISTINCT c.id) * 3
+    )
+    SELECT 
+      month
+    FROM 
+      month_stats
+    ORDER BY 
+      (expected_bitcoin_count - bitcoin_count) DESC
+  LOOP
+    -- Process this month
+    RAISE NOTICE 'Processing 2023-%', current_month.month;
+    batch_result := process_month_reconciliation(2023, current_month.month, difficulty_2023, max_dates_per_batch);
+    
+    -- Log the result
+    RAISE NOTICE 'Completed batch %: processed % dates, added % calculations',
+      batch_result->>'batch_id', 
+      batch_result->>'dates_processed',
+      batch_result->>'bitcoin_added';
+  END LOOP;
+END $$;
+*/
