@@ -1,173 +1,215 @@
 #!/bin/bash
+
 # Auto Reconciliation Script
-# 
-# This script runs daily reconciliation checks and automatically fixes missing calculations
-# Can be used with cron or another scheduler for automatic daily reconciliation
-#
-# Usage: ./auto_reconcile.sh [options]
-# Options:
-#   --batch-size N  Set batch size for reconciliation (default: 5)
-#   --date DATE     Process specific date (format: YYYY-MM-DD)
-#   --silent        Minimize output (good for cron jobs)
-#   --help          Show this help text
+# This script automates the reconciliation process between curtailment_records and historical_bitcoin_calculations tables.
+# It uses various strategies to handle different data volumes and potential timeout issues.
 
-# Configuration
-LOG_DIR="./logs"
-LOG_FILE="${LOG_DIR}/auto_reconcile_$(date +%Y-%m-%d).log"
-BATCH_SIZE=5
-TIMEOUT=7200  # 2 hours maximum execution time
-SPECIFIC_DATE=""
-SILENT=false
+# Log setup
+LOG_FILE="./logs/auto_reconciliation_$(date +%Y-%m-%d).log"
+CHECKPOINT_FILE="./reconciliation_checkpoint.json"
 
-# Parse arguments
-while [[ "$#" -gt 0 ]]; do
-  case $1 in
-    --batch-size)
-      BATCH_SIZE="$2"
-      shift
-      ;;
-    --date)
-      SPECIFIC_DATE="$2"
-      shift
-      ;;
-    --silent)
-      SILENT=true
-      ;;
-    --help)
-      echo "Auto Reconciliation Script"
-      echo "Usage: ./auto_reconcile.sh [options]"
-      echo "Options:"
-      echo "  --batch-size N  Set batch size for reconciliation (default: 5)"
-      echo "  --date DATE     Process specific date (format: YYYY-MM-DD)"
-      echo "  --silent        Minimize output (good for cron jobs)"
-      echo "  --help          Show this help text"
-      exit 0
-      ;;
-    *)
-      echo "Unknown parameter: $1"
-      echo "Use --help for usage information"
-      exit 1
-      ;;
-  esac
-  shift
-done
+# Create logs directory if it doesn't exist
+mkdir -p ./logs
 
-# Create log directory if it doesn't exist
-mkdir -p "$LOG_DIR"
-
-# Log function
 log() {
-  local level=$1
-  local message=$2
-  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  local message="$1"
+  local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  echo "[$timestamp] $message" | tee -a "$LOG_FILE"
+}
+
+log_section() {
+  local section="$1"
+  log "============================================================"
+  log "=== $section"
+  log "============================================================"
+}
+
+# Monitor execution time and restart if needed
+execute_with_timeout() {
+  local command="$1"
+  local timeout_seconds=${2:-300}  # Default timeout: 5 minutes
+  local description=${3:-"Command"}
   
-  # Always write to log file
-  echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
+  log "Executing: $command (timeout: ${timeout_seconds}s)"
   
-  # Output to console unless in silent mode
-  if [ "$SILENT" = false ]; then
-    case $level in
-      "ERROR")
-        echo -e "\e[31m[$timestamp] [$level] $message\e[0m"
-        ;;
-      "WARNING")
-        echo -e "\e[33m[$timestamp] [$level] $message\e[0m"
-        ;;
-      "SUCCESS") 
-        echo -e "\e[32m[$timestamp] [$level] $message\e[0m"
-        ;;
-      *)
-        echo -e "\e[36m[$timestamp] [$level] $message\e[0m"
-        ;;
-    esac
+  timeout $timeout_seconds bash -c "$command" &
+  local pid=$!
+  
+  local start_time=$(date +%s)
+  while ps -p $pid > /dev/null; do
+    local current_time=$(date +%s)
+    local elapsed=$((current_time - start_time))
+    
+    if [ $elapsed -ge $timeout_seconds ]; then
+      log "⚠️ $description timed out after ${elapsed}s. Killing process..."
+      kill -9 $pid 2>/dev/null
+      wait $pid 2>/dev/null
+      return 1
+    fi
+    
+    sleep 2
+  done
+  
+  wait $pid
+  local exit_code=$?
+  
+  if [ $exit_code -eq 0 ]; then
+    log "✅ $description completed successfully"
+    return 0
+  else
+    log "❌ $description failed with exit code $exit_code"
+    return $exit_code
   fi
 }
 
-# Function to handle timeout
-handle_timeout() {
-  log "ERROR" "Reconciliation process timed out after $TIMEOUT seconds"
-  log "INFO" "Try running with a smaller batch size or use minimal_reconciliation.ts"
-  exit 1
+# Run a database analysis to check for potential issues
+analyze_database() {
+  log_section "Database Analysis"
+  execute_with_timeout "npx tsx connection_timeout_analyzer.ts analyze" 60 "Database analysis"
 }
 
-# Set timeout handler
-trap handle_timeout SIGALRM
-
-# Start logging
-log "INFO" "Starting auto reconciliation"
-log "INFO" "Batch size: $BATCH_SIZE"
-if [ -n "$SPECIFIC_DATE" ]; then
-  log "INFO" "Processing specific date: $SPECIFIC_DATE"
-fi
-
-# Check current reconciliation status
-log "INFO" "Checking current reconciliation status"
-status_output=$(npx tsx reconciliation_manager.ts status 2>&1)
-echo "$status_output" >> "$LOG_FILE"
-
-# Extract reconciliation percentage
-percentage=$(echo "$status_output" | grep "Reconciliation status:" | sed -E 's/.*Reconciliation status: ([0-9.]+)%.*/\1/')
-
-if [ -z "$percentage" ]; then
-  log "ERROR" "Failed to get reconciliation status"
-  exit 1
-fi
-
-log "INFO" "Current reconciliation: $percentage%"
-
-# If already at 100%, we're done
-if [ "$percentage" = "100" ]; then
-  log "SUCCESS" "Already at 100% reconciliation. No action needed."
-  exit 0
-fi
-
-# Process the reconciliation
-if [ -n "$SPECIFIC_DATE" ]; then
-  log "INFO" "Running reconciliation for date: $SPECIFIC_DATE"
-  timeout $TIMEOUT npx tsx reconciliation_manager.ts date "$SPECIFIC_DATE" >> "$LOG_FILE" 2>&1
-else
-  log "INFO" "Running general reconciliation with batch size $BATCH_SIZE"
-  timeout $TIMEOUT npx tsx reconciliation_manager.ts fix "$BATCH_SIZE" >> "$LOG_FILE" 2>&1
-fi
-
-# Check result
-exit_code=$?
-if [ $exit_code -eq 124 ]; then
-  # Timeout occurred
-  handle_timeout
-elif [ $exit_code -ne 0 ]; then
-  log "ERROR" "Reconciliation process failed with exit code $exit_code"
-  log "INFO" "Check $LOG_FILE for details"
+# Process most critical dates first (ones with most missing calculations)
+process_critical_dates() {
+  log_section "Processing Critical Dates"
+  local dates_to_process=${1:-5}  # Default: process top 5 critical dates
   
-  # Try with minimal reconciliation for the most critical date
-  log "INFO" "Attempting to fix most critical date with minimal reconciliation"
-  npx tsx minimal_reconciliation.ts most-critical >> "$LOG_FILE" 2>&1
-else
-  log "SUCCESS" "Reconciliation process completed successfully"
-fi
+  # Get most critical dates
+  log "Identifying the $dates_to_process most critical dates..."
+  
+  # Skip this step if minimal_reconciliation produces no output
+  if ! execute_with_timeout "npx tsx minimal_reconciliation.ts most-critical" 120 "Finding most critical date"; then
+    log "⚠️ Failed to find critical dates through minimal_reconciliation, using alternative method."
+    execute_with_timeout "npx tsx efficient_reconciliation.ts analyze" 120 "Analyzing reconciliation status"
+    return 1
+  fi
+  
+  # Process was successful
+  log "✅ Critical date processing completed"
+  return 0
+}
 
-# Check final status
-log "INFO" "Checking final reconciliation status"
-final_status_output=$(npx tsx reconciliation_manager.ts status 2>&1)
-echo "$final_status_output" >> "$LOG_FILE"
+# Process a specific date range
+process_date_range() {
+  local start_date=$1
+  local end_date=$2
+  local batch_size=${3:-20}  # Default batch size: 20
+  
+  log_section "Processing Date Range: $start_date to $end_date (batch size: $batch_size)"
+  
+  execute_with_timeout "npx tsx efficient_reconciliation.ts range $start_date $end_date $batch_size" 900 "Date range reconciliation"
+  
+  # Check if it failed due to timeout, try smaller batches
+  if [ $? -ne 0 ]; then
+    log "⚠️ Date range processing failed, trying with smaller batch size"
+    execute_with_timeout "npx tsx efficient_reconciliation.ts range $start_date $end_date 5" 900 "Date range reconciliation (small batch)"
+  fi
+}
 
-# Extract final reconciliation percentage
-final_percentage=$(echo "$final_status_output" | grep "Reconciliation status:" | sed -E 's/.*Reconciliation status: ([0-9.]+)%.*/\1/')
+# Process highest-value month (where most calculations are missing)
+process_high_value_month() {
+  log_section "Processing High Value Month"
+  
+  # Get current date components
+  local current_year=$(date +%Y)
+  local current_month=$(date +%m)
+  
+  # Process older months with missing data (targeting October 2022)
+  log "Processing data for October 2022 (high-value month)"
+  process_date_range "2022-10-01" "2022-10-31" 10
+  
+  # Also process June 2022 which has several days in the top missing dates
+  log "Processing data for June 2022 (high-value month)"
+  process_date_range "2022-06-10" "2022-06-15" 5
+}
 
-if [ -z "$final_percentage" ]; then
-  log "ERROR" "Failed to get final reconciliation status"
-  exit 1
-fi
+# Process most recent month to ensure up-to-date data
+process_recent_month() {
+  log_section "Processing Recent Month"
+  
+  # Get date for start of previous month
+  local prev_month_start=$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m-01)
+  # Get date for end of previous month
+  local prev_month_end=$(date -d "$prev_month_start +1 month -1 day" +%Y-%m-%d)
+  
+  log "Processing previous month: $prev_month_start to $prev_month_end"
+  process_date_range "$prev_month_start" "$prev_month_end" 50
+  
+  # Process current month data
+  local current_month_start=$(date +%Y-%m-01)
+  local today=$(date +%Y-%m-%d)
+  
+  log "Processing current month to date: $current_month_start to $today"
+  process_date_range "$current_month_start" "$today" 50
+}
 
-log "INFO" "Final reconciliation: $final_percentage%"
+# Generate a progress report
+generate_report() {
+  log_section "Generating Reconciliation Report"
+  
+  execute_with_timeout "npx tsx reconciliation_progress_report.ts" 60 "Progress report generation"
+  
+  log "Current reconciliation status:"
+  npx tsx reconciliation_progress_check.ts | tee -a "$LOG_FILE"
+}
 
-# Compare percentages
-if (( $(echo "$final_percentage > $percentage" | bc -l) )); then
-  improvement=$(echo "$final_percentage - $percentage" | bc -l)
-  log "SUCCESS" "Improved reconciliation by $improvement%"
-  exit 0
-else
-  log "WARNING" "No improvement in reconciliation percentage"
-  log "INFO" "Try running with a different batch size or use minimal_reconciliation.ts"
-  exit 1
-fi
+# Check if we're already reconciled to an acceptable level
+check_reconciliation_level() {
+  log "Checking current reconciliation percentage..."
+  
+  # Run the progress check and capture the output
+  local progress_output=$(npx tsx reconciliation_progress_check.ts)
+  
+  # Extract the completion percentage (this regex looks for a percentage value)
+  local percentage=$(echo "$progress_output" | grep -o "Completion percentage: [0-9.]\+%" | grep -o "[0-9.]\+")
+  
+  if [ -z "$percentage" ]; then
+    log "⚠️ Unable to determine current reconciliation percentage"
+    return 1
+  fi
+  
+  log "Current reconciliation percentage: $percentage%"
+  
+  # Check if we've reached the target (75% or higher)
+  if (( $(echo "$percentage >= 75" | bc -l) )); then
+    log "✅ Reconciliation target met or exceeded: $percentage% (target: 75%)"
+    return 0
+  else
+    log "⚠️ Reconciliation target not yet met: $percentage% (target: 75%)"
+    return 1
+  fi
+}
+
+# Main execution
+main() {
+  log_section "Starting Auto Reconciliation"
+  log "Date: $(date)"
+  
+  # Check if we already have a good reconciliation level
+  if check_reconciliation_level; then
+    log "Reconciliation already at acceptable level. Running only recent data updates."
+    process_recent_month
+    generate_report
+    return 0
+  fi
+  
+  # Step 1: Analyze database connection for potential issues
+  analyze_database
+  
+  # Step 2: Process critical dates first (most problematic)
+  process_critical_dates 3
+  
+  # Step 3: Process high-value months
+  process_high_value_month
+  
+  # Step 4: Process recent data to ensure up-to-date records
+  process_recent_month
+  
+  # Step 5: Generate final report
+  generate_report
+  
+  log_section "Auto Reconciliation Complete"
+  log "Reconciliation processing completed. Check the report for details."
+}
+
+# Run the main function
+main
