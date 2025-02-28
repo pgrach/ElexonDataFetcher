@@ -1,54 +1,50 @@
+/**
+ * This script audits Bitcoin calculation data for February 2025.
+ * It leverages the centralized reconciliation functions from historicalReconciliation service.
+ */
 import { format, eachDayOfInterval, parseISO } from 'date-fns';
-import { db } from "@db";
-import { historicalBitcoinCalculations } from "@db/schema";
-import { processHistoricalCalculations } from "../services/bitcoinService";
-import { sql, eq } from "drizzle-orm";
-import pLimit from 'p-limit';
+import { 
+  reconcileDateRange,
+  auditAndFixBitcoinCalculations
+} from "../services/historicalReconciliation";
 
+// Configuration
 const START_DATE = '2025-02-01';
 const END_DATE = '2025-02-28';
 const BATCH_SIZE = 3;
-const limit = pLimit(BATCH_SIZE);
 const API_RATE_LIMIT = 250;
 
+/**
+ * Delay execution for the specified milliseconds
+ */
 async function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function verifyBitcoinCalculations(date: string): Promise<{ needsUpdate: boolean, error?: string }> {
-  try {
-    console.log(`\nVerifying Bitcoin calculations for ${date}...`);
-
-    // Check if we have calculations for all periods and miner models
-    const calculations = await db
-      .select({
-        periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
-        minerCount: sql<number>`COUNT(DISTINCT miner_model)`
-      })
-      .from(historicalBitcoinCalculations)
-      .where(eq(historicalBitcoinCalculations.settlementDate, date));
-
-    if (!calculations[0] || calculations[0].periodCount === 0) {
-      return { needsUpdate: true, error: 'No Bitcoin calculations found' };
-    }
-
-    console.log(`[${date}] Found ${calculations[0].periodCount} periods with ${calculations[0].minerCount} miner models`);
-
-    // For now, assume we need minimum 48 periods * 4 miner models = 192 records
-    const expectedMinRecords = 192;
-    const needsUpdate = calculations[0].periodCount * calculations[0].minerCount < expectedMinRecords;
-
-    return { needsUpdate };
-  } catch (error) {
-    console.error(`Error verifying Bitcoin calculations for ${date}:`, error);
-    return { needsUpdate: true, error: String(error) };
-  }
-}
-
+/**
+ * Audit Bitcoin calculations for February 2025
+ */
 async function auditBitcoinCalculations() {
   try {
     console.log(`\n=== Starting February 2025 Bitcoin Calculations Audit ===\n`);
+    console.log(`Date Range: ${START_DATE} to ${END_DATE}\n`);
 
+    // Option 1: Process the entire date range at once (faster but less detailed)
+    // This uses the consolidated reconcileDateRange function
+    console.log('Processing entire date range...');
+    const rangeResults = await reconcileDateRange(START_DATE, END_DATE);
+    
+    console.log('\n=== Range Processing Results ===');
+    console.log(`Total days processed: ${rangeResults.processedDates}`);
+    console.log(`Days updated: ${rangeResults.updatedDates}`);
+    console.log(`Days with errors: ${rangeResults.errors.length}`);
+    
+    if (rangeResults.errors.length > 0) {
+      console.log('\nDetailed analysis of dates with errors:');
+    }
+
+    // Option 2: Process dates with errors individually
+    // This gives more detailed information about what failed
     const dates = eachDayOfInterval({
       start: parseISO(START_DATE),
       end: parseISO(END_DATE)
@@ -57,74 +53,78 @@ async function auditBitcoinCalculations() {
     let updatedDates: string[] = [];
     let errorDates: string[] = [];
 
-    // Process dates in smaller batches
-    for (let i = 0; i < dates.length; i += BATCH_SIZE) {
-      const batchDates = dates.slice(i, i + BATCH_SIZE);
+    // Process dates that had errors during range processing
+    const datesToCheck = rangeResults.errors.length > 0 
+      ? rangeResults.errors.map(e => e.date)
+      : [];
+      
+    if (datesToCheck.length > 0) {
+      console.log(`\n=== Detailed Processing of ${datesToCheck.length} Problematic Dates ===\n`);
 
-      // Process each date in the batch
-      const results = await Promise.all(
-        batchDates.map(date => limit(async () => {
-          try {
-            const verification = await verifyBitcoinCalculations(date);
+      // Process dates in smaller batches
+      for (let i = 0; i < datesToCheck.length; i += BATCH_SIZE) {
+        const batchDates = datesToCheck.slice(i, i + BATCH_SIZE);
 
-            if (verification.error) {
-              console.log(`[${date}] Error: ${verification.error}`);
-              if (verification.error === 'No Bitcoin calculations found') {
-                console.log(`[${date}] Processing Bitcoin calculations...`);
-                await processHistoricalCalculations(date, date);
-                updatedDates.push(date);
-                return { date, status: 'updated' };
+        // Process each date in the batch
+        const results = await Promise.all(
+          batchDates.map(async (date) => {
+            try {
+              console.log(`\n- Auditing ${date}...`);
+              
+              // Use the consolidated audit and fix function
+              const result = await auditAndFixBitcoinCalculations(date);
+              
+              if (result.success) {
+                if (result.fixed) {
+                  console.log(`[${date}] ✓ Fixed: ${result.message}`);
+                  updatedDates.push(date);
+                  return { date, status: 'fixed' };
+                } else {
+                  console.log(`[${date}] ✓ Already complete: ${result.message}`);
+                  return { date, status: 'complete' };
+                }
               } else {
+                console.log(`[${date}] × Failed: ${result.message}`);
                 errorDates.push(date);
                 return { date, status: 'error' };
               }
+            } catch (error) {
+              console.error(`× Error processing ${date}:`, error);
+              errorDates.push(date);
+              return { date, status: 'error' };
             }
+          })
+        );
 
-            if (verification.needsUpdate) {
-              console.log(`[${date}] ⚠️ Incomplete calculations - reprocessing...`);
-              await processHistoricalCalculations(date, date);
-              updatedDates.push(date);
-              return { date, status: 'updated' };
-            }
+        // Print progress
+        const progress = ((i + batchDates.length) / datesToCheck.length * 100).toFixed(1);
+        console.log(`\nProgress: ${progress}% (${i + batchDates.length}/${datesToCheck.length} days)`);
 
-            console.log(`[${date}] ✓ Bitcoin calculations complete`);
-            return { date, status: 'correct' };
-          } catch (error) {
-            console.error(`Error processing ${date}:`, error);
-            errorDates.push(date);
-            return { date, status: 'error' };
-          }
-        }))
-      );
-
-      // Print progress
-      const progress = ((i + BATCH_SIZE) / dates.length * 100).toFixed(1);
-      console.log(`\nProgress: ${progress}% (${i + BATCH_SIZE}/${dates.length} days)`);
-
-      // Add delay between batches
-      if (i + BATCH_SIZE < dates.length) {
-        await delay(API_RATE_LIMIT * 2);
+        // Add delay between batches
+        if (i + BATCH_SIZE < datesToCheck.length) {
+          await delay(API_RATE_LIMIT);
+        }
       }
     }
 
-    // Print summary
-    console.log('\n=== Audit Summary ===');
-    console.log(`Total days processed: ${dates.length}`);
+    // Print final summary
+    console.log('\n=== Final Audit Summary ===');
+    console.log(`Total days in February 2025: ${dates.length}`);
     console.log(`Days with complete calculations: ${dates.length - updatedDates.length - errorDates.length}`);
-    console.log(`Days updated: ${updatedDates.length}`);
-    console.log(`Days with errors: ${errorDates.length}`);
+    console.log(`Days updated/fixed: ${updatedDates.length}`);
+    console.log(`Days with persistent errors: ${errorDates.length}`);
 
     if (updatedDates.length > 0) {
-      console.log('\nUpdated dates:', updatedDates.join(', '));
+      console.log('\nFixed dates:', updatedDates.join(', '));
     }
     if (errorDates.length > 0) {
-      console.log('\nError dates:', errorDates.join(', '));
+      console.log('\nPersistent error dates:', errorDates.join(', '));
     }
 
     return {
       totalDays: dates.length,
       completeDays: dates.length - updatedDates.length - errorDates.length,
-      updatedDays: updatedDates.length,
+      updatedDays: updatedDates.length, 
       errorDays: errorDates.length,
       updatedDates,
       errorDates
