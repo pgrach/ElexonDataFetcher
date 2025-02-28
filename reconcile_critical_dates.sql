@@ -1,10 +1,8 @@
--- Reconciliation Script for January 2023
--- This script focuses only on January 2023 records
+-- Reconciliation Script for Critical Dates
+-- This script focuses on only the most important dates with missing calculations
 
--- For performance reasons, this script processes in batches by date
-
--- Function to reconcile Bitcoin calculations for a specific date in January 2023
-CREATE OR REPLACE FUNCTION reconcile_day_jan2023(target_date DATE) RETURNS void AS $$
+-- Function to reconcile Bitcoin calculations for a specific date
+CREATE OR REPLACE FUNCTION reconcile_critical_day(target_date DATE, difficulty_override NUMERIC DEFAULT NULL) RETURNS void AS $$
 DECLARE
     total_curtailment_records INTEGER;
     total_bitcoin_records_before INTEGER;
@@ -17,12 +15,31 @@ DECLARE
         FROM curtailment_records
         WHERE settlement_date = process_date
         ORDER BY farm_id, settlement_period;
-    difficulty_value NUMERIC := 37935772752142; -- 2023 avg difficulty
+    difficulty_value NUMERIC;
+    year_value INTEGER;
     start_timestamp TIMESTAMP;
     processed_count INTEGER := 0;
 BEGIN
     -- Record start time
     start_timestamp := NOW();
+    
+    -- Get the year for automatic difficulty selection
+    year_value := EXTRACT(YEAR FROM target_date);
+    
+    -- Determine difficulty based on year or use override
+    IF difficulty_override IS NOT NULL THEN
+        difficulty_value := difficulty_override;
+    ELSIF year_value = 2022 THEN
+        difficulty_value := 28650501065301; -- Avg 2022
+    ELSIF year_value = 2023 THEN
+        difficulty_value := 37935772752142; -- Avg 2023
+    ELSIF year_value = 2024 THEN
+        difficulty_value := 81537565317401; -- Avg 2024
+    ELSIF year_value = 2025 THEN
+        difficulty_value := 110568428300952; -- Recent
+    ELSE
+        difficulty_value := 50000000000000; -- Default
+    END IF;
     
     -- Count initial records
     SELECT COUNT(*) INTO total_curtailment_records
@@ -33,8 +50,8 @@ BEGIN
     FROM historical_bitcoin_calculations
     WHERE settlement_date = target_date;
     
-    RAISE NOTICE 'Starting reconciliation for %: % curtailment records, % bitcoin records', 
-        target_date, total_curtailment_records, total_bitcoin_records_before;
+    RAISE NOTICE 'Starting reconciliation for % with difficulty %: % curtailment records, % bitcoin records', 
+        target_date, difficulty_value, total_curtailment_records, total_bitcoin_records_before;
     
     -- Process each farm and period for this date
     OPEN farm_cursor(target_date);
@@ -134,71 +151,46 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Process each day in January 2023, one at a time
--- Using explicit dates to avoid issues with date functions
-SELECT reconcile_day_jan2023('2023-01-01');
-SELECT reconcile_day_jan2023('2023-01-02');
-SELECT reconcile_day_jan2023('2023-01-03');
-SELECT reconcile_day_jan2023('2023-01-04');
-SELECT reconcile_day_jan2023('2023-01-05');
--- Continue with the rest of the days
-SELECT reconcile_day_jan2023('2023-01-06');
-SELECT reconcile_day_jan2023('2023-01-07');
-SELECT reconcile_day_jan2023('2023-01-08');
-SELECT reconcile_day_jan2023('2023-01-09');
-SELECT reconcile_day_jan2023('2023-01-10');
-SELECT reconcile_day_jan2023('2023-01-11');
-SELECT reconcile_day_jan2023('2023-01-12');
-SELECT reconcile_day_jan2023('2023-01-13');
-SELECT reconcile_day_jan2023('2023-01-14');
-SELECT reconcile_day_jan2023('2023-01-15');
--- Process the remaining days
-SELECT reconcile_day_jan2023('2023-01-16');
-SELECT reconcile_day_jan2023('2023-01-17');
-SELECT reconcile_day_jan2023('2023-01-18');
-SELECT reconcile_day_jan2023('2023-01-19');
-SELECT reconcile_day_jan2023('2023-01-20');
-SELECT reconcile_day_jan2023('2023-01-21');
-SELECT reconcile_day_jan2023('2023-01-22');
-SELECT reconcile_day_jan2023('2023-01-23');
-SELECT reconcile_day_jan2023('2023-01-24');
-SELECT reconcile_day_jan2023('2023-01-25');
-SELECT reconcile_day_jan2023('2023-01-26');
-SELECT reconcile_day_jan2023('2023-01-27');
-SELECT reconcile_day_jan2023('2023-01-28');
-SELECT reconcile_day_jan2023('2023-01-29');
-SELECT reconcile_day_jan2023('2023-01-30');
-SELECT reconcile_day_jan2023('2023-01-31');
+-- Process a few critical dates with high volumes, one from each year
+-- 2022
+SELECT reconcile_critical_day('2022-12-15'); -- December 2022
+-- 2023 
+SELECT reconcile_critical_day('2023-01-15'); -- January 2023
+SELECT reconcile_critical_day('2023-06-20'); -- June 2023
+-- 2024
+SELECT reconcile_critical_day('2024-09-15'); -- September 2024
+-- 2025
+SELECT reconcile_critical_day('2025-01-15'); -- January 2025
 
--- Check the results of our reconciliation
-WITH monthly_curtailment AS (
+-- Check the results of our reconciliation for 2023-01-15
+WITH curtailment_data AS (
   SELECT 
-    to_char(settlement_date, 'YYYY-MM') as year_month,
+    settlement_date,
     COUNT(*) as curtailment_count
   FROM curtailment_records
-  WHERE to_char(settlement_date, 'YYYY-MM') = '2023-01'
-  GROUP BY to_char(settlement_date, 'YYYY-MM')
+  WHERE settlement_date = '2023-01-15'
+  GROUP BY settlement_date
 ),
-monthly_bitcoin AS (
+bitcoin_data AS (
   SELECT 
-    to_char(settlement_date, 'YYYY-MM') as year_month,
+    settlement_date,
     miner_model,
     COUNT(*) as bitcoin_count
   FROM historical_bitcoin_calculations
-  WHERE to_char(settlement_date, 'YYYY-MM') = '2023-01'
-  GROUP BY to_char(settlement_date, 'YYYY-MM'), miner_model
+  WHERE settlement_date = '2023-01-15'
+  GROUP BY settlement_date, miner_model
 ),
-monthly_summary AS (
+date_summary AS (
   SELECT 
-    mc.year_month,
-    mc.curtailment_count,
+    cd.settlement_date,
+    cd.curtailment_count,
     COALESCE(s19.bitcoin_count, 0) as s19j_pro_count,
     COALESCE(s9.bitcoin_count, 0) as s9_count,
     COALESCE(m20s.bitcoin_count, 0) as m20s_count,
     CASE
-      WHEN COALESCE(s19.bitcoin_count, 0) >= mc.curtailment_count AND
-           COALESCE(s9.bitcoin_count, 0) >= mc.curtailment_count AND
-           COALESCE(m20s.bitcoin_count, 0) >= mc.curtailment_count THEN 'Complete'
+      WHEN COALESCE(s19.bitcoin_count, 0) >= cd.curtailment_count AND
+           COALESCE(s9.bitcoin_count, 0) >= cd.curtailment_count AND
+           COALESCE(m20s.bitcoin_count, 0) >= cd.curtailment_count THEN 'Complete'
       WHEN COALESCE(s19.bitcoin_count, 0) = 0 AND
            COALESCE(s9.bitcoin_count, 0) = 0 AND
            COALESCE(m20s.bitcoin_count, 0) = 0 THEN 'Missing'
@@ -206,23 +198,23 @@ monthly_summary AS (
     END as status,
     ROUND(
       (COALESCE(s19.bitcoin_count, 0) + COALESCE(s9.bitcoin_count, 0) + COALESCE(m20s.bitcoin_count, 0)) * 100.0 / 
-      (CASE WHEN mc.curtailment_count = 0 THEN 1 ELSE mc.curtailment_count * 3 END),
+      (CASE WHEN cd.curtailment_count = 0 THEN 1 ELSE cd.curtailment_count * 3 END),
       2
     ) as completion_percentage
-  FROM monthly_curtailment mc
-  LEFT JOIN monthly_bitcoin s19 ON mc.year_month = s19.year_month AND s19.miner_model = 'S19J_PRO'
-  LEFT JOIN monthly_bitcoin s9 ON mc.year_month = s9.year_month AND s9.miner_model = 'S9'
-  LEFT JOIN monthly_bitcoin m20s ON mc.year_month = m20s.year_month AND m20s.miner_model = 'M20S'
+  FROM curtailment_data cd
+  LEFT JOIN bitcoin_data s19 ON cd.settlement_date = s19.settlement_date AND s19.miner_model = 'S19J_PRO'
+  LEFT JOIN bitcoin_data s9 ON cd.settlement_date = s9.settlement_date AND s9.miner_model = 'S9'
+  LEFT JOIN bitcoin_data m20s ON cd.settlement_date = m20s.settlement_date AND m20s.miner_model = 'M20S'
 )
 SELECT 
-  year_month,
+  settlement_date,
   status,
   completion_percentage,
   curtailment_count,
   s19j_pro_count,
   s9_count,
   m20s_count
-FROM monthly_summary;
+FROM date_summary;
 
 -- Drop the temporary function
-DROP FUNCTION reconcile_day_jan2023(DATE);
+DROP FUNCTION reconcile_critical_day(DATE, NUMERIC);
