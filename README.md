@@ -54,11 +54,10 @@ The reconciliation process focuses on these key entities:
 
 ### Core Files
 - `unified_reconciliation.ts` - Unified system for all reconciliation operations
-- `unified_reconcile.sh` - Shell wrapper for the unified reconciliation system
+- `comprehensive_reconciliation.ts` - High-performance reconciliation with reporting capabilities
 - `daily_reconciliation_check.ts` - Automated daily reconciliation
-- `reconciliation_manager.ts` - Manager for orchestrating reconciliation processes
-- `reconciliation_dashboard.ts` - Dashboard generation for monitoring reconciliation
-- `reconciliation.sql` - Consolidated SQL queries for reconciliation operations
+- `batch_reconcile.ts` - Batch processing for historical dates
+- `simple_reconcile.ts` - Simple tool for quick fixes of specific dates
 - `server/services/historicalReconciliation.ts` - Core service for reconciliation logic
 - `server/services/bitcoinService.ts` - Bitcoin calculation logic
 

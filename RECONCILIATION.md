@@ -200,6 +200,16 @@ Regular maintenance includes:
 2. For each curtailment record, calculations are generated for all miner models
 3. The reconciliation system verifies and fixes missing or incorrect calculations
 
+### System Optimization
+
+As part of ongoing improvements to the reconciliation system, we've streamlined the codebase by:
+
+1. Consolidating the documentation into a single comprehensive reference file (RECONCILIATION.md)
+2. Removing redundant tools that had overlapping functionality:
+   - `reconciliation_dashboard.ts` (functionality now in `comprehensive_reconciliation.ts` reporting)
+   - `reconciliation_manager.ts` (functionality now in `unified_reconciliation.ts`)
+3. Maintaining backward compatibility through the core services in `server/services/historicalReconciliation.ts`
+
 ### Key Components
 
 - **Checkpoint System**: Allows resuming interrupted operations
