@@ -1,0 +1,16 @@
+{
+  "lastProcessedDate": "2025-02-28",
+  "pendingDates": [],
+  "completedDates": [
+    "2025-02-28"
+  ],
+  "startTime": 1740766171064,
+  "lastUpdateTime": 1740766174036,
+  "stats": {
+    "totalRecords": 0,
+    "processedRecords": 0,
+    "successfulRecords": 0,
+    "failedRecords": 0,
+    "timeouts": 0
+  }
+}
