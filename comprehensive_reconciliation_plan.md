@@ -1,96 +1,65 @@
-# Comprehensive Bitcoin Calculation Reconciliation Plan
+# Comprehensive Reconciliation Plan
+
+## Overview
+This document outlines the comprehensive plan for reconciling curtailment records with Bitcoin calculations. The goal is to ensure 100% reconciliation between the two data sets, with accurate Bitcoin mining calculations for each curtailment record across all miner models.
 
 ## Current Status
-As of February 28, 2025, after initial reconciliation runs, we have the following completion percentages:
-- 2024: 81.28% complete (156,351 missing records)
-- 2025: 49.54% complete (122,118 missing records)
-- 2022: 16.77% complete (514,097 missing records)
-- 2023: 20.95% complete (309,966 missing records)
+- Reconciliation rate: 65.02% (984,547 calculations out of 1,514,223 expected)
+- Three miner models tracked: S19J_PRO (328,189 calculations), S9 (328,179 calculations), M20S (328,179 calculations)
+- Missing calculations primarily in December 2023
 
-### Recent Progress
-- Successfully processed 10 critical dates from 2023 with highest missing calculations
-- Successfully processed 10 dates from December 2023 (5,244 calculations)
-- Added approximately 82,131 Bitcoin calculations total
-- Increased 2023 completion percentage from 0.32% to 20.95%
-- December 2023 is now 12.62% complete (10 out of 24 dates processed)
+## Reconciliation Process
 
-## Goal
-Achieve 100% reconciliation between curtailment_records and historical_bitcoin_calculations tables, ensuring every curtailment record has corresponding calculations for all three miner models (S19J_PRO, M20S, S9).
+### 1. Daily Reconciliation
+- **Automated Process**: The system runs daily to reconcile the previous day's curtailment records with Bitcoin calculations
+- **Implementation**: Uses `historicalReconciliation.reconcileDay()` function
+- **Monitoring**: Daily status is logged and can be checked via the reconciliation tool
 
-## Reconciliation Approach
+### 2. Monthly Reconciliation
+- **Scheduled Process**: Runs on the 1st of each month to ensure complete reconciliation of the previous month
+- **Implementation**: Uses `historicalReconciliation.reconcilePreviousMonth()` function
+- **Verification**: Creates monthly summary records for quick verification
 
-### 1. Batch Processing by Priority
-Process dates in batches of 5-10, prioritized by the highest number of missing calculations. This approach avoids timeouts while making steady progress on the most critical dates.
+### 3. Manual Reconciliation
+- **Reconciliation Tool**: Use the consolidated tool via `npx tsx reconciliation.ts`
+- **Commands**:
+  - `npx tsx reconciliation.ts status` - Check current reconciliation status
+  - `npx tsx reconciliation.ts find` - Find dates with missing calculations
+  - `npx tsx reconciliation.ts reconcile` - Fix all missing calculations
+  - `npx tsx reconciliation.ts date YYYY-MM-DD` - Fix a specific date
 
-### 2. Year-Specific Strategies
-- **2023**: Focus on this year first due to lowest completion percentage
-  - Process top 20 dates with most missing records
-  - Run monthly batch jobs for remaining dates
-  
-- **2022**: Second priority
-  - Process in monthly batches starting with most recent months
-  
-- **2025**: Third priority
-  - Focus on completing February data first
-  - Implement daily reconciliation process for real-time data
-  
-- **2024**: Final priority (highest completion rate)
-  - Process remaining gaps in monthly batches
+## Data Integrity Checks
 
-### 3. Verification Process
-After each batch processing:
-1. Verify the completion percentage has increased
-2. Check for any errors or anomalies in the newly created records
-3. Update status metrics to track progress
+### Period-Farm Combinations
+- Each unique period-farm combination should have exactly one calculation per miner model
+- SQL checks ensure no duplicates and complete coverage
 
-## Implementation Plan
+### Miner Models
+- S19J_PRO, S9, and M20S models must all be calculated for each curtailment record
+- Difficulty data is obtained from AWS DynamoDB for accurate calculations
 
-### Phase 1: Critical Date Processing (2023) - [60% COMPLETE]
-1. ✅ Identify and process top 10 dates from 2023 with highest missing calculations
-2. ✅ Create optimized batch jobs to handle 5 dates per run
-3. ✅ Achieved improvement: Increased 2023 completion from 0.32% to 20.95%
-4. ✅ Developed specialized monthly reconciliation approach (December 2023 at 12.62%)
-5. 🔄 Process remaining critical dates (targeting 30%+ overall completion)
+### Database Schema
+- `curtailment_records` - Contains curtailment data from Elexon API
+- `historical_bitcoin_calculations` - Contains Bitcoin mining calculations for each curtailment record and miner model
 
-### Phase 2: Monthly Batch Processing (2023-2022)
-1. Create month-based batch jobs to process remaining 2023 data
-2. Begin processing 2022 data in monthly batches
-3. Expected improvement: Increase 2023 completion to 60%, 2022 to 40%
+## Recovery Plan for December 2023
 
-### Phase 3: Recent Data Reconciliation (2025)
-1. Complete reconciliation of all 2025 data
-2. Implement automated daily reconciliation for new data
-3. Expected improvement: Increase 2025 completion to 100%
+1. Identify specific missing date-period-farm combinations
+2. Process each missing combination using the reconciliation tool
+3. Verify results with SQL validation queries
+4. Create monthly summary records once full reconciliation is achieved
 
-### Phase 4: Gap Filling (2024)
-1. Identify and process all remaining gaps in 2024 data
-2. Expected improvement: Increase 2024 completion to 95%+
+## Maintaining Reconciliation
 
-### Phase 5: Final Reconciliation
-1. Comprehensive verification of all historical records
-2. Final targeted processing of any remaining gaps
-3. Expected outcome: All years at 100% completion
+### Prevention Measures
+- Improved error handling in API data ingestion
+- Retry logic for difficulty data retrieval
+- Transaction-based processing to prevent partial updates
 
-## Script Types and Functions
+### Monitoring
+- Daily reconciliation status check
+- Weekly comprehensive audit
+- Monthly detailed reconciliation report
 
-1. **Priority Date Processing**
-   - Uses SQL function to process specific dates
-   - Each date handled individually to ensure accurate calculations
-
-2. **Monthly Batch Processing**
-   - Identifies and processes all dates in a given month
-   - Uses temporary tables to optimize calculation performance
-
-3. **Verification Scripts**
-   - Generates reports on completion percentages
-   - Identifies remaining gaps for targeted processing
-
-4. **Automated Reconciliation**
-   - Daily jobs for real-time data reconciliation
-   - Monitoring and alerting for calculation failures
-
-## Success Metrics
-- Increase in completion percentage after each batch
-- Reduction in total missing records across all years
-- Consistent 3:1 ratio between Bitcoin calculations and curtailment records
-- Complete validation of calculation parameters (difficulty, pricing) for each date
+## Conclusion
+This plan ensures a robust approach to maintaining 100% reconciliation between curtailment records and Bitcoin calculations, providing accurate insights into mining potential under various scenarios.
