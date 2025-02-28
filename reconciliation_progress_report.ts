@@ -5,7 +5,8 @@
  * between curtailment records and Bitcoin calculations.
  */
 
-import { Pool } from 'pg';
+import pg from 'pg';
+const { Pool } = pg;
 
 // Get the database connection string from environment
 const dbUrl = process.env.DATABASE_URL;

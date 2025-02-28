@@ -4,6 +4,9 @@
  * This script targets specific dates with the highest number of missing calculations
  * based on the pre-identified list from our SQL query. It focuses on efficiency by
  * prioritizing dates with the most missing data.
+ * 
+ * Updated to focus on December 2023, which has been identified as having the largest
+ * number of missing calculations.
  */
 
 import { auditAndFixBitcoinCalculations, reconcileDay } from "./server/services/historicalReconciliation";

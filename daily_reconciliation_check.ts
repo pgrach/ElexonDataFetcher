@@ -9,9 +9,65 @@
  */
 
 import { format, subDays } from "date-fns";
-import { findDatesWithMissingCalculations, fixDateReconciliation } from "./comprehensive_reconcile";
+import pg from "pg";
+import { auditAndFixBitcoinCalculations } from "./server/services/historicalReconciliation";
 
 const RECENT_DAYS_TO_CHECK = 2; // Check today and yesterday
+
+// Create database connection
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+  console.error('DATABASE_URL environment variable is not set');
+  process.exit(1);
+}
+
+const pool = new pg.Pool({
+  connectionString: dbUrl,
+});
+
+async function checkDateReconciliationStatus(date: string) {
+  const client = await pool.connect();
+  
+  try {
+    const query = `
+      WITH required_combinations AS (
+        SELECT 
+          count(DISTINCT (settlement_period || '-' || farm_id)) * 3 AS expected_count
+        FROM 
+          curtailment_records
+        WHERE 
+          settlement_date = $1
+      ),
+      actual_calculations AS (
+        SELECT 
+          COUNT(*) AS actual_count
+        FROM 
+          historical_bitcoin_calculations
+        WHERE 
+          settlement_date = $1
+      )
+      SELECT 
+        $1 AS date,
+        COALESCE((SELECT expected_count FROM required_combinations), 0) AS expected_count,
+        COALESCE((SELECT actual_count FROM actual_calculations), 0) AS actual_count,
+        CASE 
+          WHEN (SELECT expected_count FROM required_combinations) = 0 THEN 100
+          ELSE ROUND(((SELECT actual_count FROM actual_calculations)::numeric / 
+                    (SELECT expected_count FROM required_combinations)) * 100, 2)
+        END AS completion_percentage
+    `;
+    
+    const result = await client.query(query, [date]);
+    return {
+      date,
+      expected: parseInt(result.rows[0].expected_count || '0'),
+      actual: parseInt(result.rows[0].actual_count || '0'),
+      completionPercentage: parseFloat(result.rows[0].completion_percentage || '0')
+    };
+  } finally {
+    client.release();
+  }
+}
 
 async function runDailyCheck() {
   console.log("=== Starting Daily Reconciliation Check ===\n");
@@ -28,14 +84,17 @@ async function runDailyCheck() {
   
   console.log(`Dates to check: ${dates.join(", ")}`);
   
-  // Find any dates with missing calculations
-  const startDate = dates[dates.length - 1]; // Earliest date
-  const endDate = dates[0]; // Most recent date
+  // Check reconciliation status for each date
+  const dateStatuses = await Promise.all(dates.map(date => checkDateReconciliationStatus(date)));
   
-  const missingDates = await findDatesWithMissingCalculations(startDate, endDate);
+  // Filter for dates with missing calculations
+  const missingDates = dateStatuses.filter(status => 
+    status.completionPercentage < 100 && status.expected > 0
+  );
   
   if (missingDates.length === 0) {
     console.log(`\n✅ All checked dates are fully reconciled. No action needed.`);
+    await pool.end();
     return {
       dates,
       missingDates: [],
@@ -55,31 +114,46 @@ async function runDailyCheck() {
   const results = [];
   const fixedDates = [];
   
-  for (const date of missingDates.map(d => d.date)) {
+  for (const { date } of missingDates) {
     console.log(`\nProcessing ${date}...`);
-    const result = await fixDateReconciliation(date);
-    results.push(result);
-    
-    if (result.finalStatus.calculations.reconciliationPercentage === 100) {
-      fixedDates.push(date);
-      console.log(`✅ Successfully fixed ${date}`);
-    } else {
-      console.log(`⚠️ Could not completely fix ${date} (${result.finalStatus.calculations.reconciliationPercentage}%)`);
+    try {
+      const result = await auditAndFixBitcoinCalculations(date);
+      results.push(result);
+      
+      if (result.success) {
+        fixedDates.push(date);
+        console.log(`✅ Successfully processed ${date}`);
+      } else {
+        console.log(`⚠️ Could not completely fix ${date}: ${result.message}`);
+      }
+    } catch (error) {
+      console.error(`Error processing ${date}:`, error);
     }
   }
+  
+  // Verify the final status of each date
+  const finalStatuses = await Promise.all(
+    missingDates.map(({ date }) => checkDateReconciliationStatus(date))
+  );
+  
+  const successfullyReconciled = finalStatuses.filter(
+    status => status.completionPercentage === 100
+  );
   
   // Summary
   console.log(`\n=== Daily Reconciliation Check Summary ===`);
   console.log(`Dates Checked: ${dates.join(", ")}`);
   console.log(`Dates with Issues: ${missingDates.length}`);
-  console.log(`Dates Fixed: ${fixedDates.length}`);
+  console.log(`Dates Fixed: ${successfullyReconciled.length}`);
   
-  if (fixedDates.length === missingDates.length) {
+  await pool.end();
+  
+  if (successfullyReconciled.length === missingDates.length) {
     console.log(`\n✅ All issues successfully fixed!`);
     return {
       dates,
       missingDates: missingDates.map(d => d.date),
-      fixedDates,
+      fixedDates: successfullyReconciled.map(d => d.date),
       status: "all_fixed"
     };
   } else {
@@ -87,7 +161,7 @@ async function runDailyCheck() {
     return {
       dates,
       missingDates: missingDates.map(d => d.date),
-      fixedDates,
+      fixedDates: successfullyReconciled.map(d => d.date),
       status: "partial_fix"
     };
   }
