@@ -3,7 +3,7 @@
  * This uses the main fix_all_bitcoin_calculations.ts script functionality
  */
 
-const { execSync } = require('child_process');
+import { execSync } from 'child_process';
 
 // Configuration
 const SPECIFIC_DATES = [
