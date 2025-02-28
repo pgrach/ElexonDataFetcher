@@ -8,7 +8,54 @@ This document outlines the comprehensive plan for reconciling curtailment record
 - Three miner models tracked: S19J_PRO (328,189 calculations), S9 (328,179 calculations), M20S (328,179 calculations)
 - Missing calculations primarily in December 2023
 
-## Reconciliation Process
+## Consolidated Toolset
+
+### 1. Main Reconciliation Tool (`reconciliation.ts`)
+The primary tool for all reconciliation operations.
+```bash
+# Check current reconciliation status
+npx tsx reconciliation.ts status
+
+# Find dates with missing calculations
+npx tsx reconciliation.ts find
+
+# Fix all missing calculations
+npx tsx reconciliation.ts reconcile
+
+# Fix a specific date
+npx tsx reconciliation.ts date YYYY-MM-DD
+```
+
+### 2. Quick Status Check (`check_reconciliation_status.ts`)
+A simplified tool to quickly check the current reconciliation status.
+```bash
+npx tsx check_reconciliation_status.ts
+```
+
+### 3. December 2023 Focus Tool (`fix_december_2023.ts`)
+A specialized tool for targeting the December 2023 reconciliation issues.
+```bash
+# Check December 2023 status
+npx tsx fix_december_2023.ts status
+
+# Fix December 2023 in batches (default batch size: 5)
+npx tsx fix_december_2023.ts fix
+
+# Fix with custom batch size
+npx tsx fix_december_2023.ts fix 10
+```
+
+### 4. Single Date Testing (`test_reconcile_date.ts`)
+A test tool for verifying reconciliation on a specific date.
+```bash
+# Edit the date in the file first, then run:
+npx tsx test_reconcile_date.ts
+```
+
+### 5. SQL Queries (`reconciliation.sql`)
+Consolidated SQL queries for database-level analysis and verification.
+
+## Automated Reconciliation Processes
 
 ### 1. Daily Reconciliation
 - **Automated Process**: The system runs daily to reconcile the previous day's curtailment records with Bitcoin calculations
@@ -19,14 +66,6 @@ This document outlines the comprehensive plan for reconciling curtailment record
 - **Scheduled Process**: Runs on the 1st of each month to ensure complete reconciliation of the previous month
 - **Implementation**: Uses `historicalReconciliation.reconcilePreviousMonth()` function
 - **Verification**: Creates monthly summary records for quick verification
-
-### 3. Manual Reconciliation
-- **Reconciliation Tool**: Use the consolidated tool via `npx tsx reconciliation.ts`
-- **Commands**:
-  - `npx tsx reconciliation.ts status` - Check current reconciliation status
-  - `npx tsx reconciliation.ts find` - Find dates with missing calculations
-  - `npx tsx reconciliation.ts reconcile` - Fix all missing calculations
-  - `npx tsx reconciliation.ts date YYYY-MM-DD` - Fix a specific date
 
 ## Data Integrity Checks
 
@@ -42,12 +81,24 @@ This document outlines the comprehensive plan for reconciling curtailment record
 - `curtailment_records` - Contains curtailment data from Elexon API
 - `historical_bitcoin_calculations` - Contains Bitcoin mining calculations for each curtailment record and miner model
 
-## Recovery Plan for December 2023
+## December 2023 Recovery Plan
 
-1. Identify specific missing date-period-farm combinations
-2. Process each missing combination using the reconciliation tool
-3. Verify results with SQL validation queries
-4. Create monthly summary records once full reconciliation is achieved
+1. Run the specialized December tool to identify gaps:
+   ```bash
+   npx tsx fix_december_2023.ts status
+   ```
+
+2. Process batches of dates with missing calculations:
+   ```bash
+   npx tsx fix_december_2023.ts fix
+   ```
+
+3. Repeat batch processing until reconciliation is complete
+
+4. Verify final state:
+   ```bash
+   npx tsx reconciliation.ts status
+   ```
 
 ## Maintaining Reconciliation
 
@@ -57,9 +108,9 @@ This document outlines the comprehensive plan for reconciling curtailment record
 - Transaction-based processing to prevent partial updates
 
 ### Monitoring
-- Daily reconciliation status check
-- Weekly comprehensive audit
+- Daily reconciliation status check via automated processes
+- Weekly comprehensive audit using the provided tools
 - Monthly detailed reconciliation report
 
 ## Conclusion
-This plan ensures a robust approach to maintaining 100% reconciliation between curtailment records and Bitcoin calculations, providing accurate insights into mining potential under various scenarios.
+This comprehensive plan and consolidated toolset ensure a robust approach to maintaining 100% reconciliation between curtailment records and Bitcoin calculations, providing accurate insights into mining potential under various scenarios.

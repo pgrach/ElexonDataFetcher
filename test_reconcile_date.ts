@@ -80,6 +80,16 @@ async function getReconciliationStatusForDate(date: string) {
   return status;
 }
 
+// Define type for missing combinations row
+type MissingCombinationRow = Record<string, unknown> & {
+  settlement_period: number;
+  farm_id: string;
+  s19j_pro_calculations: number;
+  s9_calculations: number;
+  m20s_calculations: number;
+  status: string;
+}
+
 async function getMissingCombinations(date: string) {
   const result = await db.execute(sql`
     WITH period_farm_combinations AS (
@@ -143,13 +153,20 @@ async function getMissingCombinations(date: string) {
   console.log("-------|---------|----------|----|----|--------");
   
   result.rows.forEach(row => {
+    const period = String(row.settlement_period || '');
+    const farmId = String(row.farm_id || '');
+    const s19jPro = String(row.s19j_pro_calculations || 0);
+    const s9 = String(row.s9_calculations || 0);
+    const m20s = String(row.m20s_calculations || 0);
+    const status = String(row.status || 'Unknown');
+    
     console.log(
-      `${row.settlement_period.toString().padStart(6)} | ` +
-      `${row.farm_id.padEnd(7)} | ` +
-      `${row.s19j_pro_calculations.toString().padStart(8)} | ` +
-      `${row.s9_calculations.toString().padStart(2)} | ` +
-      `${row.m20s_calculations.toString().padStart(3)} | ` +
-      `${row.status}`
+      `${period.padStart(6)} | ` +
+      `${farmId.padEnd(7)} | ` +
+      `${s19jPro.padStart(8)} | ` +
+      `${s9.padStart(2)} | ` +
+      `${m20s.padStart(3)} | ` +
+      `${status}`
     );
   });
   

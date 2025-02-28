@@ -1,93 +1,73 @@
-# Bitcoin Calculation Reconciliation Tools
+# Bitcoin Mining Analytics Platform
 
-This collection of tools is designed to identify and fix missing or incomplete Bitcoin calculations derived from wind farm curtailment data.
+An advanced Bitcoin mining analytics platform that provides comprehensive insights into mining potential through sophisticated data reconciliation and multi-dimensional performance tracking.
 
-## Problem Statement
+## Technical Architecture
 
-Our system tracks wind farm curtailment records and uses this data to calculate potential Bitcoin mining outcomes using different miner models. The analysis identified several time periods with missing or incomplete Bitcoin calculations, including:
+- TypeScript/Node.js backend with robust calculation verification
+- PostgreSQL and AWS DynamoDB for advanced data management
+- React frontend with real-time data visualization
+- Comprehensive reconciliation tools for detecting and resolving mining data discrepancies
+- Advanced API integrations for precise cryptocurrency insights
 
-- **Missing Data (No Bitcoin Calculations)**: 
-  - 2022-04, 2022-06 through 2022-11
-  - All of 2023 (January through December)
+## Reconciliation Status
 
-- **Incomplete Data (Partial Bitcoin Calculations)**:
-  - 2022-01 through 2022-03, 2022-05, 2022-12
-  - 2024-09, 2024-12
-  - 2025-01, 2025-02
+Currently, the platform shows a 65.02% reconciliation rate (984,547 calculations out of 1,514,223 expected) across three miner models:
+- S19J_PRO: 328,189 calculations
+- S9: 328,179 calculations
+- M20S: 328,179 calculations
 
-## Solution
+The primary gaps in reconciliation are in December 2023.
 
-The tools in this repository provide a comprehensive solution to reconcile and fix all missing Bitcoin calculations:
+## Reconciliation Process
 
-### Tools Overview
+### 1. Daily Reconciliation
+- Automated daily process to reconcile the previous day's curtailment records with Bitcoin calculations
+- Uses `historicalReconciliation.reconcileDay()` function
 
-1. **fix_all_bitcoin_calculations.ts**
-   - Main utility that processes all missing or incomplete calculations
-   - Handles batching, concurrency, and progress tracking
-   - Can be used to fix individual dates or full datasets
+### 2. Monthly Reconciliation
+- Scheduled process on the 1st of each month
+- Uses `historicalReconciliation.reconcilePreviousMonth()` function
 
-2. **reconcile_missing_calculations.ts**
-   - Targets specific time periods identified in our analysis
-   - Uses the main fix script for actual processing
-   - Provides verification before and after fixes
+### 3. Manual Reconciliation Tools
+- `npx tsx reconciliation.ts status` - Check current reconciliation status
+- `npx tsx reconciliation.ts find` - Find dates with missing calculations
+- `npx tsx reconciliation.ts reconcile` - Fix all missing calculations
+- `npx tsx reconciliation.ts date YYYY-MM-DD` - Fix a specific date
 
-3. **verify_bitcoin_calculations.ts**
-   - Generates detailed reports on calculation completeness
-   - Identifies any remaining issues after fixes
-   - Provides month-by-month and day-by-day analysis
+### 4. Special Tools
+- `npx tsx check_reconciliation_status.ts` - Quick status check tool
+- `npx tsx run_reconciliation.ts` - Focused tool for December 2023 reconciliation
+- `npx tsx test_reconcile_date.ts` - Test tool for a specific date
 
-4. **run_bitcoin_calculation_fix.ts**
-   - Orchestrates the entire reconciliation process
-   - Runs verification → fixes → final verification
-   - Creates a summary of completed work
+## Data Model
 
-## Usage
+The reconciliation process focuses on these key entities:
 
-To run the complete reconciliation process:
+1. **Curtailment Records**
+   - Contains curtailment data from Elexon API
+   - Each record represents a unique period-farm combination
 
-```bash
-tsx run_bitcoin_calculation_fix.ts
-```
+2. **Bitcoin Calculations**
+   - Contains mining calculations for each curtailment record
+   - Each unique period-farm combination should have calculations for all miner models
 
-For verification only:
+## Development
 
-```bash
-tsx verify_bitcoin_calculations.ts
-```
+### Core Files
+- `reconciliation.ts` - Main reconciliation tool
+- `reconciliation.sql` - Consolidated SQL queries
+- `server/services/historicalReconciliation.ts` - Core service for reconciliation logic
+- `server/services/bitcoinService.ts` - Bitcoin calculation logic
 
-To fix specific time periods:
+### Running the Project
+The app runs with the "Start application" workflow, which executes `npm run dev`.
 
-```bash
-tsx reconcile_missing_calculations.ts
-```
+### API Documentation
+The platform exposes several API endpoints to access curtailment and mining data:
 
-To run the comprehensive fix directly:
-
-```bash
-tsx fix_all_bitcoin_calculations.ts
-```
-
-## How It Works
-
-1. The tools analyze the database to identify which curtailment records are missing corresponding Bitcoin calculations
-2. Missing calculations are prioritized based on completeness and chronology
-3. Calculations are processed in batches with limited concurrency to avoid overwhelming the system
-4. Progress is tracked and can be resumed if interrupted
-5. Final verification ensures all calculations are properly completed
-
-## Expected Outcomes
-
-After running these tools:
-
-- All curtailment records should have corresponding Bitcoin calculations for all three miner models
-- Database tables will be properly reconciled
-- Reports will show 100% completion across all time periods
-
-## Monitoring
-
-The scripts generate detailed logs and reports that show:
-
-- Overall progress and completion percentages
-- Any failures or issues encountered
-- Time taken for each operation
-- Final verification results
+- `/api/curtailment/mining-potential` - Get Bitcoin mining potential
+- `/api/curtailment/monthly-mining-potential` - Get monthly mining data
+- `/api/summary/daily` - Get daily curtailment summaries
+- `/api/summary/monthly` - Get monthly curtailment summaries
+- `/api/summary/yearly` - Get yearly curtailment summaries
