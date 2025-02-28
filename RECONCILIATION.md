@@ -16,9 +16,7 @@ Our reconciliation system consists of several integrated components:
 
 3. **Daily Reconciliation Check** (`daily_reconciliation_check.ts`): Automated daily maintenance tool for recent data.
 
-4. **Scheduled Reconciliation** (`scheduled_reconciliation.ts`): Scheduled maintenance to ensure regular updates.
-
-5. **Historical Reconciliation Service** (`server/services/historicalReconciliation.ts`): Core service that provides the functionality used by all reconciliation tools.
+4. **Historical Reconciliation Service** (`server/services/historicalReconciliation.ts`): Core service that provides the foundational functionality used by all reconciliation tools.
 
 ## Usage Guide
 
@@ -88,22 +86,19 @@ npx tsx unified_reconciliation.ts critical 2025-02-23
 npx tsx unified_reconciliation.ts spot-fix 2025-02-25 12 FARM-123
 ```
 
-### Simple Reconciliation
+### Quick-Use Reconciliation
 
-For quick fixes of a single date:
-
-```bash
-# Reconcile a specific date
-npx tsx simple_reconcile.ts 2025-02-28
-```
-
-### Batch Reconciliation
-
-For processing historical data in batches:
+All functionality from the simple and batch reconciliation tools has been consolidated into the unified system:
 
 ```bash
-# Reconcile a date range
-npx tsx batch_reconcile.ts 2025-01-01 2025-01-31
+# For simple date reconciliation (replaces simple_reconcile.ts)
+npx tsx unified_reconciliation.ts date 2025-02-28
+
+# For batch processing (replaces batch_reconcile.ts)
+npx tsx unified_reconciliation.ts range 2025-01-01 2025-01-31
+
+# For scheduled reconciliation (replaces scheduled_reconciliation.ts)
+npx tsx comprehensive_reconciliation.ts reconcile-recent
 ```
 
 ## Monitoring and Troubleshooting
@@ -206,8 +201,10 @@ As part of ongoing improvements to the reconciliation system, we've streamlined 
 
 1. Consolidating the documentation into a single comprehensive reference file (RECONCILIATION.md)
 2. Removing redundant tools that had overlapping functionality:
-   - `reconciliation_dashboard.ts` (functionality now in `comprehensive_reconciliation.ts` reporting)
-   - `reconciliation_manager.ts` (functionality now in `unified_reconciliation.ts`)
+   - `simple_reconcile.ts` (functionality now in `unified_reconciliation.ts date` command)
+   - `batch_reconcile.ts` (functionality now in `unified_reconciliation.ts range` command)
+   - `scheduled_reconciliation.ts` (functionality now in `comprehensive_reconciliation.ts reconcile-recent` command)
+   - `reconciliation_script.ts` (functionality now in both comprehensive and unified systems)
 3. Maintaining backward compatibility through the core services in `server/services/historicalReconciliation.ts`
 
 ### Key Components
