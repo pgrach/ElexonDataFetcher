@@ -16,7 +16,24 @@ const LOG_FILE = 'reconciliation_dashboard.log';
  * Helper function to safely cast query results to an array of records
  */
 function safeResultArray<T = Record<string, any>>(result: any): Array<T> {
-  return result as unknown as Array<T>;
+  if (!result) return [];
+  
+  // Handle rows property which is common in PostgreSQL client results
+  if (result.rows && Array.isArray(result.rows)) {
+    return result.rows as Array<T>;
+  }
+  
+  // Handle direct array results
+  if (Array.isArray(result)) {
+    return result as Array<T>;
+  }
+  
+  // For Drizzle ORM results
+  if (result && typeof result === 'object') {
+    return Array.isArray(result) ? result : [result] as Array<T>;
+  }
+  
+  return [];
 }
 
 // Color constants for console output
@@ -80,15 +97,17 @@ function log(message: string, level: 'info' | 'warning' | 'error' | 'success' = 
 /**
  * Format a number with commas
  */
-function formatNumber(value: number): string {
-  return value.toLocaleString();
+function formatNumber(value: any): string {
+  const num = typeof value === 'number' ? value : Number(value);
+  return isNaN(num) ? '0' : num.toLocaleString();
 }
 
 /**
  * Format a percentage with 2 decimal places and % symbol
  */
-function formatPercentage(value: number): string {
-  return `${value.toFixed(2)}%`;
+function formatPercentage(value: any): string {
+  const num = typeof value === 'number' ? value : Number(value);
+  return isNaN(num) ? '0.00%' : `${num.toFixed(2)}%`;
 }
 
 /**
@@ -193,17 +212,17 @@ async function getStatusByMonth() {
     const result = await db.execute(sql`
       WITH monthly_expected AS (
         SELECT
-          TO_CHAR(date, 'YYYY-MM') AS month,
+          TO_CHAR(settlement_date, 'YYYY-MM') AS month,
           COUNT(*) AS expected
         FROM curtailment_records
-        GROUP BY TO_CHAR(date, 'YYYY-MM')
+        GROUP BY TO_CHAR(settlement_date, 'YYYY-MM')
       ),
       monthly_actual AS (
         SELECT
-          TO_CHAR(date, 'YYYY-MM') AS month,
+          TO_CHAR(settlement_date, 'YYYY-MM') AS month,
           COUNT(*) AS actual
         FROM historical_bitcoin_calculations
-        GROUP BY TO_CHAR(date, 'YYYY-MM')
+        GROUP BY TO_CHAR(settlement_date, 'YYYY-MM')
       )
       SELECT
         e.month,
@@ -247,28 +266,28 @@ async function getTopMissingDates(limit: number = 10) {
     const result = await db.execute(sql`
       WITH date_expected AS (
         SELECT
-          date,
+          settlement_date,
           COUNT(*) AS expected
         FROM curtailment_records
-        GROUP BY date
+        GROUP BY settlement_date
       ),
       date_actual AS (
         SELECT
-          date,
+          settlement_date,
           COUNT(*) AS actual
         FROM historical_bitcoin_calculations
-        GROUP BY date
+        GROUP BY settlement_date
       )
       SELECT
-        e.date,
+        e.settlement_date,
         e.expected,
         COALESCE(a.actual, 0) AS actual,
         e.expected - COALESCE(a.actual, 0) AS missing,
         ROUND((COALESCE(a.actual, 0)::numeric / e.expected::numeric) * 100, 2) AS completion
       FROM date_expected e
-      LEFT JOIN date_actual a ON e.date = a.date
+      LEFT JOIN date_actual a ON e.settlement_date = a.settlement_date
       WHERE e.expected > COALESCE(a.actual, 0)
-      ORDER BY missing DESC, e.date DESC
+      ORDER BY missing DESC, e.settlement_date DESC
       LIMIT ${limit}
     `);
     
@@ -281,7 +300,7 @@ async function getTopMissingDates(limit: number = 10) {
     }
     
     resultArray.forEach((row, index) => {
-      log(`${index + 1}. ${format(new Date(row.date), 'yyyy-MM-dd')}: ${formatNumber(row.missing)} missing (${formatNumber(row.actual)} / ${formatNumber(row.expected)}, ${formatPercentage(row.completion)})`, 'warning');
+      log(`${index + 1}. ${format(new Date(row.settlement_date), 'yyyy-MM-dd')}: ${formatNumber(row.missing)} missing (${formatNumber(row.actual)} / ${formatNumber(row.expected)}, ${formatPercentage(row.completion)})`, 'warning');
     });
     
     return resultArray;
