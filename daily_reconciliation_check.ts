@@ -1,9 +1,9 @@
 /**
  * Enhanced Daily Reconciliation Check
  * 
- * This script runs automatically to check the reconciliation status for recent dates
- * and process any missing calculations. It includes robust error handling, connection
- * resilience, and comprehensive logging.
+ * This script automatically checks the reconciliation status for recent dates
+ * and processes any missing calculations using the unified reconciliation system.
+ * It includes robust error handling, connection resilience, and comprehensive logging.
  * 
  * Usage:
  *   npx tsx daily_reconciliation_check.ts [days=2] [forceProcess=false]
@@ -17,6 +17,11 @@ import { format, subDays, parseISO } from "date-fns";
 import pg from "pg";
 import fs from "fs";
 import path from "path";
+import { 
+  getReconciliationStatus,
+  findDatesWithMissingCalculations,
+  processDate
+} from "./unified_reconciliation";
 import { reconcileDay, auditAndFixBitcoinCalculations } from "./server/services/historicalReconciliation";
 
 // Configuration
@@ -432,7 +437,24 @@ async function checkDateReconciliationStatus(date: string): Promise<Reconciliati
   }, `Check reconciliation status for ${date}`, 3, 15000);
 }
 
-// Fix a specific date with comprehensive error handling
+// Interface for unified reconciliation status
+interface UnifiedReconciliationStatus {
+  overview: {
+    totalRecords: number;
+    totalCalculations: number;
+    missingCalculations: number;
+    completionPercentage: number;
+  };
+  dateStats: Array<{
+    date: string;
+    expected: number;
+    actual: number;
+    missing: number;
+    completionPercentage: number;
+  }>;
+}
+
+// Fix a specific date with comprehensive error handling using unified reconciliation
 async function fixDateComprehensive(date: string): Promise<{
   success: boolean;
   message: string;
@@ -441,8 +463,25 @@ async function fixDateComprehensive(date: string): Promise<{
   stillMissing: number;
 }> {
   try {
-    // First get the initial status
-    const initialStatus = await checkDateReconciliationStatus(date);
+    // First get the initial status using the unified system
+    const initialStatusResult = await withRetry<UnifiedReconciliationStatus>(
+      async () => await getReconciliationStatus(),
+      `Get initial reconciliation status`,
+      2
+    );
+    
+    // Find the specific date in the status result
+    const dateStats = initialStatusResult.dateStats.find((stat) => stat.date === date);
+    
+    // If no stats found for this date, create default values
+    const initialStatus = dateStats ? {
+      date,
+      expected: dateStats.expected,
+      actual: dateStats.actual,
+      missing: dateStats.missing,
+      completionPercentage: dateStats.completionPercentage
+    } : await checkDateReconciliationStatus(date);
+    
     log(`Initial status for ${date}: ${initialStatus.actual}/${initialStatus.expected} (${initialStatus.completionPercentage}%)`, "info");
     
     if (initialStatus.completionPercentage === 100) {
@@ -457,20 +496,30 @@ async function fixDateComprehensive(date: string): Promise<{
     
     const previouslyMissing = initialStatus.missing;
     
-    // First try with the standard historical reconciliation service
-    log(`Attempting to fix ${date} using standard reconciliation...`, "info");
-    await withRetry(
-      async () => await reconcileDay(date),
-      `Standard reconciliation for ${date}`,
-      2
+    // Use the unified reconciliation system's processDate function
+    log(`Attempting to fix ${date} using unified reconciliation system...`, "info");
+    const processResult = await withRetry<{success: boolean; message: string}>(
+      async () => await processDate(date),
+      `Unified reconciliation for ${date}`,
+      3
     );
     
-    // Check status after standard reconciliation
-    let statusAfterStandard = await checkDateReconciliationStatus(date);
-    log(`Status after standard reconciliation: ${statusAfterStandard.actual}/${statusAfterStandard.expected} (${statusAfterStandard.completionPercentage}%)`, "info");
+    // If the unified system fails, fall back to the standard reconciliation
+    if (!processResult.success) {
+      log(`Unified reconciliation failed: ${processResult.message}. Falling back to standard reconciliation...`, "warning");
+      await withRetry(
+        async () => await reconcileDay(date),
+        `Standard reconciliation for ${date}`,
+        2
+      );
+    }
     
-    // Only try audit and fix if standard didn't fully resolve
-    if (statusAfterStandard.completionPercentage < 100) {
+    // Check status after reconciliation attempt
+    let statusAfterReconciliation = await checkDateReconciliationStatus(date);
+    log(`Status after reconciliation: ${statusAfterReconciliation.actual}/${statusAfterReconciliation.expected} (${statusAfterReconciliation.completionPercentage}%)`, "info");
+    
+    // Only try audit and fix if reconciliation didn't fully resolve
+    if (statusAfterReconciliation.completionPercentage < 100) {
       log(`Attempting to fix remaining records with targeted reconciliation...`, "info");
       
       const auditResult = await withRetry(
