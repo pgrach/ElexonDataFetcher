@@ -81,13 +81,28 @@ npx tsx unified_reconciliation.ts [command] [options]
 
 ## Reconciliation Best Practices
 
-1. **Regular Checks**: Run `npx tsx comprehensive_reconciliation.ts status` daily to monitor reconciliation status.
+1. **Automated Scheduled Checks**: Set up a cron job to run the scheduled reconciliation script:
+   ```bash
+   npx tsx scheduled_reconciliation.ts [days=7]
+   ```
+   This will automatically check and reconcile the most recent days' data.
 
-2. **Incremental Updates**: Use `reconcile-recent` to ensure recent data is always reconciled.
+2. **Regular Status Monitoring**: Run `npx tsx batch_reconcile.ts` periodically to find and fix any missing calculations.
 
-3. **Reporting**: Generate monthly reports with `npx tsx comprehensive_reconciliation.ts report` to track progress.
+3. **Issue Investigation**: If specific dates continue to have problems, use the simple_reconcile.ts script for debugging:
+   ```bash
+   npx tsx simple_reconcile.ts YYYY-MM-DD
+   ```
 
-4. **Troubleshooting**: If specific dates are problematic, use the spot-fix feature of unified_reconciliation to target specific combinations.
+4. **Comprehensive Reconciliation**: For a full database audit and reconciliation, use:
+   ```bash
+   npx tsx batch_reconcile.ts
+   ```
+
+5. **Targeted Fixes**: If specific date-period-farm combinations are problematic, use:
+   ```bash
+   npx tsx unified_reconciliation.ts spot-fix DATE PERIOD FARM
+   ```
 
 ## Understanding the Reconciliation Process
 
@@ -103,9 +118,10 @@ The relationship is:
 
 ## Log Files
 
-The reconciliation tools generate detailed logs:
-- `reconciliation.log` - Logs from unified_reconciliation.ts
-- `comprehensive_reconciliation.log` - Logs from comprehensive_reconciliation.ts
+The reconciliation tools generate detailed logs that can be found in the logs directory:
+- Daily logs for reconciliation activities are stored in the `logs/` directory with date-stamped filenames
+- `logs/reconciliation_YYYY-MM-DD.log` - Contains detailed reconciliation events
+- `logs/daily_reconciliation_YYYY-MM-DD.log` - Contains logs from scheduled checks
 
 ## Handling Failure Cases
 
@@ -114,3 +130,56 @@ If reconciliation fails for specific dates:
 1. Check the logs for error messages
 2. Use `npx tsx unified_reconciliation.ts critical DATE` for problematic dates
 3. For specific period-farm combinations, use the spot-fix command
+
+## Automating Reconciliation
+
+To ensure consistent data integrity, set up the scheduled reconciliation script to run automatically.
+
+### Using cron (Linux/macOS)
+
+Add a daily scheduled task by editing your crontab:
+
+```bash
+crontab -e
+```
+
+Add this line to run reconciliation daily at 2:00 AM:
+
+```
+0 2 * * * cd /path/to/your/project && /usr/bin/env npx tsx scheduled_reconciliation.ts 7 >> /path/to/your/project/reconciliation_cron.log 2>&1
+```
+
+### Using Windows Task Scheduler
+
+1. Create a batch file called `run_reconciliation.bat`:
+   ```batch
+   cd C:\path\to\your\project
+   npx tsx scheduled_reconciliation.ts 7 >> reconciliation_scheduler.log 2>&1
+   ```
+
+2. Open Windows Task Scheduler and create a new task:
+   - Set the trigger to run daily at 2:00 AM
+   - Set the action to run your batch file
+
+### Using GitHub Actions (for projects on GitHub)
+
+Create a file `.github/workflows/reconciliation.yml`:
+
+```yaml
+name: Daily Reconciliation
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Run at 2:00 AM UTC daily
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+      - run: npm install
+      - run: npx tsx scheduled_reconciliation.ts 7
+```
