@@ -1,85 +1,41 @@
-# Bitcoin Calculation Reconciliation Plan
+# Bitcoin Reconciliation Plan
 
-## Current Status Summary (Feb 28, 2025)
+## Current Status
+- **Reconciliation Rate**: 65.02% (984,547 calculations out of 1,514,223 expected)
+- **Complete Calculations**: 
+  - S19J_PRO: 328,189 calculations
+  - S9: 328,179 calculations
+  - M20S: 328,179 calculations
 
-- **Total Reconciliation Progress: 43.24%** (902,455 of 2,087,079 required records)
-- **Per-Year Completion Rates:**
-  - 2022: 16.74% (103,387 of 617,649 required)
-  - 2023: 0.05% (204 of 392,097 required) - **HIGHEST PRIORITY**
-  - 2024: 81.28% (678,951 of 835,302 required)
-  - 2025: 49.54% (119,913 of 242,031 required)
+## Identified Issues
+1. **Missing December 2023 calculations**: The primary gap in reconciliation
+2. **Period-Farm combinations**: Some unique combinations missing calculations for specific miner models
+3. **Difficulty data retrieval**: Potential issues with historical difficulty retrieval for some dates
 
 ## Reconciliation Approach
 
-We'll implement a systematic, focused approach to reconcile all missing Bitcoin calculations, prioritizing by year based on completion percentage.
+### 1. Centralized System
+- Consolidated all reconciliation code in `/server/services/historicalReconciliation.ts`
+- Created a single entry point through `reconciliation.ts` for all reconciliation tasks
+- Simplified SQL queries in `reconciliation.sql` for better maintainability
 
-### 1. Priority Order for Processing
+### 2. Dedicated Tools
+- `check_reconciliation_status.ts`: Quick tool to check current reconciliation status
+- `reconciliation.ts`: Complete tool with commands for status, finding issues, and fixing
+- `comprehensive_reconciliation_plan.md`: Documentation of the overall approach
 
-1. **2023 (0.05% complete)** - Critical priority
-2. **2022 (16.74% complete)** - High priority
-3. **2025 (49.54% complete)** - Medium priority
-4. **2024 (81.28% complete)** - Lower priority
+### 3. Execution Plan for December 2023
+1. Identify all missing period-farm combinations for December 2023
+2. Process each date sequentially, ensuring proper difficulty data is available
+3. Verify results after each date is processed
+4. Generate final reconciliation report
 
-### 2. Implementation Strategy
+### 4. Ongoing Maintenance
+- Daily automated reconciliation for new curtailment records
+- Monthly verification of complete reconciliation
+- Alerting system for any reconciliation failures
 
-#### For Each Year:
-
-1. Create dedicated reconciliation script
-2. Process month by month in sequence
-3. Implement recovery mechanisms to handle errors
-4. Verify completion after each month
-5. Generate comprehensive reports
-
-### 3. Reconciliation Scripts
-
-We'll create the following scripts:
-
-- **reconcile_2023.sql** - For 2023 data (highest priority)
-- **reconcile_2022.sql** - For 2022 data
-- **reconcile_2025.sql** - For 2025 data
-- **reconcile_2024.sql** - For 2024 data
-- **complete_bitcoin_reconciliation.sql** - Master script to run all reconciliations
-
-### 4. Performance Optimization
-
-- Process data in smaller batch sizes to avoid memory issues
-- Use optimized SQL queries with proper indexing
-- Implement transaction blocks for data consistency
-- Run during off-peak hours to minimize system impact
-
-### 5. Verification and Validation
-
-After each reconciliation batch:
-
-- Verify correct counts for all miner models
-- Compare against expected totals
-- Generate logs with success/failure status
-- Store progress metrics in separate tables
-
-## Testing and Verification 
-
-We have successfully tested our approach with:
-
-1. **2023-01-15** - Added 180 calculation records (60 per miner model)
-2. **2023-06-20** - Added 21 calculation records (7 per miner model)
-
-These tests confirm that our reconciliation strategy works effectively.
-
-## Expected Timeline
-
-| Phase | Task | Estimated Completion | Records to Add |
-|-------|------|---------------------|---------------|
-| 1 | Reconcile 2023 data | 3-4 days | ~392,000 |
-| 2 | Reconcile 2022 data | 5-6 days | ~514,000 |
-| 3 | Reconcile 2025 data | 2-3 days | ~122,000 |
-| 4 | Reconcile 2024 data | 3-4 days | ~156,000 |
-| 5 | Final verification | 1 day | - |
-
-## Post-Reconciliation Steps
-
-After achieving 100% reconciliation:
-
-1. Implement preventive measures to avoid future discrepancies
-2. Set up monitoring alerts for any new reconciliation issues
-3. Document the process for future reference
-4. Create automated scripts for ongoing reconciliation checks
+## Success Criteria
+- 100% reconciliation rate across all dates
+- All three miner models (S19J_PRO, S9, M20S) calculated for each unique period-farm combination
+- Consistent calculation methodology across all dates

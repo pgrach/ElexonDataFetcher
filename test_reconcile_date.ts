@@ -3,155 +3,203 @@
  */
 
 import { db } from "./db";
-import { curtailmentRecords, historicalBitcoinCalculations } from "./db/schema";
 import { sql } from "drizzle-orm";
-import { auditAndFixBitcoinCalculations } from "./server/services/historicalReconciliation";
+import { fixDate } from "./reconciliation";
 
-// Target date with missing calculations (based on SQL query)
-const TARGET_DATE = "2025-02-28";
+// Set the date to test here
+const TEST_DATE = "2023-12-25";
 
 async function getReconciliationStatusForDate(date: string) {
-  // First, analyze the unique combinations of period-farm pairs
-  const uniqueCombosResult = await db.execute(sql`
-    WITH unique_combos AS (
-      SELECT DISTINCT settlement_period, farm_id
+  const result = await db.execute(sql`
+    WITH date_curtailment AS (
+      SELECT 
+        COUNT(*) as total_records,
+        COUNT(DISTINCT (settlement_period || '-' || farm_id)) as unique_combinations
       FROM curtailment_records
-      WHERE settlement_date = ${date}::date
+      WHERE settlement_date = ${date}
+    ),
+    date_bitcoin AS (
+      SELECT
+        miner_model,
+        COUNT(*) as calculation_count
+      FROM historical_bitcoin_calculations
+      WHERE settlement_date = ${date}
+      GROUP BY miner_model
     )
-    SELECT COUNT(*) as unique_combo_count
-    FROM unique_combos
-  `);
-  
-  const uniqueCombinations = Number(uniqueCombosResult.rows[0]?.unique_combo_count || 0);
-  
-  // Get curtailment count for the date
-  const curtailmentResult = await db
-    .select({ count: sql<number>`COUNT(*)` })
-    .from(curtailmentRecords)
-    .where(sql`settlement_date = ${date}::date`);
-  
-  const curtailmentCount = curtailmentResult[0]?.count || 0;
-  
-  // Get Bitcoin calculation counts for the date by model
-  const bitcoinResult = await db
-    .select({
-      model: historicalBitcoinCalculations.minerModel,
-      count: sql<number>`COUNT(*)`
-    })
-    .from(historicalBitcoinCalculations)
-    .where(sql`settlement_date = ${date}::date`)
-    .groupBy(historicalBitcoinCalculations.minerModel);
-  
-  const modelCounts = bitcoinResult.reduce((acc, { model, count }) => {
-    acc[model as string] = Number(count);
-    return acc;
-  }, {} as Record<string, number>);
-  
-  const totalCalculations = bitcoinResult.reduce((sum, { count }) => sum + Number(count), 0);
-  
-  // The expected calculations should be based on unique period-farm combinations
-  // Each unique combination needs one calculation per miner model
-  const MINER_MODELS = 3; // S19J_PRO, S9, M20S
-  const expectedCalculations = uniqueCombinations * MINER_MODELS;
-  
-  // Also get the calculation distribution
-  const calculationDistributionResult = await db.execute(sql`
     SELECT 
-      hbc.settlement_period,
-      hbc.farm_id,
-      COUNT(DISTINCT hbc.miner_model) as model_count
-    FROM historical_bitcoin_calculations hbc
-    WHERE hbc.settlement_date = ${date}::date
-    GROUP BY hbc.settlement_period, hbc.farm_id
+      c.total_records as curtailment_records,
+      c.unique_combinations as unique_combinations,
+      COALESCE(b.miner_model, 'TOTAL') as miner_model,
+      COALESCE(b.calculation_count, SUM(b.calculation_count) OVER ()) as calculation_count,
+      c.unique_combinations * 1 as expected_per_model,
+      c.unique_combinations * 3 as expected_total,
+      ROUND((COALESCE(b.calculation_count, SUM(b.calculation_count) OVER ()) * 100.0) / 
+        NULLIF(c.unique_combinations * 3, 0), 2) as reconciliation_percentage
+    FROM date_curtailment c
+    LEFT JOIN date_bitcoin b ON 1=1
+    GROUP BY c.total_records, c.unique_combinations, b.miner_model, b.calculation_count
   `);
   
-  const calculationDistribution = calculationDistributionResult.rows.map(row => ({
-    period: Number(row.settlement_period),
-    farmId: row.farm_id,
-    modelCount: Number(row.model_count)
-  }));
+  console.log(`=== Reconciliation Status for ${date} ===\n`);
   
-  const reconciliationPercentage = expectedCalculations > 0 
-    ? (totalCalculations / expectedCalculations) * 100 
-    : 100;
-    
-  return {
-    date,
-    curtailmentCount,
-    uniquePeriodFarmCombinations: uniqueCombinations,
-    modelCounts,
-    totalCalculations,
-    expectedCalculations,
-    calculationDistribution,
-    reconciliationPercentage: Math.round(reconciliationPercentage * 100) / 100
+  if (result.rows.length === 0) {
+    console.log(`No data found for ${date}.`);
+    return null;
+  }
+
+  const totalRow = result.rows.find(row => row.miner_model === 'TOTAL') || result.rows[0];
+  
+  const status = {
+    curtailmentRecords: Number(totalRow.curtailment_records),
+    uniqueCombinations: Number(totalRow.unique_combinations),
+    totalCalculations: Number(totalRow.calculation_count || 0),
+    expectedPerModel: Number(totalRow.expected_per_model || 0),
+    expectedTotal: Number(totalRow.expected_total || 0),
+    reconciliationPercentage: Number(totalRow.reconciliation_percentage || 0)
   };
+  
+  console.log(`Curtailment Records: ${status.curtailmentRecords}`);
+  console.log(`Unique Period-Farm Combinations: ${status.uniqueCombinations}`);
+  console.log(`Bitcoin Calculations: ${status.totalCalculations}`);
+  console.log(`Expected Per Model: ${status.expectedPerModel}`);
+  console.log(`Expected Total: ${status.expectedTotal}`);
+  console.log(`Reconciliation: ${status.reconciliationPercentage}%\n`);
+  
+  // Print by miner model
+  result.rows.forEach(row => {
+    if (row.miner_model !== 'TOTAL') {
+      console.log(`- ${row.miner_model}: ${row.calculation_count || 0}/${row.expected_per_model} calculations`);
+    }
+  });
+  
+  // Detailed status - missing combinations
+  if (status.reconciliationPercentage < 100) {
+    await getMissingCombinations(date);
+  }
+  
+  return status;
+}
+
+async function getMissingCombinations(date: string) {
+  const result = await db.execute(sql`
+    WITH period_farm_combinations AS (
+      SELECT 
+        settlement_period,
+        farm_id,
+        COUNT(*) as record_count
+      FROM curtailment_records
+      WHERE settlement_date = ${date}
+      GROUP BY settlement_period, farm_id
+    ),
+    bitcoin_calculations AS (
+      SELECT 
+        settlement_period,
+        farm_id,
+        miner_model,
+        COUNT(*) as calculation_count
+      FROM historical_bitcoin_calculations
+      WHERE settlement_date = ${date}
+      GROUP BY settlement_period, farm_id, miner_model
+    )
+    SELECT
+      pf.settlement_period,
+      pf.farm_id,
+      COALESCE(bc_s19.calculation_count, 0) as s19j_pro_calculations,
+      COALESCE(bc_s9.calculation_count, 0) as s9_calculations,
+      COALESCE(bc_m20s.calculation_count, 0) as m20s_calculations,
+      CASE 
+        WHEN COALESCE(bc_s19.calculation_count, 0) = 0 OR 
+             COALESCE(bc_s9.calculation_count, 0) = 0 OR 
+             COALESCE(bc_m20s.calculation_count, 0) = 0 THEN 'Incomplete'
+        ELSE 'Complete'
+      END as status
+    FROM period_farm_combinations pf
+    LEFT JOIN bitcoin_calculations bc_s19 
+      ON pf.settlement_period = bc_s19.settlement_period 
+      AND pf.farm_id = bc_s19.farm_id
+      AND bc_s19.miner_model = 'S19J_PRO'
+    LEFT JOIN bitcoin_calculations bc_s9
+      ON pf.settlement_period = bc_s9.settlement_period 
+      AND pf.farm_id = bc_s9.farm_id
+      AND bc_s9.miner_model = 'S9'
+    LEFT JOIN bitcoin_calculations bc_m20s
+      ON pf.settlement_period = bc_m20s.settlement_period 
+      AND pf.farm_id = bc_m20s.farm_id
+      AND bc_m20s.miner_model = 'M20S'
+    WHERE 
+      COALESCE(bc_s19.calculation_count, 0) = 0 OR 
+      COALESCE(bc_s9.calculation_count, 0) = 0 OR 
+      COALESCE(bc_m20s.calculation_count, 0) = 0
+    ORDER BY pf.settlement_period, pf.farm_id
+  `);
+  
+  if (result.rows.length === 0) {
+    console.log("No missing combinations found!");
+    return [];
+  }
+  
+  console.log(`\n=== Missing Period-Farm Combinations for ${date} ===\n`);
+  console.log("Period | Farm ID | S19J_PRO | S9 | M20S | Status");
+  console.log("-------|---------|----------|----|----|--------");
+  
+  result.rows.forEach(row => {
+    console.log(
+      `${row.settlement_period.toString().padStart(6)} | ` +
+      `${row.farm_id.padEnd(7)} | ` +
+      `${row.s19j_pro_calculations.toString().padStart(8)} | ` +
+      `${row.s9_calculations.toString().padStart(2)} | ` +
+      `${row.m20s_calculations.toString().padStart(3)} | ` +
+      `${row.status}`
+    );
+  });
+  
+  return result.rows;
 }
 
 async function testReconcileDate() {
   try {
-    console.log(`\n===== TESTING RECONCILIATION FOR ${TARGET_DATE} =====\n`);
+    console.log(`=== Testing Reconciliation for ${TEST_DATE} ===\n`);
     
     // Get initial status
-    console.log("Checking initial reconciliation status...");
-    const initialStatus = await getReconciliationStatusForDate(TARGET_DATE);
+    console.log("Initial Status:");
+    const initialStatus = await getReconciliationStatusForDate(TEST_DATE);
     
-    console.log("\n=== Initial Status ===");
-    console.log(`Date: ${initialStatus.date}`);
-    console.log(`Curtailment Records: ${initialStatus.curtailmentCount}`);
-    console.log(`Bitcoin Calculations: ${initialStatus.totalCalculations}`);
-    console.log(`Expected Calculations: ${initialStatus.expectedCalculations}`);
-    console.log(`Reconciliation: ${initialStatus.reconciliationPercentage}%`);
-    
-    console.log("\nBy Miner Model:");
-    for (const [model, count] of Object.entries(initialStatus.modelCounts)) {
-      console.log(`- ${model}: ${count}`);
-    }
-    
-    // If already at 100%, no need to reconcile
-    if (initialStatus.reconciliationPercentage === 100) {
-      console.log("\n✅ Already at 100% reconciliation! No action needed.");
+    if (!initialStatus) {
+      console.log(`No data available for ${TEST_DATE}. Exiting.`);
       return;
     }
     
-    // Reconcile the date
-    console.log("\nReconciling date...");
-    const result = await auditAndFixBitcoinCalculations(TARGET_DATE);
+    // If already at 100%, we're done
+    if (initialStatus.reconciliationPercentage === 100) {
+      console.log(`\n✅ ${TEST_DATE} is already at 100% reconciliation! No action needed.`);
+      return;
+    }
     
-    console.log(`\nReconciliation result: ${result.success ? "Success" : "Failure"}`);
+    // Fix the date
+    console.log(`\nAttempting to fix ${TEST_DATE}...`);
+    const result = await fixDate(TEST_DATE);
+    console.log(`\nFix result: ${result.success ? 'Success' : 'Failed'}`);
     console.log(`Message: ${result.message}`);
-    console.log(`Fixed: ${result.fixed}`);
     
-    // Get final status
-    console.log("\nChecking final reconciliation status...");
-    const finalStatus = await getReconciliationStatusForDate(TARGET_DATE);
-    
-    console.log("\n=== Final Status ===");
-    console.log(`Date: ${finalStatus.date}`);
-    console.log(`Curtailment Records: ${finalStatus.curtailmentCount}`);
-    console.log(`Bitcoin Calculations: ${finalStatus.totalCalculations}`);
-    console.log(`Expected Calculations: ${finalStatus.expectedCalculations}`);
-    console.log(`Reconciliation: ${finalStatus.reconciliationPercentage}%`);
-    
-    console.log("\nBy Miner Model:");
-    for (const [model, count] of Object.entries(finalStatus.modelCounts)) {
-      console.log(`- ${model}: ${count}`);
-    }
-    
-    // Report improvement
-    const improvement = finalStatus.reconciliationPercentage - initialStatus.reconciliationPercentage;
-    console.log(`\nImprovement: ${improvement.toFixed(2)}%`);
-    
-    if (finalStatus.reconciliationPercentage === 100) {
-      console.log("\n✅ Successfully achieved 100% reconciliation!");
-    } else {
-      console.log(`\n⚠️ Reconciliation incomplete at ${finalStatus.reconciliationPercentage}%`);
-      console.log("Check logs for details on any errors.");
-    }
+    // Check final status
+    console.log("\nFinal Status:");
+    await getReconciliationStatusForDate(TEST_DATE);
     
   } catch (error) {
-    console.error("Error during test:", error);
+    console.error("Error during reconciliation process:", error);
+    throw error;
   }
 }
 
-// Run the test
-testReconcileDate().catch(console.error);
+// Run the main function if script is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  testReconcileDate()
+    .then(() => {
+      console.log("\n=== Test Complete ===");
+      process.exit(0);
+    })
+    .catch(error => {
+      console.error("Fatal error:", error);
+      process.exit(1);
+    });
+}
