@@ -1,77 +1,53 @@
--- Script to reconcile missing months
--- This script will process months with missing Bitcoin calculations
+-- Simple Reconciliation Script
+-- This script directly processes specific dates to reconcile the data
 
--- First, let's check what years and months need processing
-WITH years_data AS (
-  SELECT DISTINCT EXTRACT(YEAR FROM settlement_date)::integer as year 
+-- 1. Check current reconciliation status
+WITH years AS (
+  SELECT DISTINCT EXTRACT(YEAR FROM settlement_date)::INTEGER as year
   FROM curtailment_records
+  ORDER BY year
 ),
-year_status AS (
+year_curtailment AS (
   SELECT 
     y.year,
     (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as curtailment_count,
-    (SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as bitcoin_count
-  FROM years_data y
-)
-SELECT 
-  year,
-  curtailment_count,
-  bitcoin_count,
-  curtailment_count * 3 as expected_bitcoin_count,
-  ROUND(bitcoin_count * 100.0 / (curtailment_count * 3), 2) as completion_percentage,
-  CASE
-    WHEN bitcoin_count = 0 THEN 'Missing'
-    WHEN bitcoin_count < curtailment_count * 3 THEN 'Incomplete'
-    ELSE 'Complete'
-  END as status
-FROM year_status
-ORDER BY
-  CASE
-    WHEN bitcoin_count = 0 THEN 1
-    WHEN bitcoin_count < curtailment_count * 3 THEN 2
-    ELSE 3
-  END,
-  year;
-
--- Create a monthly summary
-WITH months_data AS (
-  SELECT DISTINCT to_char(settlement_date, 'YYYY-MM') as year_month
-  FROM curtailment_records
-  ORDER BY year_month
+    (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) * 3 as expected_count
+  FROM years y
 ),
-month_status AS (
+year_bitcoin AS (
   SELECT 
-    md.year_month,
-    EXTRACT(YEAR FROM to_date(md.year_month || '-01', 'YYYY-MM-DD'))::integer as year,
-    (SELECT COUNT(*) FROM curtailment_records 
-     WHERE to_char(settlement_date, 'YYYY-MM') = md.year_month) as curtailment_count,
-    (SELECT COUNT(*) FROM historical_bitcoin_calculations 
-     WHERE to_char(settlement_date, 'YYYY-MM') = md.year_month) as bitcoin_count
-  FROM months_data md
+    EXTRACT(YEAR FROM settlement_date)::INTEGER as year,
+    COUNT(*) as bitcoin_count
+  FROM historical_bitcoin_calculations
+  GROUP BY year
+),
+combined AS (
+  SELECT 
+    yc.year,
+    yc.curtailment_count,
+    yc.expected_count,
+    COALESCE(yb.bitcoin_count, 0) as bitcoin_count,
+    yc.expected_count - COALESCE(yb.bitcoin_count, 0) as missing_count,
+    ROUND(COALESCE(yb.bitcoin_count, 0) * 100.0 / yc.expected_count, 2) as completion_percentage
+  FROM year_curtailment yc
+  LEFT JOIN year_bitcoin yb ON yc.year = yb.year
 )
 SELECT 
-  year_month,
   year,
   curtailment_count,
+  expected_count,
   bitcoin_count,
-  curtailment_count * 3 as expected_bitcoin_count,
-  ROUND(bitcoin_count * 100.0 / (curtailment_count * 3), 2) as completion_percentage,
-  CASE
-    WHEN bitcoin_count = 0 THEN 'Missing'
-    WHEN bitcoin_count < curtailment_count * 3 THEN 'Incomplete'
-    ELSE 'Complete'
+  missing_count,
+  completion_percentage,
+  CASE 
+    WHEN completion_percentage = 100 THEN 'COMPLETE'
+    WHEN completion_percentage >= 99.9 THEN 'NEAR COMPLETE'
+    ELSE 'INCOMPLETE'
   END as status
-FROM month_status
-ORDER BY
-  CASE
-    WHEN bitcoin_count = 0 THEN 1
-    WHEN bitcoin_count < curtailment_count * 3 THEN 2
-    ELSE 3
-  END,
-  curtailment_count DESC;
+FROM combined
+ORDER BY year;
 
--- Test with three specific dates (one from each priority year)
--- Process 2023-01-15 (from the highest priority year)
+-- 2. Process 2023-01-15 (highest priority year)
 DO $$
 DECLARE
   target_date DATE := '2023-01-15';
@@ -89,21 +65,19 @@ BEGIN
   FROM historical_bitcoin_calculations
   WHERE settlement_date = target_date;
   
-  RAISE NOTICE 'Processing date % with % curtailment records and % initial bitcoin calculations',
+  RAISE NOTICE 'Processing % with % curtailment records and % initial bitcoin calculations',
     target_date, curtailment_count, bitcoin_before;
   
   -- Process each curtailment record for this date
-  FOR curt_rec IN (
+  FOR curt_rec IN 
     SELECT 
       settlement_date,
       settlement_period,
       farm_id,
       SUM(volume) AS total_volume
     FROM curtailment_records
-    WHERE 
-      settlement_date = target_date
+    WHERE settlement_date = target_date
     GROUP BY settlement_date, settlement_period, farm_id
-  )
   LOOP
     -- Skip zero volume records
     IF ABS(curt_rec.total_volume) > 0 THEN
@@ -174,13 +148,12 @@ BEGIN
   FROM historical_bitcoin_calculations
   WHERE settlement_date = target_date;
   
-  -- Log the results
   RAISE NOTICE 'Completed processing % - Bitcoin calculations increased from % to % (added %)',
     target_date, bitcoin_before, bitcoin_after, bitcoin_after - bitcoin_before;
 END;
 $$;
 
--- Process 2022-03-15 (from the second priority year)
+-- 3. Process 2022-03-15 (second priority year)
 DO $$
 DECLARE
   target_date DATE := '2022-03-15';
@@ -198,21 +171,19 @@ BEGIN
   FROM historical_bitcoin_calculations
   WHERE settlement_date = target_date;
   
-  RAISE NOTICE 'Processing date % with % curtailment records and % initial bitcoin calculations',
+  RAISE NOTICE 'Processing % with % curtailment records and % initial bitcoin calculations',
     target_date, curtailment_count, bitcoin_before;
   
   -- Process each curtailment record for this date
-  FOR curt_rec IN (
+  FOR curt_rec IN 
     SELECT 
       settlement_date,
       settlement_period,
       farm_id,
       SUM(volume) AS total_volume
     FROM curtailment_records
-    WHERE 
-      settlement_date = target_date
+    WHERE settlement_date = target_date
     GROUP BY settlement_date, settlement_period, farm_id
-  )
   LOOP
     -- Skip zero volume records
     IF ABS(curt_rec.total_volume) > 0 THEN
@@ -283,13 +254,12 @@ BEGIN
   FROM historical_bitcoin_calculations
   WHERE settlement_date = target_date;
   
-  -- Log the results
   RAISE NOTICE 'Completed processing % - Bitcoin calculations increased from % to % (added %)',
     target_date, bitcoin_before, bitcoin_after, bitcoin_after - bitcoin_before;
 END;
 $$;
 
--- Process 2025-02-28 (from current year)
+-- 4. Process 2025-02-28 (current year)
 DO $$
 DECLARE
   target_date DATE := '2025-02-28';
@@ -307,21 +277,19 @@ BEGIN
   FROM historical_bitcoin_calculations
   WHERE settlement_date = target_date;
   
-  RAISE NOTICE 'Processing date % with % curtailment records and % initial bitcoin calculations',
+  RAISE NOTICE 'Processing % with % curtailment records and % initial bitcoin calculations',
     target_date, curtailment_count, bitcoin_before;
   
   -- Process each curtailment record for this date
-  FOR curt_rec IN (
+  FOR curt_rec IN 
     SELECT 
       settlement_date,
       settlement_period,
       farm_id,
       SUM(volume) AS total_volume
     FROM curtailment_records
-    WHERE 
-      settlement_date = target_date
+    WHERE settlement_date = target_date
     GROUP BY settlement_date, settlement_period, farm_id
-  )
   LOOP
     -- Skip zero volume records
     IF ABS(curt_rec.total_volume) > 0 THEN
@@ -392,40 +360,53 @@ BEGIN
   FROM historical_bitcoin_calculations
   WHERE settlement_date = target_date;
   
-  -- Log the results
   RAISE NOTICE 'Completed processing % - Bitcoin calculations increased from % to % (added %)',
     target_date, bitcoin_before, bitcoin_after, bitcoin_after - bitcoin_before;
 END;
 $$;
 
--- Verify again what years and months need processing
-WITH years_data AS (
-  SELECT DISTINCT EXTRACT(YEAR FROM settlement_date)::integer as year 
+-- 5. Check reconciliation status after processing the test dates
+WITH years AS (
+  SELECT DISTINCT EXTRACT(YEAR FROM settlement_date)::INTEGER as year
   FROM curtailment_records
+  ORDER BY year
 ),
-year_status AS (
+year_curtailment AS (
   SELECT 
     y.year,
     (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as curtailment_count,
-    (SELECT COUNT(*) FROM historical_bitcoin_calculations WHERE EXTRACT(YEAR FROM settlement_date) = y.year) as bitcoin_count
-  FROM years_data y
+    (SELECT COUNT(*) FROM curtailment_records WHERE EXTRACT(YEAR FROM settlement_date) = y.year) * 3 as expected_count
+  FROM years y
+),
+year_bitcoin AS (
+  SELECT 
+    EXTRACT(YEAR FROM settlement_date)::INTEGER as year,
+    COUNT(*) as bitcoin_count
+  FROM historical_bitcoin_calculations
+  GROUP BY year
+),
+combined AS (
+  SELECT 
+    yc.year,
+    yc.curtailment_count,
+    yc.expected_count,
+    COALESCE(yb.bitcoin_count, 0) as bitcoin_count,
+    yc.expected_count - COALESCE(yb.bitcoin_count, 0) as missing_count,
+    ROUND(COALESCE(yb.bitcoin_count, 0) * 100.0 / yc.expected_count, 2) as completion_percentage
+  FROM year_curtailment yc
+  LEFT JOIN year_bitcoin yb ON yc.year = yb.year
 )
 SELECT 
   year,
   curtailment_count,
+  expected_count,
   bitcoin_count,
-  curtailment_count * 3 as expected_bitcoin_count,
-  ROUND(bitcoin_count * 100.0 / (curtailment_count * 3), 2) as completion_percentage,
-  CASE
-    WHEN bitcoin_count = 0 THEN 'Missing'
-    WHEN bitcoin_count < curtailment_count * 3 THEN 'Incomplete'
-    ELSE 'Complete'
+  missing_count,
+  completion_percentage,
+  CASE 
+    WHEN completion_percentage = 100 THEN 'COMPLETE'
+    WHEN completion_percentage >= 99.9 THEN 'NEAR COMPLETE'
+    ELSE 'INCOMPLETE'
   END as status
-FROM year_status
-ORDER BY
-  CASE
-    WHEN bitcoin_count = 0 THEN 1
-    WHEN bitcoin_count < curtailment_count * 3 THEN 2
-    ELSE 3
-  END,
-  year;
+FROM combined
+ORDER BY year;
