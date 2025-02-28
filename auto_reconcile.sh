@@ -134,6 +134,7 @@ load_checkpoint() {
 # Process a specific critical date
 process_critical_date() {
   local critical_date="$1"
+  local fallback_to_minimal=1  # Flag to determine if we should try minimal reconciliation if regular fails
   
   if [ -z "$critical_date" ]; then
     log "⚠️ No critical date provided for processing"
@@ -142,18 +143,34 @@ process_critical_date() {
   
   log "Starting critical date processing for $critical_date"
   
-  # Use the specialized critical date script
-  run_with_retry "./process_critical_date.sh $critical_date" "Process critical date $critical_date" 2 $TIMEOUT_CRITICAL
+  # First attempt with the specialized critical date script
+  run_with_retry "./process_critical_date.sh $critical_date" "Process critical date with standard script" 1 $TIMEOUT_CRITICAL
   
   # Check result
   local result=$?
   if [ $result -eq 0 ]; then
-    log "✅ Successfully processed critical date: $critical_date"
+    log "✅ Successfully processed critical date with standard script: $critical_date"
+    return 0
   else
-    log "❌ Failed to process critical date: $critical_date (Error: $result)"
+    log "⚠️ Standard processing failed for critical date: $critical_date (Error: $result)"
+    log "Falling back to minimal_reconciliation.ts with critical mode..."
+    
+    # Clean up connections before retrying
+    cleanup_db_connections
+    sleep 15
+    
+    # Use minimal_reconciliation.ts with critical mode
+    run_with_retry "npx tsx minimal_reconciliation.ts critical-date $critical_date" "Process critical date with minimal mode" 2 $TIMEOUT_CRITICAL
+    
+    result=$?
+    if [ $result -eq 0 ]; then
+      log "✅ Successfully processed critical date with minimal reconciliation: $critical_date"
+      return 0
+    else
+      log "❌ Both standard and minimal approaches failed for critical date: $critical_date"
+      return $result
+    fi
   fi
-  
-  return $result
 }
 
 # Try to adapt the batch size based on database performance
@@ -227,7 +244,29 @@ run_reconciliation() {
   adapt_batch_size
   log "Running efficient reconciliation with batch size $BATCH_SIZE..."
   
-  run_with_retry "npx tsx efficient_reconciliation.ts reconcile $BATCH_SIZE" "Process missing records" 2 $TIMEOUT_RECONCILE
+  # First try with efficient_reconciliation.ts (optimized for larger datasets)
+  run_with_retry "npx tsx efficient_reconciliation.ts reconcile $BATCH_SIZE" "Process missing records with efficient mode" 1 $TIMEOUT_RECONCILE
+  
+  local result=$?
+  if [ $result -ne 0 ]; then
+    # If efficient_reconciliation fails, try with minimal_reconciliation on the most problematic dates
+    log "⚠️ Efficient reconciliation encountered issues. Switching to sequential batch processing for remaining critical dates..."
+    
+    # Get the top 3 most critical dates
+    log "Identifying remaining critical dates..."
+    critical_dates=$(run_with_retry "npx tsx minimal_reconciliation.ts most-critical" "Find most critical remaining date" 1 60)
+    critical_date=$(echo "$critical_dates" | grep "Most critical date:" | awk '{print $4}')
+    
+    if [ -n "$critical_date" ]; then
+      log "Processing remaining critical date: $critical_date"
+      # Process with sequential batching and smaller batch size
+      run_with_retry "npx tsx minimal_reconciliation.ts sequence $critical_date 3" "Process date with sequential batching" 2 $TIMEOUT_RECONCILE
+      
+      # Clean up connections
+      cleanup_db_connections
+      sleep 10
+    fi
+  }
   
   # Get updated status
   log_section "Updated Reconciliation Status"

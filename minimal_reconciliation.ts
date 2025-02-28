@@ -336,8 +336,11 @@ async function processCombo(
   date: string,
   period: number,
   farmId: string,
-  minerModel: string
+  minerModel: string,
+  retryAttempt: number = 0
 ): Promise<boolean> {
+  const MAX_RETRIES = 3;
+  
   try {
     log(`Processing ${date} P${period} ${farmId} ${minerModel}...`, 'info');
     
@@ -348,23 +351,78 @@ async function processCombo(
       return false;
     }
     
-    // Get difficulty
-    const difficulty = await getDifficulty(date);
+    // Get difficulty with timeout protection
+    let difficulty: number;
+    try {
+      difficulty = await Promise.race([
+        getDifficulty(date),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Difficulty fetch timeout')), 10000)
+        )
+      ]);
+    } catch (diffError) {
+      log(`Difficulty fetch error for ${date}: ${diffError}. Using fallback method...`, 'warning');
+      
+      // Try alternative approach to get difficulty
+      try {
+        const result = await db.execute(sql`
+          SELECT difficulty FROM historical_bitcoin_calculations 
+          WHERE settlement_date = ${date} AND difficulty IS NOT NULL 
+          LIMIT 1
+        `);
+        
+        if (result && result[0] && result[0].difficulty) {
+          difficulty = Number(result[0].difficulty);
+          log(`Using cached difficulty from DB: ${difficulty}`, 'info');
+        } else {
+          throw new Error('No cached difficulty found');
+        }
+      } catch (fallbackError) {
+        // If all else fails, use hardcoded default from server/types/bitcoin.ts
+        log(`Fallback difficulty fetch failed: ${fallbackError}. Using default value.`, 'warning');
+        difficulty = 108105433845147; // DEFAULT_DIFFICULTY
+      }
+    }
     
     // Calculate Bitcoin
     const bitcoinMined = calculateBitcoin(curtailment.volume, minerModel, difficulty);
     
-    // Insert or update
-    return await insertBitcoinCalculation(
-      date,
-      period,
-      farmId,
-      minerModel,
-      bitcoinMined,
-      difficulty
-    );
+    // Insert or update with timeouts and retries
+    try {
+      return await Promise.race([
+        insertBitcoinCalculation(
+          date,
+          period,
+          farmId,
+          minerModel,
+          bitcoinMined,
+          difficulty
+        ),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Insert operation timeout')), 15000)
+        )
+      ]);
+    } catch (insertError) {
+      log(`Error during insert operation: ${insertError}`, 'error');
+      throw insertError; // Propagate for retry logic
+    }
   } catch (error) {
     log(`Error processing ${date} P${period} ${farmId} ${minerModel}: ${error}`, 'error');
+    
+    // Implement retry logic for recoverable errors
+    if (retryAttempt < MAX_RETRIES && 
+        (error instanceof Error && 
+         (error.message.includes('timeout') || 
+          error.message.includes('connection') ||
+          error.message.includes('deadlock')))) {
+      
+      const delay = Math.pow(2, retryAttempt) * 1000; // Exponential backoff
+      log(`Retrying in ${delay}ms (attempt ${retryAttempt + 1}/${MAX_RETRIES})...`, 'warning');
+      
+      await sleep(delay);
+      return processCombo(date, period, farmId, minerModel, retryAttempt + 1);
+    }
+    
     return false;
   }
 }
