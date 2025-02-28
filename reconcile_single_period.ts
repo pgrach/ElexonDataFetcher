@@ -7,7 +7,7 @@
 
 import pg from 'pg';
 import { db } from './db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { curtailmentRecords, historicalBitcoinCalculations } from './db/schema';
 import { getDifficultyData } from './server/services/dynamodbService';
 
@@ -33,16 +33,25 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Get the status for a specific period
- */
-async function getPeriodStatus(date: string, period: number): Promise<{
+// Types
+interface MissingCombo {
+  farmId: string;
+  minerModel: string;
+}
+
+interface PeriodStatus {
   farms: number;
   expected: number;
   actual: number;
   percentage: number;
   missingFarms: string[];
-}> {
+  missingCombos: MissingCombo[];
+}
+
+/**
+ * Get the status for a specific period
+ */
+async function getPeriodStatus(date: string, period: number): Promise<PeriodStatus> {
   const client = await pool.connect();
   try {
     // First, get the basic stats
@@ -50,7 +59,7 @@ async function getPeriodStatus(date: string, period: number): Promise<{
       SELECT 
         COUNT(DISTINCT cr.farm_id) AS farms,
         COUNT(DISTINCT cr.farm_id) * 3 AS expected_count,
-        COUNT(DISTINCT (hbc.farm_id, hbc.miner_model)) AS actual_count
+        COUNT(DISTINCT hbc.id) AS actual_count
       FROM 
         curtailment_records cr
       LEFT JOIN 
@@ -107,15 +116,24 @@ async function getPeriodStatus(date: string, period: number): Promise<{
         fm.farm_id, fm.model_name;
     `;
     
-    const missingFarmsResult = await client.query(missingFarmsQuery, [date, period]);
-    const missingFarms = missingFarmsResult.rows.map(row => row.farm_id);
+    const missingCombosResult = await client.query(missingCombosQuery, [date, period]);
+    
+    // Create the missing combos data structure
+    const missingCombos = missingCombosResult.rows.map((row: any) => ({
+      farmId: row.farm_id as string,
+      minerModel: row.miner_model as string
+    }));
+    
+    // Extract unique farm IDs from the missing combinations
+    const missingFarms = [...new Set(missingCombos.map(combo => combo.farmId))];
     
     return {
       farms,
       expected,
       actual,
       percentage,
-      missingFarms
+      missingFarms: missingFarms,
+      missingCombos: missingCombos
     };
   } finally {
     client.release();
@@ -126,13 +144,14 @@ async function getPeriodStatus(date: string, period: number): Promise<{
  * Process a specific period
  */
 async function processPeriod(date: string, period: number): Promise<boolean> {
+  const client = await pool.connect();
   try {
     console.log(`\n=== Processing ${date} Period ${period} ===\n`);
     
     // Get initial status
     const beforeStatus = await getPeriodStatus(date, period);
     console.log(`Initial Status: ${beforeStatus.actual}/${beforeStatus.expected} calculations (${beforeStatus.percentage.toFixed(2)}%)`);
-    console.log(`Farms: ${beforeStatus.farms}, Missing farms: ${beforeStatus.missingFarms.length}`);
+    console.log(`Farms: ${beforeStatus.farms}, Missing combinations: ${beforeStatus.missingCombos.length}`);
     
     if (beforeStatus.percentage === 100) {
       console.log(`Period ${period} already at 100%, nothing to do.`);
@@ -143,14 +162,23 @@ async function processPeriod(date: string, period: number): Promise<boolean> {
     const difficulty = await getDifficultyData(date);
     console.log(`Using difficulty: ${difficulty}`);
     
-    // Process the missing farms
-    const { missingFarms } = beforeStatus;
-    console.log(`Processing ${missingFarms.length} missing farms...`);
+    // Process the missing combinations
+    console.log(`Processing ${beforeStatus.missingCombos.length} missing combinations...`);
     
     let successCount = 0;
     let failureCount = 0;
     
-    for (const farmId of missingFarms) {
+    // Group the missing combinations by farm to reduce database lookups
+    const missingCombosByFarm: Record<string, string[]> = {};
+    for (const combo of beforeStatus.missingCombos) {
+      if (!missingCombosByFarm[combo.farmId]) {
+        missingCombosByFarm[combo.farmId] = [];
+      }
+      missingCombosByFarm[combo.farmId].push(combo.minerModel);
+    }
+    
+    // Process each farm
+    for (const farmId of Object.keys(missingCombosByFarm)) {
       try {
         // Get the curtailment record
         const curtailment = await db
@@ -177,14 +205,14 @@ async function processPeriod(date: string, period: number): Promise<boolean> {
         const volume = Number(curtailment[0].volume);
         if (Math.abs(volume) < 0.01) {
           console.log(`Zero volume for ${farmId}, skipping...`);
-          successCount++;
+          successCount += missingCombosByFarm[farmId].length;
           continue;
         }
         
-        // Process each miner model
-        for (const minerModel of MINER_MODELS) {
+        // Process each required miner model for this farm
+        for (const minerModel of missingCombosByFarm[farmId]) {
           try {
-            // Check if record already exists to avoid duplicates
+            // Double check if record already exists to avoid duplicates
             const existing = await db
               .select({ id: historicalBitcoinCalculations.id })
               .from(historicalBitcoinCalculations)
@@ -198,27 +226,37 @@ async function processPeriod(date: string, period: number): Promise<boolean> {
               );
             
             if (existing.length > 0) {
-              // console.log(`Record already exists for ${farmId} ${minerModel}`);
+              console.log(`Record already exists for ${farmId} with ${minerModel}`);
               successCount++;
               continue;
             }
             
-            // Insert the record
+            // Insert the record using snake_case column names
             const volumeMWh = Math.abs(volume);
             
-            const result = await db.insert(historicalBitcoinCalculations).values({
-              settlement_date: date,
-              settlement_period: period,
-              farm_id: farmId,
-              miner_model: minerModel,
-              curtailed_energy: volumeMWh.toString(),
-              difficulty: difficulty.toString(),
-              bitcoin_mined: "0", // Placeholder, will be updated in batch
-              calculated_at: new Date(),
-              lead_party_name: curtailment[0].leadPartyName || null
-            }).returning();
+            // Use direct SQL to avoid type issues
+            const insertQuery = `
+              INSERT INTO historical_bitcoin_calculations 
+                (settlement_date, settlement_period, farm_id, miner_model, 
+                 curtailed_energy, difficulty, bitcoin_mined, calculated_at, lead_party_name)
+              VALUES 
+                ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              RETURNING id;
+            `;
             
-            if (result.length > 0) {
+            const insertResult = await client.query(insertQuery, [
+              date, 
+              period, 
+              farmId, 
+              minerModel, 
+              volumeMWh.toString(), 
+              difficulty.toString(), 
+              "0", // Placeholder, will be updated in batch
+              new Date(),
+              curtailment[0].leadPartyName || null
+            ]);
+            
+            if (insertResult && insertResult.rowCount && insertResult.rowCount > 0) {
               successCount++;
               console.log(`Inserted record for ${farmId} with ${minerModel}`);
             } else {
@@ -234,7 +272,7 @@ async function processPeriod(date: string, period: number): Promise<boolean> {
           await sleep(50);
         }
       } catch (error) {
-        failureCount++;
+        failureCount += missingCombosByFarm[farmId].length;
         console.error(`Error processing farm ${farmId}:`, error);
       }
     }
@@ -248,6 +286,8 @@ async function processPeriod(date: string, period: number): Promise<boolean> {
   } catch (error) {
     console.error(`Error processing period ${period}:`, error);
     return false;
+  } finally {
+    client.release();
   }
 }
 
@@ -255,6 +295,7 @@ async function processPeriod(date: string, period: number): Promise<boolean> {
  * Main function
  */
 async function main(): Promise<void> {
+  const client = await pool.connect();
   try {
     const success = await processPeriod(TARGET_DATE, TARGET_PERIOD);
     
@@ -266,6 +307,7 @@ async function main(): Promise<void> {
   } catch (error) {
     console.error('Fatal error:', error);
   } finally {
+    client.release();
     await pool.end();
   }
 }
