@@ -4,8 +4,7 @@
 -- 2. daily_mining_potential - Daily aggregated mining data
 -- 3. yearly_mining_potential - Yearly aggregated mining data
 
--- Start transaction
-BEGIN;
+-- Start tables creation
 
 -- Create settlement_period_mining table if it doesn't exist
 DO $$
@@ -133,8 +132,7 @@ BEGIN
 END
 $$;
 
--- Commit transaction
-COMMIT;
+-- End of migration
 
 -- Final success message
 DO $$
