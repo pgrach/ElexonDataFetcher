@@ -6,8 +6,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Path to the JSON file
-const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
-const OUTPUT_PATH = path.join(process.cwd(), 'bmu_mapping.csv');
+const BMU_MAPPING_PATH = path.join(__dirname, '..', 'server', 'data', 'bmuMapping.json');
+const OUTPUT_PATH = path.join(__dirname, '..', 'bmu_mapping.csv');
 
 async function exportToCSV() {
   try {

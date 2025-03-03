@@ -25,6 +25,11 @@ export function registerRoutes(app: Express): Server {
 
   // Register Bitcoin mining calculation routes
   app.use('/api/curtailment', curtailmentRoutes);
+  
+  // BMU Mapping download page
+  app.get("/bmu-download", (req, res) => {
+    res.sendFile("bmu_download.html", { root: "./public" });
+  });
 
   // Re-ingest data endpoint
   app.post("/api/ingest/:date", async (req, res) => {
