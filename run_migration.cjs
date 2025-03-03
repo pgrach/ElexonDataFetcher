@@ -19,23 +19,19 @@ async function runMigration() {
   console.log('Starting database migration...');
   
   try {
-    const migrationFile = path.join(__dirname, 'migrations', 'add_materialized_views.sql');
+    const migrationFile = path.join(__dirname, 'create_materialized_tables.sql');
     const sql = fs.readFileSync(migrationFile, 'utf8');
     
     console.log(`Executing migration script: ${migrationFile}`);
     
     const client = await pool.connect();
     try {
-      // Execute the migration script directly without extra transaction
-      const queries = sql.split(';').filter(q => q.trim());
+      // Execute the migration as a single transaction
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query('COMMIT');
       
-      for (const query of queries) {
-        if (query.trim()) {
-          await client.query(query + ';');
-        }
-      }
-      
-      console.log('Migration completed successfully with', queries.length, 'statements executed');
+      console.log('Migration completed successfully');
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('Migration failed:', error);

@@ -5,23 +5,59 @@
  * historical_bitcoin_calculations and curtailment_records data.
  */
 
-import { db } from './db';
-import pg from 'pg';
-import { eq, and, sql } from 'drizzle-orm';
+const { Pool } = require('pg');
+require('dotenv').config();
+
+// Database configuration
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
 // Constants
 const DEFAULT_DAYS_TO_POPULATE = 30;
 const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
 
-// Create a raw PostgreSQL connection for transaction support
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+/**
+ * Main execution function
+ */
+async function main() {
+  const args = process.argv.slice(2);
+  const command = args[0];
+  
+  console.log('Starting materialized view population...');
+  
+  try {
+    if (command === 'recent') {
+      const days = parseInt(args[1]) || DEFAULT_DAYS_TO_POPULATE;
+      await populateRecentMaterializedViews(days);
+    } else if (command === 'range') {
+      const startDate = args[1];
+      const endDate = args[2];
+      
+      if (!startDate || !endDate) {
+        console.error('Error: Both start date and end date are required for range command');
+        console.log('Usage: node populate_materialized_views.js range YYYY-MM-DD YYYY-MM-DD');
+        process.exit(1);
+      }
+      
+      await populateDateRangeMaterializedViews(startDate, endDate);
+    } else {
+      console.log('Usage:');
+      console.log('  node populate_materialized_views.js recent [days=30]');
+      console.log('  node populate_materialized_views.js range YYYY-MM-DD YYYY-MM-DD');
+    }
+  } catch (error) {
+    console.error('Error in population script:', error);
+    process.exit(1);
+  } finally {
+    await pool.end();
+  }
+}
 
 /**
  * Populate materialized views for recent dates
  */
-async function populateRecentMaterializedViews(days: number = DEFAULT_DAYS_TO_POPULATE) {
+async function populateRecentMaterializedViews(days = DEFAULT_DAYS_TO_POPULATE) {
   console.log(`Populating materialized views for the last ${days} days...`);
   
   const client = await pool.connect();
@@ -149,7 +185,7 @@ async function populateRecentMaterializedViews(days: number = DEFAULT_DAYS_TO_PO
 /**
  * Populate materialized views for a specific date range
  */
-async function populateDateRangeMaterializedViews(startDate: string, endDate: string) {
+async function populateDateRangeMaterializedViews(startDate, endDate) {
   console.log(`Populating materialized views for date range: ${startDate} to ${endDate}`);
   
   const client = await pool.connect();
@@ -164,7 +200,7 @@ async function populateDateRangeMaterializedViews(startDate: string, endDate: st
     
     const { count } = validateResult.rows[0];
     
-    if (parseInt(count) === 0) {
+    if (count === '0') {
       console.log('No data found for the specified date range');
       return;
     }
@@ -270,40 +306,6 @@ async function populateDateRangeMaterializedViews(startDate: string, endDate: st
     throw error;
   } finally {
     client.release();
-  }
-}
-
-async function main() {
-  const args = process.argv.slice(2);
-  const command = args[0];
-  
-  console.log('Starting materialized view population...');
-  
-  try {
-    if (command === 'recent') {
-      const days = parseInt(args[1]) || DEFAULT_DAYS_TO_POPULATE;
-      await populateRecentMaterializedViews(days);
-    } else if (command === 'range') {
-      const startDate = args[1];
-      const endDate = args[2];
-      
-      if (!startDate || !endDate) {
-        console.error('Error: Both start date and end date are required for range command');
-        console.log('Usage: npx tsx populate_materialized_views.ts range YYYY-MM-DD YYYY-MM-DD');
-        process.exit(1);
-      }
-      
-      await populateDateRangeMaterializedViews(startDate, endDate);
-    } else {
-      console.log('Usage:');
-      console.log('  npx tsx populate_materialized_views.ts recent [days=30]');
-      console.log('  npx tsx populate_materialized_views.ts range YYYY-MM-DD YYYY-MM-DD');
-    }
-  } catch (error) {
-    console.error('Error in population script:', error);
-    process.exit(1);
-  } finally {
-    await pool.end();
   }
 }
 
