@@ -103,6 +103,33 @@ export function registerRoutes(app: Express): Server {
     }
   });
   
+  // Search BMUs by fuel type
+  app.get("/api/bmu-mapping/search/fuel-type", (req, res) => {
+    try {
+      const { type } = req.query;
+      
+      if (!type || typeof type !== 'string') {
+        return res.status(400).json({ error: "Fuel type is required" });
+      }
+      
+      const bmuMappingPath = path.resolve("./server/data/bmuMapping.json");
+      const bmuMappingData = JSON.parse(fs.readFileSync(bmuMappingPath, "utf8"));
+      
+      const filteredBmus = bmuMappingData.filter((item: any) => 
+        item.fuelType && item.fuelType.toLowerCase() === type.toLowerCase()
+      );
+      
+      if (filteredBmus.length > 0) {
+        res.json(filteredBmus);
+      } else {
+        res.status(404).json({ error: `No BMUs found with fuel type '${type}'` });
+      }
+    } catch (error) {
+      console.error("Error searching BMUs by fuel type:", error);
+      res.status(500).json({ error: "Failed to search BMU data by fuel type" });
+    }
+  });
+  
   // Get BMU by National Grid ID endpoint
   app.get("/api/bmu-mapping/:id", (req, res) => {
     try {
