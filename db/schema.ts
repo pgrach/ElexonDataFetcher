@@ -70,6 +70,45 @@ export const ingestionProgress = pgTable("ingestion_progress", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
+// Materialized views for mining potential calculations
+export const settlementPeriodMining = pgTable("settlement_period_mining", {
+  id: serial("id").primaryKey(),
+  settlementDate: date("settlement_date").notNull(),
+  settlementPeriod: integer("settlement_period").notNull(),
+  farmId: text("farm_id").notNull(),
+  minerModel: text("miner_model").notNull(),
+  curtailedEnergy: numeric("curtailed_energy").notNull(),
+  bitcoinMined: numeric("bitcoin_mined").notNull(),
+  valueAtPrice: numeric("value_at_price"),
+  price: numeric("price"),
+  difficulty: numeric("difficulty").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const dailyMiningPotential = pgTable("daily_mining_potential", {
+  id: serial("id").primaryKey(),
+  summaryDate: date("summary_date").notNull(),
+  farmId: text("farm_id").notNull(),
+  minerModel: text("miner_model").notNull(),
+  totalCurtailedEnergy: numeric("total_curtailed_energy").notNull(),
+  totalBitcoinMined: numeric("total_bitcoin_mined").notNull(),
+  averageValue: numeric("average_value"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const yearlyMiningPotential = pgTable("yearly_mining_potential", {
+  id: serial("id").primaryKey(),
+  year: text("year").notNull(),
+  farmId: text("farm_id").notNull(),
+  minerModel: text("miner_model").notNull(),
+  totalCurtailedEnergy: numeric("total_curtailed_energy").notNull(),
+  totalBitcoinMined: numeric("total_bitcoin_mined").notNull(),
+  averageValue: numeric("average_value"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertCurtailmentRecordSchema = createInsertSchema(curtailmentRecords);
 export const selectCurtailmentRecordSchema = createSelectSchema(curtailmentRecords);
 export const insertDailySummarySchema = createInsertSchema(dailySummaries);
@@ -86,6 +125,15 @@ export const selectHistoricalBitcoinCalculationSchema = createSelectSchema(histo
 export const insertBitcoinMonthlySummarySchema = createInsertSchema(bitcoinMonthlySummaries);
 export const selectBitcoinMonthlySummarySchema = createSelectSchema(bitcoinMonthlySummaries);
 
+// Create schemas for the new tables
+export const insertSettlementPeriodMiningSchema = createInsertSchema(settlementPeriodMining);
+export const selectSettlementPeriodMiningSchema = createSelectSchema(settlementPeriodMining);
+export const insertDailyMiningPotentialSchema = createInsertSchema(dailyMiningPotential);
+export const selectDailyMiningPotentialSchema = createSelectSchema(dailyMiningPotential);
+export const insertYearlyMiningPotentialSchema = createInsertSchema(yearlyMiningPotential);
+export const selectYearlyMiningPotentialSchema = createSelectSchema(yearlyMiningPotential);
+
+// Define types for all tables
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
 export type DailySummary = typeof dailySummaries.$inferSelect;
@@ -101,3 +149,11 @@ export type HistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.
 export type InsertHistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferInsert;
 export type BitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferSelect;
 export type InsertBitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferInsert;
+
+// New types for mining potential tables
+export type SettlementPeriodMining = typeof settlementPeriodMining.$inferSelect;
+export type InsertSettlementPeriodMining = typeof settlementPeriodMining.$inferInsert;
+export type DailyMiningPotential = typeof dailyMiningPotential.$inferSelect;
+export type InsertDailyMiningPotential = typeof dailyMiningPotential.$inferInsert;
+export type YearlyMiningPotential = typeof yearlyMiningPotential.$inferSelect;
+export type InsertYearlyMiningPotential = typeof yearlyMiningPotential.$inferInsert;
