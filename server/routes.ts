@@ -45,6 +45,64 @@ export function registerRoutes(app: Express): Server {
     }
   });
   
+  // Search BMUs by lead party name
+  app.get("/api/bmu-mapping/search/lead-party", (req, res) => {
+    try {
+      const { name } = req.query;
+      
+      if (!name || typeof name !== 'string') {
+        return res.status(400).json({ error: "Lead party name is required" });
+      }
+      
+      const bmuMappingPath = path.resolve("./server/data/bmuMapping.json");
+      const bmuMappingData = JSON.parse(fs.readFileSync(bmuMappingPath, "utf8"));
+      
+      const filteredBmus = bmuMappingData.filter((item: any) => 
+        item.leadPartyName && item.leadPartyName.toLowerCase().includes(name.toLowerCase())
+      );
+      
+      if (filteredBmus.length > 0) {
+        res.json(filteredBmus);
+      } else {
+        res.status(404).json({ error: `No BMUs found for lead party name containing '${name}'` });
+      }
+    } catch (error) {
+      console.error("Error searching BMUs by lead party:", error);
+      res.status(500).json({ error: "Failed to search BMU data" });
+    }
+  });
+  
+  // Search BMUs by generation capacity range
+  app.get("/api/bmu-mapping/search/capacity", (req, res) => {
+    try {
+      const minCapacity = req.query.min ? parseFloat(req.query.min as string) : 0;
+      const maxCapacity = req.query.max ? parseFloat(req.query.max as string) : Infinity;
+      
+      if (isNaN(minCapacity) || isNaN(maxCapacity)) {
+        return res.status(400).json({ error: "Capacity values must be numbers" });
+      }
+      
+      const bmuMappingPath = path.resolve("./server/data/bmuMapping.json");
+      const bmuMappingData = JSON.parse(fs.readFileSync(bmuMappingPath, "utf8"));
+      
+      const filteredBmus = bmuMappingData.filter((item: any) => {
+        const capacity = parseFloat(item.generationCapacity);
+        return !isNaN(capacity) && capacity >= minCapacity && capacity <= maxCapacity;
+      });
+      
+      if (filteredBmus.length > 0) {
+        res.json(filteredBmus);
+      } else {
+        res.status(404).json({ 
+          error: `No BMUs found with capacity between ${minCapacity} and ${maxCapacity === Infinity ? 'unlimited' : maxCapacity} MW` 
+        });
+      }
+    } catch (error) {
+      console.error("Error searching BMUs by capacity:", error);
+      res.status(500).json({ error: "Failed to search BMU data by capacity" });
+    }
+  });
+  
   // Get BMU by National Grid ID endpoint
   app.get("/api/bmu-mapping/:id", (req, res) => {
     try {
