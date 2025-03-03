@@ -70,7 +70,11 @@ export const ingestionProgress = pgTable("ingestion_progress", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
-// Materialized views for mining potential calculations
+// These materialized views have been replaced with direct query optimizations
+// Keeping declarations for backward compatibility with existing code
+// but these tables are no longer used in the application
+
+// @deprecated - Use optimizedMiningService instead
 export const settlementPeriodMining = pgTable("settlement_period_mining", {
   id: serial("id").primaryKey(),
   settlementDate: date("settlement_date").notNull(),
@@ -85,6 +89,7 @@ export const settlementPeriodMining = pgTable("settlement_period_mining", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// @deprecated - Use optimizedMiningService instead
 export const dailyMiningPotential = pgTable("daily_mining_potential", {
   id: serial("id").primaryKey(),
   summaryDate: date("summary_date").notNull(),
@@ -97,6 +102,7 @@ export const dailyMiningPotential = pgTable("daily_mining_potential", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// @deprecated - Use optimizedMiningService instead
 export const yearlyMiningPotential = pgTable("yearly_mining_potential", {
   id: serial("id").primaryKey(),
   year: text("year").notNull(),
@@ -125,7 +131,8 @@ export const selectHistoricalBitcoinCalculationSchema = createSelectSchema(histo
 export const insertBitcoinMonthlySummarySchema = createInsertSchema(bitcoinMonthlySummaries);
 export const selectBitcoinMonthlySummarySchema = createSelectSchema(bitcoinMonthlySummaries);
 
-// Create schemas for the new tables
+// @deprecated - Schemas for materialized view tables
+// Keeping these for backward compatibility
 export const insertSettlementPeriodMiningSchema = createInsertSchema(settlementPeriodMining);
 export const selectSettlementPeriodMiningSchema = createSelectSchema(settlementPeriodMining);
 export const insertDailyMiningPotentialSchema = createInsertSchema(dailyMiningPotential);
@@ -150,7 +157,8 @@ export type InsertHistoricalBitcoinCalculation = typeof historicalBitcoinCalcula
 export type BitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferSelect;
 export type InsertBitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferInsert;
 
-// New types for mining potential tables
+// @deprecated - Types for materialized view tables
+// Keeping these for backward compatibility
 export type SettlementPeriodMining = typeof settlementPeriodMining.$inferSelect;
 export type InsertSettlementPeriodMining = typeof settlementPeriodMining.$inferInsert;
 export type DailyMiningPotential = typeof dailyMiningPotential.$inferSelect;
