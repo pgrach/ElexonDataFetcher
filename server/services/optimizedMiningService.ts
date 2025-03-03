@@ -190,21 +190,27 @@ export async function getFarmStatistics(farmId: string, period: 'day' | 'month' 
   console.log(`Getting farm statistics for ${farmId}, period: ${period}, value: ${value}`);
   
   try {
-    let dateCondition;
+    let bitcoinDateCondition;
+    let curtailmentDateCondition;
     
     if (period === 'day') {
       // For a specific day
-      dateCondition = eq(historicalBitcoinCalculations.settlementDate, value);
+      bitcoinDateCondition = eq(historicalBitcoinCalculations.settlementDate, value);
+      curtailmentDateCondition = eq(curtailmentRecords.settlementDate, value);
     } else if (period === 'month') {
       // For a specific month (YYYY-MM)
       const [year, month] = value.split('-').map(n => parseInt(n, 10));
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0); // Last day of month
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
       
-      dateCondition = sql`settlement_date BETWEEN ${format(startDate, 'yyyy-MM-dd')} AND ${format(endDate, 'yyyy-MM-dd')}`;
+      bitcoinDateCondition = sql`${historicalBitcoinCalculations.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
+      curtailmentDateCondition = sql`${curtailmentRecords.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
     } else if (period === 'year') {
       // For a specific year
-      dateCondition = sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(value, 10)}`;
+      bitcoinDateCondition = sql`EXTRACT(YEAR FROM ${historicalBitcoinCalculations.settlementDate}) = ${parseInt(value, 10)}`;
+      curtailmentDateCondition = sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}) = ${parseInt(value, 10)}`;
     } else {
       throw new Error(`Invalid period type: ${period}`);
     }
@@ -220,7 +226,7 @@ export async function getFarmStatistics(farmId: string, period: 'day' | 'month' 
       .from(historicalBitcoinCalculations)
       .where(
         and(
-          dateCondition,
+          bitcoinDateCondition,
           eq(historicalBitcoinCalculations.farmId, farmId)
         )
       )
@@ -236,7 +242,7 @@ export async function getFarmStatistics(farmId: string, period: 'day' | 'month' 
       .from(curtailmentRecords)
       .where(
         and(
-          dateCondition,
+          curtailmentDateCondition,
           eq(curtailmentRecords.farmId, farmId)
         )
       );
