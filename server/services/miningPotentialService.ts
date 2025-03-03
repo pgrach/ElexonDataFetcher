@@ -263,8 +263,8 @@ export async function populateYearlyMiningPotential(year: string, minerModel: st
       year,
       farmId: data.farmId,
       minerModel,
-      totalCurtailedEnergy: data.totalCurtailedEnergy,
-      totalBitcoinMined: data.totalBitcoinMined,
+      totalCurtailedEnergy: String(data.totalCurtailedEnergy),
+      totalBitcoinMined: String(data.totalBitcoinMined),
       averageValue: null, // Will be calculated later if needed
     }));
     
@@ -312,8 +312,8 @@ export async function populateYearlyMiningPotential(year: string, minerModel: st
       year,
       farmId: data.farmId,
       minerModel,
-      totalCurtailedEnergy: curtailmentLookup.get(data.farmId) || 0,
-      totalBitcoinMined: data.totalBitcoinMined,
+      totalCurtailedEnergy: String(curtailmentLookup.get(data.farmId) || 0),
+      totalBitcoinMined: String(data.totalBitcoinMined),
       averageValue: null, // Will be calculated later if needed
     }));
     
@@ -358,14 +358,16 @@ export async function refreshMaterializedViews(date: string): Promise<void> {
     // Process next item in queue if any
     if (MATERIALIZATION_QUEUE.size > 0) {
       const nextDate = MATERIALIZATION_QUEUE.values().next().value;
-      MATERIALIZATION_QUEUE.delete(nextDate);
-      
-      // Process next item asynchronously
-      setTimeout(() => {
-        refreshMaterializedViews(nextDate).catch(err => {
-          console.error(`Error processing queued materialization for ${nextDate}:`, err);
-        });
-      }, 100);
+      if (nextDate) {
+        MATERIALIZATION_QUEUE.delete(nextDate);
+        
+        // Process next item asynchronously
+        setTimeout(() => {
+          refreshMaterializedViews(nextDate).catch(err => {
+            console.error(`Error processing queued materialization for ${nextDate}:`, err);
+          });
+        }, 100);
+      }
     }
   }
 }
