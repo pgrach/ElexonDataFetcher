@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties, getYearlySummary } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
 import curtailmentRoutes from "./routes/curtailmentRoutes";
+import miningPotentialRoutes from "./routes/miningPotentialRoutes";
 
 export function registerRoutes(app: Express): Server {
   // Get lead parties endpoint
@@ -25,6 +26,9 @@ export function registerRoutes(app: Express): Server {
 
   // Register Bitcoin mining calculation routes
   app.use('/api/curtailment', curtailmentRoutes);
+  
+  // Register optimized mining potential routes
+  app.use('/api/mining-potential', miningPotentialRoutes);
 
   // Re-ingest data endpoint
   app.post("/api/ingest/:date", async (req, res) => {
