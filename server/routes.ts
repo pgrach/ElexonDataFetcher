@@ -45,6 +45,83 @@ export function registerRoutes(app: Express): Server {
     }
   });
   
+  // BMU summary statistics endpoint
+  app.get("/api/bmu-mapping/summary", (req, res) => {
+    try {
+      const bmuMappingPath = path.resolve("./server/data/bmuMapping.json");
+      const bmuMappingData = JSON.parse(fs.readFileSync(bmuMappingPath, "utf8"));
+      
+      // Create summary by fuel type with proper type definition
+      interface FuelTypeSummary {
+        count: number;
+        totalCapacity: number;
+      }
+      
+      interface Summary {
+        totalBmus: number;
+        byFuelType: Record<string, FuelTypeSummary>;
+      }
+      
+      const summary: Summary = {
+        totalBmus: bmuMappingData.length,
+        byFuelType: {}
+      };
+      
+      // Group by fuel type
+      bmuMappingData.forEach((bmu: any) => {
+        const fuelType = bmu.fuelType || 'Unknown';
+        if (!summary.byFuelType[fuelType]) {
+          summary.byFuelType[fuelType] = {
+            count: 0,
+            totalCapacity: 0
+          };
+        }
+        
+        summary.byFuelType[fuelType].count++;
+        const capacity = parseFloat(bmu.generationCapacity || '0');
+        if (!isNaN(capacity)) {
+          summary.byFuelType[fuelType].totalCapacity += capacity;
+        }
+      });
+      
+      // Format capacities to 2 decimal places
+      Object.keys(summary.byFuelType).forEach(fuelType => {
+        summary.byFuelType[fuelType].totalCapacity = 
+          parseFloat(summary.byFuelType[fuelType].totalCapacity.toFixed(2));
+      });
+      
+      res.json(summary);
+    } catch (error) {
+      console.error("Error creating BMU summary:", error);
+      res.status(500).json({ error: "Failed to create BMU summary" });
+    }
+  });
+  
+  // Get all lead party names endpoint
+  app.get("/api/bmu-mapping/lead-parties", (req, res) => {
+    try {
+      const bmuMappingPath = path.resolve("./server/data/bmuMapping.json");
+      const bmuMappingData = JSON.parse(fs.readFileSync(bmuMappingPath, "utf8"));
+      
+      // Extract unique lead party names
+      const leadPartyNames = new Set<string>();
+      
+      bmuMappingData.forEach((bmu: any) => {
+        if (bmu.leadPartyName) {
+          leadPartyNames.add(bmu.leadPartyName);
+        }
+      });
+      
+      // Sort alphabetically
+      const sortedLeadParties = Array.from(leadPartyNames).sort();
+      
+      res.json(sortedLeadParties);
+    } catch (error) {
+      console.error("Error retrieving lead party names:", error);
+      res.status(500).json({ error: "Failed to retrieve lead party names" });
+    }
+  });
+  
   // Search BMUs by lead party name
   app.get("/api/bmu-mapping/search/lead-party", (req, res) => {
     try {
