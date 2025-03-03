@@ -15,11 +15,11 @@
  *   --auto-fix   Automatically fix missing data (default: false)
  */
 
-import { db } from "@db";
-import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
+import { db } from "./db";
+import { curtailmentRecords, historicalBitcoinCalculations } from "./db/schema";
 import { sql, eq, and, between } from "drizzle-orm";
 import { format, parseISO, addDays, subDays } from 'date-fns';
-import { reprocessDay } from "./server/scripts/reprocessDay";
+import { exec } from 'child_process';
 
 interface DateStatusItem {
   date: string;
@@ -160,7 +160,20 @@ async function checkDataIntegrity() {
         for (const date of datesToFix) {
           console.log(`Processing ${date}...`);
           try {
-            await reprocessDay(date);
+            await new Promise<void>((resolve, reject) => {
+              exec(`npx tsx server/scripts/reprocessDay.ts ${date}`, (error, stdout, stderr) => {
+                if (error) {
+                  console.error(`Error executing reprocessDay: ${error.message}`);
+                  reject(error);
+                  return;
+                }
+                if (stderr) {
+                  console.error(`reprocessDay stderr: ${stderr}`);
+                }
+                console.log(stdout);
+                resolve();
+              });
+            });
             console.log(`✅ Successfully reprocessed ${date}`);
           } catch (error) {
             console.error(`❌ Failed to reprocess ${date}:`, error);
