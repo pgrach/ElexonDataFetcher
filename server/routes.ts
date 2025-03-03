@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties, getYearlySummary } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
 import curtailmentRoutes from "./routes/curtailmentRoutes";
+import fs from "fs";
+import path from "path";
 
 export function registerRoutes(app: Express): Server {
   // Get lead parties endpoint
@@ -29,6 +31,40 @@ export function registerRoutes(app: Express): Server {
   // BMU Mapping download page
   app.get("/bmu-download", (req, res) => {
     res.sendFile("bmu_download.html", { root: "./public" });
+  });
+  
+  // BMU Mapping data API endpoint
+  app.get("/api/bmu-mapping", (req, res) => {
+    try {
+      const bmuMappingPath = path.resolve("./server/data/bmuMapping.json");
+      const bmuMappingData = JSON.parse(fs.readFileSync(bmuMappingPath, "utf8"));
+      res.json(bmuMappingData);
+    } catch (error) {
+      console.error("Error serving BMU mapping data:", error);
+      res.status(500).json({ error: "Failed to retrieve BMU mapping data" });
+    }
+  });
+  
+  // Get BMU by National Grid ID endpoint
+  app.get("/api/bmu-mapping/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const bmuMappingPath = path.resolve("./server/data/bmuMapping.json");
+      const bmuMappingData = JSON.parse(fs.readFileSync(bmuMappingPath, "utf8"));
+      
+      const bmu = bmuMappingData.find((item: any) => 
+        item.nationalGridBmUnit.toLowerCase() === id.toLowerCase()
+      );
+      
+      if (bmu) {
+        res.json(bmu);
+      } else {
+        res.status(404).json({ error: `BMU with ID ${id} not found` });
+      }
+    } catch (error) {
+      console.error(`Error retrieving BMU with ID ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to retrieve BMU data" });
+    }
   });
 
   // Re-ingest data endpoint
