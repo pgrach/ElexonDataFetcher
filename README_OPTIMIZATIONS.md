@@ -1,88 +1,119 @@
-# Database Optimization Guide
+# Database Optimization Documentation
 
-This document provides an overview of the database optimizations made to improve performance and maintainability of the Bitcoin mining analytics platform.
+This document outlines the optimization process for the Bitcoin mining analytics platform's database system.
 
 ## Overview
 
-The optimization focuses on creating materialized view tables that pre-calculate frequently accessed mining potential data to reduce query time and server load. These tables mirror the structure of traditional views but store the results physically, providing faster access at the cost of needing periodic refreshes.
+The database optimization project focused on:
 
-## New Tables
+1. Removing unnecessary materialized view tables
+2. Eliminating redundant indexes
+3. Replacing materialized views with optimized direct queries
+4. Improving overall database performance and maintainability
 
-Three new tables have been added to the schema:
+## Optimization Steps
 
-1. **settlement_period_mining**: Stores per-settlement-period mining potential data
-   - Contains bitcoin mining calculations at the most granular level (settlement period)
-   - Used for detailed time-series analysis and visualizations
+### 1. Removed Materialized View Tables
 
-2. **daily_mining_potential**: Aggregates mining data on a daily basis
-   - Pre-calculates daily totals per farm and miner model
-   - Improves performance for the most common daily reports and charts
+The following tables were identified as unnecessary and have been removed:
 
-3. **yearly_mining_potential**: Stores annual mining potential summaries
-   - Provides high-level aggregated data for yearly reporting
-   - Enables efficient year-over-year comparisons
+- `settlement_period_mining` - Period-level mining data was a materialized view
+- `daily_mining_potential` - Daily aggregated mining data
+- `yearly_mining_potential` - Yearly aggregated mining data
+- `ingestion_progress` and `process_tracking` - Auxiliary tracking tables
 
-## Implementation Details
+### 2. Eliminated Redundant Indexes
 
-### Database Schema Updates
-The tables are defined in `db/schema.ts` with appropriate types and schemas for integration with the Drizzle ORM.
+Multiple redundant indexes were identified on the core tables:
 
-### Migration
-A migration script is provided in `migrations/add_materialized_views.sql` that:
-- Checks if tables already exist before creating them
-- Adds appropriate indexes for optimization
-- Can be run safely multiple times without causing data loss
+#### curtailment_records table:
+- Removed `idx_curtailment_date` (duplicate of `curtailment_settlement_date_idx`)
+- Removed `idx_curtailment_settlement_date` (duplicate of `curtailment_settlement_date_idx`)
+- Kept `curtailment_settlement_date_idx` as the primary index for `settlement_date`
 
-### Population Service
-A dedicated service in `server/services/miningPotentialService.ts` handles:
-- Initial population of the materialized view tables
-- Automated refreshing when new data is processed
-- Fallback to original tables when materialized data is not available
+#### historical_bitcoin_calculations table:
+- Removed `idx_bitcoin_calc_date` (duplicate index on `settlement_date`)
+- Removed `idx_bitcoin_settlement_date` (duplicate index on `settlement_date`)
+- Removed `idx_historical_bitcoin_settlement_date` (duplicate index on `settlement_date`)
+- Removed `idx_bitcoin_calc_date_model` (duplicate index on `settlement_date, miner_model`)
+- Removed `idx_bitcoin_settlement_date_model` (duplicate index on `settlement_date, miner_model`)
+- Removed `historical_bitcoin_calculations_unique_calculation` (duplicate unique constraint)
 
-### API Integration
-New API endpoints have been added in `server/routes/miningPotentialRoutes.ts` that:
-- Expose the optimized data through RESTful endpoints
-- Maintain backwards compatibility with existing endpoints
-- Provide improved performance for client-side data requests
+### 3. Created Optimized Direct Query Service
 
-## Usage
+Replaced the materialized view approach with a direct query optimization strategy:
 
-### Running Migrations
-To create the necessary tables:
+- Created `optimizedMiningService.ts` with efficient query patterns
+- Implemented optimized functions for daily, monthly and yearly mining potential calculations
+- Added farm-specific statistics across time periods
+
+### 4. Updated API Routes
+
+Modified API routes to use the optimized direct query approach:
+
+- Created `optimizedMiningRoutes.ts` with endpoints for daily, monthly, and yearly calculations
+- Updated `server/routes.ts` to use the new optimized routes
+
+## Performance Benefits
+
+1. **Reduced Database Size**: By removing unnecessary tables and indexes
+2. **Simplified Schema**: Focusing on core tables improves maintainability
+3. **Real-time Calculations**: Direct queries ensure data is always current
+4. **Reduced Index Maintenance Overhead**: Fewer indexes means faster writes
+5. **Streamlined Codebase**: Less code to maintain with removal of materialized view logic
+
+## Migration Scripts
+
+Two migration scripts were created:
+
+1. `migrations/remove_redundant_indexes.sql` - SQL migration to remove duplicate indexes
+2. `run_index_optimization.js` - Script to execute the index optimization and measure results
+
+## Running the Optimization
+
+To apply the database optimizations:
+
 ```bash
-npx tsx run_migration.ts
+node run_index_optimization.js
 ```
 
-### Populating Historical Data
-To populate materialized views with existing data:
-```bash
-# Populate recent data (default: last 30 days)
-npx tsx populate_materialized_views.ts
+## Technical Details
 
-# Populate specific date range
-npx tsx populate_materialized_views.ts range 2023-01-01 2023-12-31
-```
+### Core Tables Structure
 
-### Using the API
-The new optimized endpoints are available at:
-- `/api/mining-potential/daily?date=YYYY-MM-DD&minerModel=MODEL_NAME`
-- `/api/mining-potential/yearly/YYYY?minerModel=MODEL_NAME`
+#### curtailment_records
+- `id` (integer, PK)
+- `settlement_date` (date)
+- `settlement_period` (integer)
+- `farm_id` (text)
+- `volume` (numeric)
+- `payment` (numeric)
+- `original_price` (numeric)
+- `final_price` (numeric)
+- `so_flag` (boolean)
+- `cadl_flag` (boolean)
+- `created_at` (timestamp)
+- `lead_party_name` (text)
 
-These endpoints provide the same data structure as the original endpoints, ensuring seamless integration with existing frontend code.
+#### historical_bitcoin_calculations
+- `id` (integer, PK)
+- `settlement_date` (date)
+- `settlement_period` (integer)
+- `farm_id` (text)
+- `miner_model` (text)
+- `bitcoin_mined` (numeric)
+- `difficulty` (numeric)
+- `calculated_at` (timestamp)
 
-## Benefits
+### Optimized Query Patterns
 
-1. **Improved Performance**: Pre-calculated data reduces query time significantly, especially for complex aggregations
-2. **Reduced Database Load**: Fewer ad-hoc complex queries leads to better overall database performance
-3. **Consistent Structure**: Standardized schema improves code maintainability and reduces technical debt
-4. **Transparent Fallback**: If materialized data is missing, the system falls back to original calculation methods
-5. **DRY Implementation**: Eliminates duplicated calculation logic across multiple endpoints
+The optimized service uses:
 
-## Maintenance Considerations
+1. Efficient aggregate functions (SUM, AVG, COUNT)
+2. Proper date filtering using SQL functions
+3. Combined queries to minimize database round trips
+4. Selective WHERE clauses for better index usage
 
-The materialized views need periodic refreshing to stay current with the latest data. This happens automatically through two mechanisms:
+## Conclusion
 
-1. **On-Demand Refresh**: When data is accessed but not found in the materialized tables
-2. **Proactive Refresh**: When new curtailment data is processed via the ingestion system
-
-For manual refreshing, use the population script as described above.
+By streamlining the database structure and optimizing query patterns, we've created a more maintainable and performant system that focuses on the core data needs without unnecessary complexity.
