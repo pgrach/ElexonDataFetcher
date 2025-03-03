@@ -15,12 +15,14 @@ The database optimization project focused on:
 
 ### 1. Removed Materialized View Tables
 
-The following tables were identified as unnecessary and have been removed:
+The following materialized view tables have been deprecated in the schema:
 
-- `settlement_period_mining` - Period-level mining data was a materialized view
+- `settlement_period_mining` - Period-level mining data 
 - `daily_mining_potential` - Daily aggregated mining data
 - `yearly_mining_potential` - Yearly aggregated mining data
 - `ingestion_progress` and `process_tracking` - Auxiliary tracking tables
+
+The table declarations remain in the schema with `@deprecated` annotations for backward compatibility but are no longer used actively in the application.
 
 ### 2. Eliminated Redundant Indexes
 
@@ -75,10 +77,15 @@ Modified API routes to use the optimized direct query approach:
 
 ## Migration Scripts
 
-Two migration scripts were created:
+Several migration scripts were created:
 
 1. `migrations/remove_redundant_indexes.sql` - SQL migration to remove duplicate indexes
 2. `run_index_optimization.js` - Script to execute the index optimization and measure results
+
+The following files have been deprecated or removed:
+1. `migrations/add_materialized_views.sql` - Removed as materialized views are deprecated
+2. `populate_materialized_views.js` - Removed as materialized views are no longer populated
+3. `create_materialized_tables.sql` - Removed in favor of direct query approach
 
 ## Running the Optimization
 
@@ -154,3 +161,17 @@ GET /api/mining-potential/farm/FARM_ID?period=day|month|year&value=YYYY-MM-DD|YY
 By streamlining the database structure and optimizing query patterns, we've created a more maintainable and performant system that focuses on the core data needs without unnecessary complexity. The optimization has resulted in significantly faster API responses, reduced database size, and improved overall system efficiency.
 
 The removal of materialized views in favor of direct queries not only improved performance but also eliminated the need for complex view refresh mechanisms, making the system more reliable and easier to maintain.
+
+## Future Recommendations
+
+For further optimization, consider:
+
+1. **Complete Removal of Deprecated Components**: Once assured that all systems are using the optimized services, fully remove the deprecated tables and services.
+
+2. **Automated Query Analysis**: Implement query performance monitoring to identify any remaining slow queries.
+
+3. **Partition Large Tables**: For large production deployments, consider partitioning the core tables by date to further improve query performance.
+
+4. **Memory Caching Layer**: For frequently accessed data, add a Redis or Memcached layer to cache common queries.
+
+5. **API Response Compression**: Implement response compression for large data transfers, especially for yearly statistics.

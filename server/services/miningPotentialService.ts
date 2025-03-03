@@ -1,12 +1,13 @@
 /**
- * Mining Potential Service
+ * Mining Potential Service [DEPRECATED]
  * 
- * This service manages materialized view tables for mining potential calculations:
- * - settlement_period_mining: Per-period mining data
- * - daily_mining_potential: Daily aggregated mining data
- * - yearly_mining_potential: Yearly aggregated mining data
+ * This service manages materialized view tables for mining potential calculations
+ * which are now deprecated in favor of direct query optimizations.
  * 
- * These tables act as materialized views to improve performance for frequently accessed calculations.
+ * @deprecated Use optimizedMiningService instead which provides the same
+ * functionality with better performance via direct table queries.
+ * 
+ * This file is maintained only for backward compatibility and will be removed in future releases.
  */
 
 import { db } from "../../db";

@@ -1,9 +1,11 @@
 /**
- * Mining Potential Routes
+ * Mining Potential Routes [DEPRECATED]
  * 
- * Endpoints for querying optimized mining potential data using materialized views.
- * These endpoints provide the same functionality as the existing curtailment routes
- * but with improved performance by using pre-calculated data.
+ * @deprecated These endpoints use materialized views which have been replaced
+ * with direct table queries in optimizedMiningRoutes. Use /api/mining-potential
+ * instead of these routes.
+ * 
+ * This file is maintained only for backward compatibility and will be removed in future releases.
  */
 
 import express, { Request, Response } from "express";
