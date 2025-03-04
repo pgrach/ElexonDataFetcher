@@ -37,12 +37,12 @@ async function getAPIData(date: string) {
     records: [] as any[]
   };
 
-  // For quicker testing, just get a few periods
-  const periods = [1, 2, 3, 4, 5, 15, 20, 25, 30, 35, 40, 45, 48];
+  // For complete testing, get all periods
+  const MAX_PERIODS = 48;
   
-  for (const period of periods) {
+  for (let period = 1; period <= MAX_PERIODS; period++) {
     try {
-      await delay(250); // Rate limiting
+      await delay(150); // Rate limiting
       const records = await fetchBidsOffers(date, period);
 
       if (records && Array.isArray(records)) {
@@ -50,8 +50,11 @@ async function getAPIData(date: string) {
           record.volume < 0 && (record.soFlag || record.cadlFlag)
         );
 
+        const periodVolume = validRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
+        const periodPayment = validRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice), 0);
+
         if (validRecords.length > 0) {
-          console.log(`[${date} P${period}] Records: ${validRecords.length} (${validRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0).toFixed(2)} MWh, £${validRecords.reduce((sum, r) => sum + Math.abs(r.volume * r.originalPrice), 0).toFixed(2)})`);
+          console.log(`[${date} P${period}] Records: ${validRecords.length} (${periodVolume.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
         }
 
         for (const record of validRecords) {
@@ -68,30 +71,18 @@ async function getAPIData(date: string) {
       }
     } catch (error) {
       console.error(`[${date} P${period}] Error:`, error);
-      await delay(500); // Double delay on error
+      await delay(300); // Delay on error
     }
   }
-
-  // Estimate total based on sampled periods
-  const sampledPeriodsCount = periods.length;
-  const totalPeriodsCount = 48;
-  const estimationFactor = totalPeriodsCount / sampledPeriodsCount;
-  
-  const estimatedTotalVolume = apiData.totalVolume * estimationFactor;
-  const estimatedTotalPayment = apiData.totalPayment * estimationFactor;
 
   return {
     date,
     recordCount: apiData.recordCount,
     periodCount: apiData.periodCount.size,
     farmCount: apiData.farmCount.size,
-    sampleVolume: apiData.totalVolume,
-    samplePayment: apiData.totalPayment,
-    estimatedTotalVolume: estimatedTotalVolume,
-    estimatedTotalPayment: estimatedTotalPayment,
-    sampledPeriodsCount,
-    totalPeriodsCount,
-    estimationFactor
+    totalVolume: apiData.totalVolume,
+    totalPayment: apiData.totalPayment,
+    records: apiData.records
   };
 }
 
@@ -110,24 +101,17 @@ async function compareData(date: string) {
       payment: Number(dbStats.totalPayment).toFixed(2)
     });
 
-    console.log('\nAPI stats (sampled):', {
-      sampledPeriods: apiStats.sampledPeriodsCount,
+    console.log('\nAPI stats (complete):', {
       records: apiStats.recordCount,
       periods: apiStats.periodCount,
       farms: apiStats.farmCount,
-      sampleVolume: apiStats.sampleVolume.toFixed(2),
-      samplePayment: apiStats.samplePayment.toFixed(2)
-    });
-
-    console.log('\nAPI stats (estimated total):', {
-      estimationFactor: apiStats.estimationFactor.toFixed(2),
-      estimatedVolume: apiStats.estimatedTotalVolume.toFixed(2),
-      estimatedPayment: apiStats.estimatedTotalPayment.toFixed(2)
+      volume: apiStats.totalVolume.toFixed(2),
+      payment: apiStats.totalPayment.toFixed(2)
     });
 
     // Calculate differences
-    const volumeDiff = Math.abs(apiStats.estimatedTotalVolume - Number(dbStats.totalVolume));
-    const paymentDiff = Math.abs(apiStats.estimatedTotalPayment - Number(dbStats.totalPayment));
+    const volumeDiff = Math.abs(apiStats.totalVolume - Number(dbStats.totalVolume));
+    const paymentDiff = Math.abs(apiStats.totalPayment - Math.abs(Number(dbStats.totalPayment)));
     const volumeDiffPercent = (volumeDiff / Number(dbStats.totalVolume)) * 100;
     const paymentDiffPercent = (paymentDiff / Math.abs(Number(dbStats.totalPayment))) * 100;
 
