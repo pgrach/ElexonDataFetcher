@@ -84,13 +84,18 @@ export async function processDailyCurtailment(date: string): Promise<void> {
               const payment = volume * record.originalPrice;
 
               try {
+                // The payment should be a negative value to represent cost
+                // Since volume is already negative, we shouldn't need to negate it again
+                // Fix: Ensure payment is stored with correct sign (negative)
+                const paymentValue = record.volume * record.originalPrice;
+                
                 await db.insert(curtailmentRecords).values({
                   settlementDate: date,
                   settlementPeriod: period,
                   farmId: record.id,
                   leadPartyName: bmuLeadPartyMap?.get(record.id) || 'Unknown',
                   volume: record.volume.toString(), // Keep the original negative value
-                  payment: payment.toString(),
+                  payment: paymentValue.toString(), // Store with correct sign (negative)
                   originalPrice: record.originalPrice.toString(),
                   finalPrice: record.finalPrice.toString(),
                   soFlag: record.soFlag,
