@@ -81,9 +81,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
           const periodResults = await Promise.all(
             validRecords.map(async record => {
               const volume = Math.abs(record.volume);
-              // We need to negate the payment calculation to align with Elexon API representation
-              // Elexon considers negative volumes with positive payments
-              const payment = -1 * volume * record.originalPrice;
+              const payment = volume * record.originalPrice;
 
               try {
                 await db.insert(curtailmentRecords).values({
