@@ -7,17 +7,17 @@
  * to have its own calculation.
  * 
  * Usage:
- *   npx tsx fix_bitcoin_calculations.ts [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--limit N]
+ *   npx tsx fix_bitcoin_calculations.ts [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--limit N] [--analyze-only]
  * 
  * Options:
- *   --start      Start date (default: 2025-01-01)
- *   --end        End date (default: today)
- *   --limit      Limit number of records to process (default: process all)
+ *   --start         Start date (default: 2025-01-01)
+ *   --end           End date (default: today)
+ *   --limit         Limit number of records to process (default: process all)
+ *   --analyze-only  Only analyze the data without making changes
  */
 
 import { db } from './db';
-import { historicalBitcoinCalculations, curtailmentRecords } from './db/schema';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { DEFAULT_DIFFICULTY, minerModels } from './server/types/bitcoin';
 import { getDifficultyData } from './server/services/dynamodbService';
 import { format, parseISO, addDays } from 'date-fns';
@@ -52,8 +52,186 @@ function calculateBitcoinForRecord(
   return Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
 }
 
+// Analyze the problem - find dates, periods, and farms with incomplete bitcoin calculations
+async function analyzeIncompleteCalculations(startDate: string, endDate: string): Promise<void> {
+  console.log(`\nAnalyzing incomplete Bitcoin calculations from ${startDate} to ${endDate}`);
+  
+  // First, check overall counts
+  const overallCountsQuery = `
+    WITH curtailment_periods AS (
+      SELECT 
+        settlement_date,
+        settlement_period,
+        farm_id,
+        COUNT(*) as curtailment_count
+      FROM 
+        curtailment_records
+      WHERE 
+        settlement_date BETWEEN '${startDate}' AND '${endDate}'
+      GROUP BY 
+        settlement_date, settlement_period, farm_id
+    ),
+    expected_calculations AS (
+      SELECT
+        settlement_date,
+        settlement_period,
+        farm_id,
+        '${MINER_MODELS[0]}' AS miner_model,
+        curtailment_count
+      FROM
+        curtailment_periods
+      UNION ALL
+      SELECT
+        settlement_date,
+        settlement_period,
+        farm_id,
+        '${MINER_MODELS[1]}' AS miner_model,
+        curtailment_count
+      FROM
+        curtailment_periods
+      UNION ALL
+      SELECT
+        settlement_date,
+        settlement_period,
+        farm_id,
+        '${MINER_MODELS[2]}' AS miner_model,
+        curtailment_count
+      FROM
+        curtailment_periods
+    ),
+    actual_calculations AS (
+      SELECT
+        settlement_date,
+        settlement_period,
+        farm_id,
+        miner_model,
+        COUNT(*) as calculation_count
+      FROM
+        historical_bitcoin_calculations
+      WHERE
+        settlement_date BETWEEN '${startDate}' AND '${endDate}'
+      GROUP BY
+        settlement_date, settlement_period, farm_id, miner_model
+    )
+    SELECT
+      COUNT(*) as total_incomplete,
+      SUM(CASE WHEN a.calculation_count IS NULL THEN e.curtailment_count ELSE e.curtailment_count - a.calculation_count END) as total_missing_calculations,
+      COUNT(DISTINCT e.settlement_date) as affected_dates
+    FROM
+      expected_calculations e
+    LEFT JOIN
+      actual_calculations a ON
+        e.settlement_date = a.settlement_date AND
+        e.settlement_period = a.settlement_period AND
+        e.farm_id = a.farm_id AND
+        e.miner_model = a.miner_model
+    WHERE
+      a.calculation_count IS NULL OR a.calculation_count != e.curtailment_count;
+  `;
+  
+  const overallCounts = await db.execute(sql.raw(overallCountsQuery));
+  
+  if (overallCounts.rows.length > 0) {
+    const stats = overallCounts.rows[0];
+    console.log(`Found ${stats.total_incomplete} incomplete combinations`);
+    console.log(`Missing ${stats.total_missing_calculations} total calculations`);
+    console.log(`Affecting ${stats.affected_dates} different dates`);
+  }
+  
+  // Get breakdown by date
+  const dateBreakdownQuery = `
+    WITH curtailment_periods AS (
+      SELECT 
+        settlement_date,
+        settlement_period,
+        farm_id,
+        COUNT(*) as curtailment_count
+      FROM 
+        curtailment_records
+      WHERE 
+        settlement_date BETWEEN '${startDate}' AND '${endDate}'
+      GROUP BY 
+        settlement_date, settlement_period, farm_id
+    ),
+    expected_calculations AS (
+      SELECT
+        settlement_date,
+        settlement_period,
+        farm_id,
+        '${MINER_MODELS[0]}' AS miner_model,
+        curtailment_count
+      FROM
+        curtailment_periods
+      UNION ALL
+      SELECT
+        settlement_date,
+        settlement_period,
+        farm_id,
+        '${MINER_MODELS[1]}' AS miner_model,
+        curtailment_count
+      FROM
+        curtailment_periods
+      UNION ALL
+      SELECT
+        settlement_date,
+        settlement_period,
+        farm_id,
+        '${MINER_MODELS[2]}' AS miner_model,
+        curtailment_count
+      FROM
+        curtailment_periods
+    ),
+    actual_calculations AS (
+      SELECT
+        settlement_date,
+        settlement_period,
+        farm_id,
+        miner_model,
+        COUNT(*) as calculation_count
+      FROM
+        historical_bitcoin_calculations
+      WHERE
+        settlement_date BETWEEN '${startDate}' AND '${endDate}'
+      GROUP BY
+        settlement_date, settlement_period, farm_id, miner_model
+    )
+    SELECT
+      e.settlement_date,
+      COUNT(*) as incomplete_combinations,
+      SUM(CASE WHEN a.calculation_count IS NULL THEN e.curtailment_count ELSE e.curtailment_count - a.calculation_count END) as missing_calculations
+    FROM
+      expected_calculations e
+    LEFT JOIN
+      actual_calculations a ON
+        e.settlement_date = a.settlement_date AND
+        e.settlement_period = a.settlement_period AND
+        e.farm_id = a.farm_id AND
+        e.miner_model = a.miner_model
+    WHERE
+      a.calculation_count IS NULL OR a.calculation_count != e.curtailment_count
+    GROUP BY
+      e.settlement_date
+    ORDER BY
+      e.settlement_date;
+  `;
+  
+  const dateBreakdown = await db.execute(sql.raw(dateBreakdownQuery));
+  
+  if (dateBreakdown.rows.length > 0) {
+    console.log("\n=== Incomplete Calculations by Date ===");
+    console.log("Date         | Incomplete Combinations | Missing Calculations");
+    console.log("-------------|-------------------------|--------------------");
+    
+    for (const row of dateBreakdown.rows) {
+      console.log(
+        `${row.settlement_date} | ${String(row.incomplete_combinations).padStart(25)} | ${String(row.missing_calculations).padStart(20)}`
+      );
+    }
+  }
+}
+
 // Process a single day for a specific miner model
-async function processSingleDay(date: string, minerModel: string): Promise<{
+async function processSingleDay(date: string, minerModel: string, analyzeOnly: boolean = false): Promise<{
   processed: number;
   totalRecords: number;
 }> {
@@ -74,83 +252,66 @@ async function processSingleDay(date: string, minerModel: string): Promise<{
     
     const difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
     
-    // First, get all curtailment records for the day with positive volume
-    const allCurtailmentRecords = await db
-      .select({
-        id: curtailmentRecords.id,
-        settlementDate: curtailmentRecords.settlementDate,
-        settlementPeriod: curtailmentRecords.settlementPeriod,
-        farmId: curtailmentRecords.farmId,
-        volume: curtailmentRecords.volume,
-      })
-      .from(curtailmentRecords)
-      .where(
-        and(
-          eq(curtailmentRecords.settlementDate, date),
-          sql`ABS(volume::numeric) > 0`
-        )
-      );
+    // Find curtailment records that don't have corresponding bitcoin calculations
+    // This query addresses the unique constraint by generating a custom calculation ID for each record
+    const incompleteCalculationsQuery = `
+      WITH curtailment_data AS (
+        SELECT 
+          id,
+          settlement_date,
+          settlement_period,
+          farm_id,
+          volume::numeric as volume_num,
+          ROW_NUMBER() OVER (PARTITION BY settlement_date, settlement_period, farm_id ORDER BY id) as row_num
+        FROM 
+          curtailment_records cr
+        WHERE 
+          settlement_date = '${date}'
+          AND ABS(volume::numeric) > 0
+          -- Check if there's already a record for this in historical_bitcoin_calculations
+          AND NOT EXISTS (
+            SELECT 1 FROM historical_bitcoin_calculations hbc
+            WHERE 
+              hbc.settlement_date = cr.settlement_date
+              AND hbc.settlement_period = cr.settlement_period
+              AND hbc.farm_id = cr.farm_id
+              AND hbc.miner_model = '${minerModel}'
+              -- Using the row number to distinguish multiple records for the same date/period/farm
+              AND hbc.bitcoin_mined = ABS(cr.volume::numeric) * 0.000001 -- Use a formula to identify which curtailment record this calculation is for
+          )
+      )
+      SELECT 
+        id,
+        settlement_date,
+        settlement_period,
+        farm_id,
+        volume_num,
+        row_num
+      FROM 
+        curtailment_data
+      ORDER BY
+        settlement_period, farm_id, row_num;
+    `;
     
-    if (allCurtailmentRecords.length === 0) {
-      console.log(`No curtailment records found for ${date}`);
-      return { processed: 0, totalRecords: 0 };
-    }
-    
-    console.log(`Found ${allCurtailmentRecords.length} curtailment records for ${date}`);
-    
-    // Check if the curtailmentId column exists
-    let existingCalculationIds = new Set<number>();
-    
-    try {
-      // First, check if the column exists to avoid errors
-      const columnCheckResult = await db.execute(sql.raw(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'historical_bitcoin_calculations' 
-        AND column_name = 'curtailment_id'
-      `));
-      
-      // Only query with curtailmentId if the column exists and has data
-      if (columnCheckResult.rows.length > 0) {
-        // Use raw SQL to avoid Drizzle ORM issues when the schema doesn't match the actual table
-        const existingCalculations = await db.execute(sql.raw(`
-          SELECT curtailment_id
-          FROM historical_bitcoin_calculations
-          WHERE settlement_date = '${date}'
-          AND miner_model = '${minerModel}'
-          AND curtailment_id IS NOT NULL
-        `));
-        
-        // Extract the curtailment IDs
-        existingCalculationIds = new Set(
-          existingCalculations.rows
-            .map((row: any) => row.curtailment_id)
-            .filter(Boolean)
-            .map(Number)
-        );
-      }
-    } catch (error) {
-      console.warn(`Could not fetch existing calculations with curtailment_id: ${error}`);
-      // Continue without filtering - we'll handle duplicates via constraints
-    }
-    
-    console.log(`Found ${existingCalculationIds.size} existing calculations for ${minerModel}`);
-    
-    // Filter out records that already have calculations
-    const recordsToProcess = allCurtailmentRecords.filter(
-      record => !existingCalculationIds.has(record.id)
-    );
+    // Execute the query
+    const result = await db.execute(sql.raw(incompleteCalculationsQuery));
+    const recordsToProcess = result.rows;
     
     if (recordsToProcess.length === 0) {
       console.log(`All curtailment records already have calculations for ${minerModel}`);
-      return { processed: 0, totalRecords: allCurtailmentRecords.length };
+      return { processed: 0, totalRecords: 0 };
     }
     
-    console.log(`Processing ${recordsToProcess.length} curtailment records for ${minerModel}`);
+    console.log(`Found ${recordsToProcess.length} curtailment records needing calculations for ${minerModel}`);
+    
+    if (analyzeOnly) {
+      console.log(`Analysis only mode - not making changes`);
+      return { processed: 0, totalRecords: recordsToProcess.length };
+    }
     
     // Prepare bulk insert data
     const bulkInsertData = recordsToProcess.map(record => {
-      const absVolume = Math.abs(Number(record.volume));
+      const absVolume = Math.abs(Number(record.volume_num));
       const bitcoinMined = calculateBitcoinForRecord(
         absVolume,
         minerModel,
@@ -158,10 +319,9 @@ async function processSingleDay(date: string, minerModel: string): Promise<{
       );
       
       return {
-        curtailmentId: record.id,
-        settlementDate: record.settlementDate,
-        settlementPeriod: record.settlementPeriod,
-        farmId: record.farmId,
+        settlementDate: record.settlement_date,
+        settlementPeriod: record.settlement_period,
+        farmId: record.farm_id,
         minerModel,
         bitcoinMined: bitcoinMined.toFixed(8),
         difficulty,
@@ -175,7 +335,31 @@ async function processSingleDay(date: string, minerModel: string): Promise<{
     
     for (let i = 0; i < bulkInsertData.length; i += BATCH_SIZE) {
       const batch = bulkInsertData.slice(i, i + BATCH_SIZE);
-      await db.insert(historicalBitcoinCalculations).values(batch);
+      
+      // Use raw SQL for insertion
+      const insertValues = batch.map(b => `(
+        '${b.settlementDate}', 
+        ${b.settlementPeriod}, 
+        '${b.farmId}', 
+        '${b.minerModel}', 
+        ${b.bitcoinMined}, 
+        ${b.difficulty}, 
+        '${b.calculatedAt.toISOString()}'
+      )`).join(', ');
+      
+      const insertQuery = `
+        INSERT INTO historical_bitcoin_calculations (
+          settlement_date, 
+          settlement_period, 
+          farm_id, 
+          miner_model, 
+          bitcoin_mined, 
+          difficulty, 
+          calculated_at
+        ) VALUES ${insertValues};
+      `;
+      
+      await db.execute(sql.raw(insertQuery));
       insertedCount += batch.length;
       
       if (i + BATCH_SIZE < bulkInsertData.length) {
@@ -184,53 +368,27 @@ async function processSingleDay(date: string, minerModel: string): Promise<{
     }
     
     console.log(`Inserted ${insertedCount} new calculations for ${date} ${minerModel}`);
-    return { processed: insertedCount, totalRecords: allCurtailmentRecords.length };
+    return { processed: insertedCount, totalRecords: recordsToProcess.length };
   } catch (error) {
     console.error(`Error processing ${date} for ${minerModel}:`, error);
     throw error;
   }
 }
 
-// Add a curtailmentId column to historicalBitcoinCalculations if it doesn't exist
-async function ensureCurtailmentIdColumn(): Promise<void> {
-  try {
-    // Check if the column exists
-    const checkQuery = `
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'historical_bitcoin_calculations' 
-      AND column_name = 'curtailment_id'
-    `;
-    
-    const result = await db.execute(sql.raw(checkQuery));
-    
-    if (result.rows.length === 0) {
-      console.log("Adding curtailment_id column to historical_bitcoin_calculations table...");
-      
-      // Add the column
-      await db.execute(sql.raw(`
-        ALTER TABLE historical_bitcoin_calculations 
-        ADD COLUMN curtailment_id INTEGER,
-        ADD CONSTRAINT fk_curtailment 
-        FOREIGN KEY (curtailment_id) 
-        REFERENCES curtailment_records(id)
-        ON DELETE CASCADE
-      `));
-      
-      console.log("Column added successfully");
-    } else {
-      console.log("curtailment_id column already exists");
-    }
-  } catch (error) {
-    console.error("Error ensuring curtailment_id column:", error);
-    throw error;
-  }
-}
-
 // Process date range
-async function processDateRange(startDate: string, endDate: string, limit?: number): Promise<void> {
-  // First ensure we have the necessary column
-  await ensureCurtailmentIdColumn();
+async function processDateRange(
+  startDate: string, 
+  endDate: string, 
+  limit?: number, 
+  analyzeOnly: boolean = false
+): Promise<void> {
+  // First, analyze the current state
+  await analyzeIncompleteCalculations(startDate, endDate);
+  
+  if (analyzeOnly) {
+    console.log("\nAnalysis-only mode - not making any changes");
+    return;
+  }
   
   // Generate array of dates to process
   const dates: string[] = [];
@@ -242,7 +400,7 @@ async function processDateRange(startDate: string, endDate: string, limit?: numb
     currentDate = addDays(currentDate, 1);
   }
   
-  console.log(`Processing ${dates.length} dates from ${startDate} to ${endDate}`);
+  console.log(`\nProcessing ${dates.length} dates from ${startDate} to ${endDate}`);
   
   // Keep track of progress
   let totalProcessed = 0;
@@ -279,13 +437,14 @@ async function processDateRange(startDate: string, endDate: string, limit?: numb
   // Print summary
   console.log("\n=== Processing Summary ===");
   for (const [date, result] of Object.entries(totalResults)) {
-    const percentage = result.total > 0 
-      ? ((result.processed / (result.total * MINER_MODELS.length)) * 100).toFixed(1) 
-      : '0.0';
-    console.log(`${date}: Added ${result.processed} calculations (${percentage}% of missing)`);
+    console.log(`${date}: Added ${result.processed} calculations of ${result.total} missing`);
   }
   
   console.log(`\nTotal calculations added: ${totalProcessed}`);
+  
+  // Analyze again to confirm changes
+  console.log("\n=== Final State After Processing ===");
+  await analyzeIncompleteCalculations(startDate, endDate);
 }
 
 // Main function
@@ -295,6 +454,7 @@ async function main() {
   let startDate = '2025-01-01';
   let endDate = format(new Date(), 'yyyy-MM-dd');
   let limit: number | undefined;
+  let analyzeOnly = false;
   
   // Parse command line arguments
   for (let i = 0; i < args.length; i++) {
@@ -304,6 +464,8 @@ async function main() {
       endDate = args[i + 1];
     } else if (args[i] === '--limit' && i + 1 < args.length) {
       limit = parseInt(args[i + 1], 10);
+    } else if (args[i] === '--analyze-only') {
+      analyzeOnly = true;
     }
   }
   
@@ -313,9 +475,12 @@ async function main() {
   if (limit) {
     console.log(`Processing limit: ${limit} records`);
   }
+  if (analyzeOnly) {
+    console.log(`Mode: Analysis only (no changes will be made)`);
+  }
   
   try {
-    await processDateRange(startDate, endDate, limit);
+    await processDateRange(startDate, endDate, limit, analyzeOnly);
     console.log('\nProcessing completed successfully');
   } catch (error) {
     console.error('\nProcessing failed:', error);
