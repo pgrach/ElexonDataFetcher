@@ -5,7 +5,15 @@
  * It fetches data from the Elexon API for any missing periods and updates the database.
  * 
  * Usage:
- *   npx tsx server/scripts/fixMissingPeriods.ts
+ *   npx tsx server/scripts/fixMissingPeriods.ts [DATE] [FORCE_REPROCESS]
+ * 
+ * Options:
+ *   DATE - Date to process in YYYY-MM-DD format (default: 2025-03-02)
+ *   FORCE_REPROCESS - Set to "true" to force reprocessing even if no missing periods (default: true)
+ * 
+ * Examples:
+ *   npx tsx server/scripts/fixMissingPeriods.ts 2025-03-02
+ *   npx tsx server/scripts/fixMissingPeriods.ts 2025-03-02 true
  */
 import { db } from "@db";
 import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "@db/schema";
@@ -14,8 +22,8 @@ import { processHistoricalCalculations } from "../services/bitcoinService";
 import { eq, sql } from "drizzle-orm";
 import { processDailyCurtailment } from "../services/curtailment";
 
-const TARGET_DATE = '2025-03-02';
-const FORCE_REPROCESS = true; // Set to true to force reprocessing even when no missing periods are found
+const TARGET_DATE = process.argv[2] || '2025-03-02';
+const FORCE_REPROCESS = process.argv[3] === 'false' ? false : true; // Default to true unless explicitly set to false
 
 async function getExistingPeriods(date: string): Promise<Set<number>> {
   try {
