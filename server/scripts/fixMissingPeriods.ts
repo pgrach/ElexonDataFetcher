@@ -14,7 +14,8 @@ import { processHistoricalCalculations } from "../services/bitcoinService";
 import { eq, sql } from "drizzle-orm";
 import { processDailyCurtailment } from "../services/curtailment";
 
-const TARGET_DATE = '2025-03-03';
+const TARGET_DATE = '2025-03-02';
+const FORCE_REPROCESS = true; // Set to true to force reprocessing even when no missing periods are found
 
 async function getExistingPeriods(date: string): Promise<Set<number>> {
   try {
@@ -97,9 +98,14 @@ async function fixMissingPeriods() {
     const missingPeriods = await getMissingPeriods(TARGET_DATE);
     console.log(`\nFound ${missingPeriods.length} missing periods: ${missingPeriods.join(', ')}`);
     
-    if (missingPeriods.length === 0) {
+    if (missingPeriods.length === 0 && !FORCE_REPROCESS) {
       console.log('No missing periods found. Database is complete.');
+      console.log('Set FORCE_REPROCESS to true if you want to reprocess anyway.');
       return;
+    }
+    
+    if (missingPeriods.length === 0) {
+      console.log('Force reprocessing enabled. Continuing with full data reprocessing...');
     }
     
     // Option 1: Process individual missing periods
