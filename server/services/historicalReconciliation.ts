@@ -268,6 +268,94 @@ export async function reprocessDay(dateStr: string) {
 }
 
 /**
+ * Find dates with missing Bitcoin calculations for reconciliation
+ * This function specifically checks for incomplete calculation dates
+ */
+export async function findDatesWithMissingCalculations(limit: number = 100) {
+  try {
+    console.log('Finding dates with missing Bitcoin calculations...');
+    
+    const query = `
+      WITH curtailment_summary AS (
+        SELECT 
+          settlement_date,
+          array_agg(DISTINCT settlement_period) as curtailment_periods,
+          COUNT(DISTINCT settlement_period) as period_count,
+          COUNT(DISTINCT farm_id) as farm_count,
+          SUM(ABS(volume::numeric)) as total_volume,
+          COUNT(DISTINCT farm_id) * COUNT(DISTINCT settlement_period) as expected_calculations
+        FROM curtailment_records
+        WHERE ABS(volume::numeric) > 0
+        GROUP BY settlement_date
+      ),
+      calculation_summary AS (
+        SELECT 
+          settlement_date,
+          array_agg(DISTINCT settlement_period) as calculated_periods,
+          COUNT(*) as actual_calculations,
+          COUNT(DISTINCT settlement_period) as calculated_period_count,
+          COUNT(DISTINCT farm_id) as calculated_farm_count
+        FROM historical_bitcoin_calculations
+        GROUP BY settlement_date
+      )
+      SELECT 
+        c.settlement_date as date,
+        c.period_count,
+        c.farm_count,
+        c.total_volume,
+        c.expected_calculations,
+        COALESCE(cal.actual_calculations, 0) as actual_calculations,
+        c.expected_calculations - COALESCE(cal.actual_calculations, 0) as missing_calculations,
+        CASE 
+          WHEN c.expected_calculations = 0 THEN 100
+          ELSE ROUND((COALESCE(cal.actual_calculations, 0)::numeric / c.expected_calculations::numeric) * 100, 2)
+        END as completion_percentage,
+        c.curtailment_periods,
+        COALESCE(cal.calculated_periods, ARRAY[]::integer[]) as calculated_periods
+      FROM curtailment_summary c
+      LEFT JOIN calculation_summary cal ON c.settlement_date = cal.settlement_date
+      WHERE c.expected_calculations > COALESCE(cal.actual_calculations, 0)
+      ORDER BY c.settlement_date DESC
+      LIMIT $1
+    `;
+    
+    // Execute query with raw SQL
+    const modifiedQuery = query.replace(/\$1/g, `${limit}`);
+    const result = await db.execute(sql.raw(modifiedQuery));
+    
+    // Define interface for row type to avoid 'any' implicits
+    interface QueryRow {
+      date: string;
+      period_count: string;
+      farm_count: string;
+      total_volume: string;
+      expected_calculations: string;
+      actual_calculations: string;
+      missing_calculations: string;
+      completion_percentage: string;
+      curtailment_periods: any[];
+      calculated_periods: any[];
+    }
+    
+    return result.rows.map(row => ({
+      date: row.date,
+      periodCount: parseInt(row.period_count),
+      farmCount: parseInt(row.farm_count),
+      totalVolume: parseFloat(row.total_volume),
+      expectedCalculations: parseInt(row.expected_calculations),
+      actualCalculations: parseInt(row.actual_calculations),
+      missingCalculations: parseInt(row.missing_calculations),
+      completionPercentage: parseFloat(row.completion_percentage),
+      curtailmentPeriods: row.curtailment_periods,
+      calculatedPeriods: row.calculated_periods
+    }));
+  } catch (error: unknown) {
+    console.error('Error finding dates with missing calculations:', error);
+    throw error;
+  }
+}
+
+/**
  * Finds dates with missing or incomplete Bitcoin calculations.
  * This is a utility function used by audit tools and scripts.
  */
@@ -407,6 +495,141 @@ export async function reconcileDateRange(startDate: string, endDate: string): Pr
   } catch (error) {
     console.error('Error during date range reconciliation:', error);
     throw error;
+  }
+}
+
+/**
+ * Get comprehensive reconciliation status across all dates
+ * This provides an overview of data completeness across the system
+ */
+export async function getReconciliationStatus(): Promise<{
+  overview: {
+    totalRecords: number;
+    totalCalculations: number;
+    missingCalculations: number;
+    completionPercentage: number;
+  };
+  dateStats: Array<{
+    date: string;
+    expected: number;
+    actual: number;
+    missing: number;
+    completionPercentage: number;
+  }>;
+}> {
+  try {
+    console.log('Getting system-wide reconciliation status...');
+    
+    // Query to get comprehensive status across dates
+    const query = `
+      WITH curtailment_summary AS (
+        SELECT 
+          settlement_date,
+          COUNT(DISTINCT farm_id) * COUNT(DISTINCT settlement_period) as expected_calculations,
+          COUNT(*) as curtailment_records
+        FROM curtailment_records
+        WHERE ABS(volume::numeric) > 0
+        GROUP BY settlement_date
+      ),
+      calculation_summary AS (
+        SELECT 
+          settlement_date,
+          COUNT(*) as actual_calculations
+        FROM historical_bitcoin_calculations
+        GROUP BY settlement_date
+      )
+      SELECT 
+        c.settlement_date as date,
+        c.expected_calculations as expected,
+        COALESCE(cal.actual_calculations, 0) as actual,
+        c.expected_calculations - COALESCE(cal.actual_calculations, 0) as missing,
+        CASE 
+          WHEN c.expected_calculations = 0 THEN 100
+          ELSE ROUND((COALESCE(cal.actual_calculations, 0)::numeric / c.expected_calculations::numeric) * 100, 2)
+        END as completion_percentage
+      FROM curtailment_summary c
+      LEFT JOIN calculation_summary cal ON c.settlement_date = cal.settlement_date
+      ORDER BY c.settlement_date DESC
+      LIMIT 30
+    `;
+    
+    // Execute query with raw SQL instead of client.query
+    const result = await db.execute(sql.raw(query));
+    
+    // Define interface for row type to avoid 'any' implicits
+    interface StatusRow {
+      date: string;
+      expected: string;
+      actual: string;
+      missing: string;
+      completion_percentage: string;
+    }
+    
+    const dateStats = result.rows as StatusRow[];
+    
+    // Calculate overall statistics with proper typing
+    const totalExpected = dateStats.reduce((sum: number, row: StatusRow) => sum + parseInt(row.expected), 0);
+    const totalActual = dateStats.reduce((sum: number, row: StatusRow) => sum + parseInt(row.actual), 0);
+    const totalMissing = totalExpected - totalActual;
+    const overallPercentage = totalExpected > 0 
+      ? parseFloat((totalActual / totalExpected * 100).toFixed(2)) 
+      : 100;
+    
+    // Format the response
+    return {
+      overview: {
+        totalRecords: totalExpected,
+        totalCalculations: totalActual,
+        missingCalculations: totalMissing,
+        completionPercentage: overallPercentage
+      },
+      dateStats: dateStats.map((row: StatusRow) => ({
+        date: row.date,
+        expected: parseInt(row.expected),
+        actual: parseInt(row.actual),
+        missing: parseInt(row.missing),
+        completionPercentage: parseFloat(row.completion_percentage)
+      }))
+    };
+  } catch (error: unknown) {
+    console.error('Error getting reconciliation status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Process a specific date to ensure all Bitcoin calculations exist
+ * This is a simplified version of the unified reconciliation system's processDate
+ */
+export async function processDate(date: string, attemptNumber: number = 1): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  const MAX_ATTEMPTS = 3;
+  
+  try {
+    console.log(`Processing date ${date} (attempt ${attemptNumber}/${MAX_ATTEMPTS})...`);
+    
+    // Use the existing auditAndFix function
+    const result = await auditAndFixBitcoinCalculations(date);
+    
+    return {
+      success: result.success,
+      message: result.message
+    };
+  } catch (error) {
+    console.error(`Error processing date ${date}:`, error);
+    
+    // Implement retry logic
+    if (attemptNumber < MAX_ATTEMPTS) {
+      console.log(`Retrying date ${date} (attempt ${attemptNumber + 1}/${MAX_ATTEMPTS})...`);
+      return processDate(date, attemptNumber + 1);
+    }
+    
+    return {
+      success: false,
+      message: `Failed after ${attemptNumber} attempts: ${error.message}`
+    };
   }
 }
 
