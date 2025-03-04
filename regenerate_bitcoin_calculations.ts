@@ -298,6 +298,19 @@ async function regenerateCalculations(date: string, applyFix: boolean = false): 
       totalCalculationsGenerated += batchInsertData.length;
     }
     
+    // Now, insert from the temporary table to the real table
+    console.log(`Inserting calculations from temporary table to historical_bitcoin_calculations...`);
+    const finalInsertQuery = `
+      INSERT INTO historical_bitcoin_calculations 
+        (settlement_date, settlement_period, farm_id, miner_model, bitcoin_mined, difficulty, calculated_at, curtailment_id)
+      SELECT 
+        settlement_date, settlement_period, farm_id, miner_model, bitcoin_mined, difficulty, calculated_at, curtailment_id
+      FROM 
+        temp_bitcoin_calculations;
+    `;
+    
+    await db.execute(sql.raw(finalInsertQuery));
+    
     console.log(`Total calculations generated for ${date}: ${totalCalculationsGenerated}`);
     return { curtailmentCount, calculationsGenerated: totalCalculationsGenerated };
     

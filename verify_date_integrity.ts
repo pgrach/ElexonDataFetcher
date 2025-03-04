@@ -1,18 +1,21 @@
 /**
- * Data Integrity Verification Tool
+ * Enhanced Data Integrity Verification Tool
  * 
  * This script verifies data integrity between curtailment records and 
  * historical bitcoin calculations for a specified date range.
  * 
- * It identifies missing dates and automatically reprocesses them.
+ * It identifies missing dates, incomplete calculations, and automatically 
+ * reprocesses them to ensure each curtailment record has all required bitcoin calculations.
  * 
  * Usage:
- *   npx tsx verify_date_integrity.ts [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--auto-fix]
+ *   npx tsx verify_date_integrity.ts [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--auto-fix] [--verbose]
  * 
  * Options:
  *   --start      Start date (default: 7 days ago)
  *   --end        End date (default: today)
  *   --auto-fix   Automatically fix missing data (default: false)
+ *   --verbose    Show detailed output for each date (default: false)
+ *   --check-all  Check calculations for all miner models (default: false)
  */
 
 import { db } from "./db";
@@ -25,7 +28,11 @@ interface DateStatusItem {
   date: string;
   curtailmentCount: number;
   calculationCount: number;
-  status: 'complete' | 'missing_curtailment' | 'missing_calculations' | 'missing_both';
+  s19jProCount: number;
+  m20sCount: number;
+  s9Count: number;
+  missingCalculations: number;
+  status: 'complete' | 'missing_curtailment' | 'missing_calculations' | 'missing_both' | 'incomplete_calculations';
   curtailmentVolume: string | null;
   calculationBitcoin: string | null;
 }
@@ -75,6 +82,17 @@ async function checkDataIntegrity() {
       .from(historicalBitcoinCalculations)
       .where(between(historicalBitcoinCalculations.settlementDate, startDate, endDate))
       .groupBy(historicalBitcoinCalculations.settlementDate);
+      
+    // Get bitcoin calculation counts by date and miner model
+    const minerModelStats = await db
+      .select({
+        settlementDate: historicalBitcoinCalculations.settlementDate,
+        minerModel: historicalBitcoinCalculations.minerModel,
+        recordCount: sql<number>`COUNT(*)`
+      })
+      .from(historicalBitcoinCalculations)
+      .where(between(historicalBitcoinCalculations.settlementDate, startDate, endDate))
+      .groupBy(historicalBitcoinCalculations.settlementDate, historicalBitcoinCalculations.minerModel);
     
     // Create a map of curtailment stats by date
     const curtailmentByDate = new Map<string, { count: number, volume: string | null }>();
@@ -94,6 +112,27 @@ async function checkDataIntegrity() {
       });
     });
     
+    // Create a map of miner model counts by date
+    const minerModelByDate = new Map<string, { 
+      S19J_PRO: number, 
+      M20S: number, 
+      S9: number
+    }>();
+    
+    minerModelStats.forEach(ms => {
+      const dateStats = minerModelByDate.get(ms.settlementDate) || { S19J_PRO: 0, M20S: 0, S9: 0 };
+      
+      if (ms.minerModel === 'S19J_PRO') {
+        dateStats.S19J_PRO = ms.recordCount;
+      } else if (ms.minerModel === 'M20S') {
+        dateStats.M20S = ms.recordCount;
+      } else if (ms.minerModel === 'S9') {
+        dateStats.S9 = ms.recordCount;
+      }
+      
+      minerModelByDate.set(ms.settlementDate, dateStats);
+    });
+    
     // Generate a complete set of dates in the range
     const dates: string[] = [];
     let currentDate = parseISO(startDate);
@@ -110,6 +149,12 @@ async function checkDataIntegrity() {
     for (const date of dates) {
       const curtailment = curtailmentByDate.get(date);
       const calculations = calculationsByDate.get(date);
+      const minerModels = minerModelByDate.get(date) || { S19J_PRO: 0, M20S: 0, S9: 0 };
+      
+      // Calculate expected vs actual calculations
+      const expectedCalculations = (curtailment?.count || 0) * 3; // 3 miner models per curtailment record
+      const actualCalculations = calculations?.count || 0;
+      const missingCalculations = Math.max(0, expectedCalculations - actualCalculations);
       
       let status: DateStatusItem['status'] = 'complete';
       if (!curtailment && !calculations) {
@@ -118,12 +163,18 @@ async function checkDataIntegrity() {
         status = 'missing_curtailment';
       } else if (!calculations) {
         status = 'missing_calculations';
+      } else if (missingCalculations > 0) {
+        status = 'incomplete_calculations';
       }
       
       results.push({
         date,
         curtailmentCount: curtailment?.count || 0,
-        calculationCount: calculations?.count || 0,
+        calculationCount: actualCalculations,
+        s19jProCount: minerModels.S19J_PRO,
+        m20sCount: minerModels.M20S,
+        s9Count: minerModels.S9,
+        missingCalculations,
         status,
         curtailmentVolume: curtailment?.volume || null,
         calculationBitcoin: calculations?.bitcoin || null
