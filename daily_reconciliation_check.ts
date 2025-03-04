@@ -20,9 +20,10 @@ import path from "path";
 import { 
   getReconciliationStatus,
   findDatesWithMissingCalculations,
-  processDate
-} from "./unified_reconciliation";
-import { reconcileDay, auditAndFixBitcoinCalculations } from "./server/services/historicalReconciliation";
+  processDate,
+  reconcileDay, 
+  auditAndFixBitcoinCalculations 
+} from "./server/services/historicalReconciliation";
 
 // Configuration
 const RECENT_DAYS_TO_CHECK = parseInt(process.argv[2] || "2", 10);

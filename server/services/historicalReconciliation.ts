@@ -323,32 +323,23 @@ export async function findDatesWithMissingCalculations(limit: number = 100) {
     const modifiedQuery = query.replace(/\$1/g, `${limit}`);
     const result = await db.execute(sql.raw(modifiedQuery));
     
-    // Define interface for row type to avoid 'any' implicits
-    interface QueryRow {
-      date: string;
-      period_count: string;
-      farm_count: string;
-      total_volume: string;
-      expected_calculations: string;
-      actual_calculations: string;
-      missing_calculations: string;
-      completion_percentage: string;
-      curtailment_periods: any[];
-      calculated_periods: any[];
-    }
-    
-    return result.rows.map(row => ({
-      date: row.date,
-      periodCount: parseInt(row.period_count),
-      farmCount: parseInt(row.farm_count),
-      totalVolume: parseFloat(row.total_volume),
-      expectedCalculations: parseInt(row.expected_calculations),
-      actualCalculations: parseInt(row.actual_calculations),
-      missingCalculations: parseInt(row.missing_calculations),
-      completionPercentage: parseFloat(row.completion_percentage),
-      curtailmentPeriods: row.curtailment_periods,
-      calculatedPeriods: row.calculated_periods
-    }));
+    // Process rows with proper type safety
+    return result.rows.map(row => {
+      // Safely access properties
+      const rowObj = row as Record<string, unknown>;
+      return {
+        date: String(rowObj.date || ''),
+        periodCount: parseInt(String(rowObj.period_count || '0')),
+        farmCount: parseInt(String(rowObj.farm_count || '0')),
+        totalVolume: parseFloat(String(rowObj.total_volume || '0')),
+        expectedCalculations: parseInt(String(rowObj.expected_calculations || '0')),
+        actualCalculations: parseInt(String(rowObj.actual_calculations || '0')),
+        missingCalculations: parseInt(String(rowObj.missing_calculations || '0')),
+        completionPercentage: parseFloat(String(rowObj.completion_percentage || '0')),
+        curtailmentPeriods: Array.isArray(rowObj.curtailment_periods) ? rowObj.curtailment_periods : [],
+        calculatedPeriods: Array.isArray(rowObj.calculated_periods) ? rowObj.calculated_periods : []
+      };
+    });
   } catch (error: unknown) {
     console.error('Error finding dates with missing calculations:', error);
     throw error;
@@ -553,23 +544,33 @@ export async function getReconciliationStatus(): Promise<{
       LIMIT 30
     `;
     
-    // Execute query with raw SQL instead of client.query
+    // Execute query with raw SQL
     const result = await db.execute(sql.raw(query));
     
-    // Define interface for row type to avoid 'any' implicits
-    interface StatusRow {
+    // Process rows with proper type safety
+    type ProcessedRow = {
       date: string;
-      expected: string;
-      actual: string;
-      missing: string;
-      completion_percentage: string;
-    }
+      expected: number;
+      actual: number;
+      missing: number;
+      completionPercentage: number;
+    };
     
-    const dateStats = result.rows as StatusRow[];
+    // Process the rows with proper type safety
+    const dateStats = result.rows.map(row => {
+      const rowObj = row as Record<string, unknown>;
+      return {
+        date: String(rowObj.date || ''),
+        expected: parseInt(String(rowObj.expected || '0')),
+        actual: parseInt(String(rowObj.actual || '0')),
+        missing: parseInt(String(rowObj.missing || '0')),
+        completionPercentage: parseFloat(String(rowObj.completion_percentage || '0'))
+      };
+    });
     
-    // Calculate overall statistics with proper typing
-    const totalExpected = dateStats.reduce((sum: number, row: StatusRow) => sum + parseInt(row.expected), 0);
-    const totalActual = dateStats.reduce((sum: number, row: StatusRow) => sum + parseInt(row.actual), 0);
+    // Calculate overall statistics
+    const totalExpected = dateStats.reduce((sum, row) => sum + row.expected, 0);
+    const totalActual = dateStats.reduce((sum, row) => sum + row.actual, 0);
     const totalMissing = totalExpected - totalActual;
     const overallPercentage = totalExpected > 0 
       ? parseFloat((totalActual / totalExpected * 100).toFixed(2)) 
@@ -583,13 +584,7 @@ export async function getReconciliationStatus(): Promise<{
         missingCalculations: totalMissing,
         completionPercentage: overallPercentage
       },
-      dateStats: dateStats.map((row: StatusRow) => ({
-        date: row.date,
-        expected: parseInt(row.expected),
-        actual: parseInt(row.actual),
-        missing: parseInt(row.missing),
-        completionPercentage: parseFloat(row.completion_percentage)
-      }))
+      dateStats
     };
   } catch (error: unknown) {
     console.error('Error getting reconciliation status:', error);
@@ -617,7 +612,7 @@ export async function processDate(date: string, attemptNumber: number = 1): Prom
       success: result.success,
       message: result.message
     };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`Error processing date ${date}:`, error);
     
     // Implement retry logic
@@ -626,9 +621,14 @@ export async function processDate(date: string, attemptNumber: number = 1): Prom
       return processDate(date, attemptNumber + 1);
     }
     
+    // Get error message safely
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : String(error);
+    
     return {
       success: false,
-      message: `Failed after ${attemptNumber} attempts: ${error.message}`
+      message: `Failed after ${attemptNumber} attempts: ${errorMessage}`
     };
   }
 }
@@ -707,7 +707,7 @@ export async function auditAndFixBitcoinCalculations(date: string): Promise<{
       fixed: true,
       message: `Fixed calculations for ${missingCalculations.map(m => m.minerModel).join(', ')}`
     };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`Error auditing Bitcoin calculations for ${date}:`, error);
     return {
       success: false,
