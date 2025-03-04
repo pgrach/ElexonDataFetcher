@@ -2,7 +2,7 @@
  * Enhanced Daily Reconciliation Check
  * 
  * This script automatically checks the reconciliation status for recent dates
- * and processes any missing calculations using the unified reconciliation system.
+ * and processes any missing calculations using the centralized reconciliation system.
  * It includes robust error handling, connection resilience, and comprehensive logging.
  * 
  * Usage:
@@ -497,17 +497,17 @@ async function fixDateComprehensive(date: string): Promise<{
     
     const previouslyMissing = initialStatus.missing;
     
-    // Use the unified reconciliation system's processDate function
-    log(`Attempting to fix ${date} using unified reconciliation system...`, "info");
+    // Use the centralized reconciliation system's processDate function
+    log(`Attempting to fix ${date} using centralized reconciliation system...`, "info");
     const processResult = await withRetry<{success: boolean; message: string}>(
       async () => await processDate(date),
-      `Unified reconciliation for ${date}`,
+      `Centralized reconciliation for ${date}`,
       3
     );
     
-    // If the unified system fails, fall back to the standard reconciliation
+    // If the centralized system fails, fall back to the standard reconciliation
     if (!processResult.success) {
-      log(`Unified reconciliation failed: ${processResult.message}. Falling back to standard reconciliation...`, "warning");
+      log(`Centralized reconciliation failed: ${processResult.message}. Falling back to standard reconciliation...`, "warning");
       await withRetry(
         async () => await reconcileDay(date),
         `Standard reconciliation for ${date}`,
