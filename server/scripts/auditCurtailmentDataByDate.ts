@@ -123,10 +123,41 @@ async function compareDatabaseWithAPI() {
       const apiPeriod = apiData[period];
       
       if (!dbPeriod || !apiPeriod || apiPeriod.error) {
-        console.log(`\nPeriod ${period}:`);
+        console.log(`\nPeriod ${period} ⚠️:`);
         console.log('  Database:', dbPeriod ? 'Found' : 'Not found');
         console.log('  API:', apiPeriod ? (apiPeriod.error ? `Error: ${apiPeriod.error}` : 'Found') : 'Not found');
+        
+        // If API has data but database doesn't, add detailed information about what's missing
+        if (!dbPeriod && apiPeriod && !apiPeriod.error) {
+          console.log(`  Missing API data: ${apiPeriod.recordCount} records, ${apiPeriod.totalVolume} MWh, £${apiPeriod.totalPayment}`);
+          console.log('  This period should be reprocessed.');
+        }
+        
         discrepanciesFound = true;
+        
+        // Add to periodSummary even if DB data is missing
+        if (!dbPeriod && apiPeriod && !apiPeriod.error) {
+          periodSummary.push({
+            period,
+            hasDiscrepancy: true,
+            db: {
+              recordCount: 0,
+              volume: "0.00",
+              payment: "0.00"
+            },
+            api: {
+              recordCount: apiPeriod.recordCount,
+              volume: apiPeriod.totalVolume,
+              payment: apiPeriod.totalPayment
+            },
+            diff: {
+              recordCount: -apiPeriod.recordCount,
+              volume: (-Number(apiPeriod.totalVolume)).toFixed(2),
+              payment: (-Number(apiPeriod.totalPayment)).toFixed(2)
+            }
+          });
+        }
+        
         continue;
       }
       

@@ -5,16 +5,16 @@
     "periodCount": 48,
     "farmCount": 50,
     "totalVolume": "61590.986031944444190590",
-    "totalPayment": "-1062893.41308170831892683"
+    "totalPayment": "1062893.41308170831892683"
   },
   "periodSummary": [
     {
       "period": 1,
-      "hasDiscrepancy": true,
+      "hasDiscrepancy": false,
       "db": {
         "recordCount": 31,
         "volume": "595.70",
-        "payment": "-2139.51"
+        "payment": "2139.51"
       },
       "api": {
         "recordCount": 31,
@@ -24,16 +24,16 @@
       "diff": {
         "recordCount": 0,
         "volume": "0.00",
-        "payment": "-4279.02"
+        "payment": "0.00"
       }
     },
     {
       "period": 12,
-      "hasDiscrepancy": true,
+      "hasDiscrepancy": false,
       "db": {
         "recordCount": 38,
         "volume": "957.48",
-        "payment": "-12396.40"
+        "payment": "12396.40"
       },
       "api": {
         "recordCount": 38,
@@ -43,16 +43,16 @@
       "diff": {
         "recordCount": 0,
         "volume": "0.00",
-        "payment": "-24792.80"
+        "payment": "-0.00"
       }
     },
     {
       "period": 24,
-      "hasDiscrepancy": true,
+      "hasDiscrepancy": false,
       "db": {
         "recordCount": 50,
         "volume": "1322.13",
-        "payment": "-26898.94"
+        "payment": "26898.94"
       },
       "api": {
         "recordCount": 50,
@@ -62,16 +62,16 @@
       "diff": {
         "recordCount": 0,
         "volume": "-0.00",
-        "payment": "-53797.88"
+        "payment": "0.00"
       }
     },
     {
       "period": 36,
-      "hasDiscrepancy": true,
+      "hasDiscrepancy": false,
       "db": {
         "recordCount": 42,
         "volume": "926.77",
-        "payment": "-4421.81"
+        "payment": "4421.81"
       },
       "api": {
         "recordCount": 42,
@@ -81,7 +81,7 @@
       "diff": {
         "recordCount": 0,
         "volume": "-0.00",
-        "payment": "-8843.62"
+        "payment": "0.00"
       }
     },
     {
@@ -90,7 +90,7 @@
       "db": {
         "recordCount": 94,
         "volume": "2038.64",
-        "payment": "-57880.48"
+        "payment": "57880.48"
       },
       "api": {
         "recordCount": 94,
@@ -100,7 +100,7 @@
       "diff": {
         "recordCount": 0,
         "volume": "-0.00",
-        "payment": "-99899.39"
+        "payment": "15861.57"
       }
     }
   ]
