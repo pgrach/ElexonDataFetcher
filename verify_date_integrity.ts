@@ -22,7 +22,7 @@ import { db } from "./db";
 import { curtailmentRecords, historicalBitcoinCalculations } from "./db/schema";
 import { sql, eq, and, between } from "drizzle-orm";
 import { format, parseISO, addDays, subDays } from 'date-fns';
-import { exec } from 'child_process';
+import { exec, execSync } from 'child_process';
 
 interface DateStatusItem {
   date: string;
@@ -40,6 +40,9 @@ interface DateStatusItem {
 // Parse command line arguments
 const args = process.argv.slice(2);
 const autoFix = args.includes('--auto-fix');
+const verbose = args.includes('--verbose');
+const checkAll = args.includes('--check-all');
+const updateConstraints = args.includes('--update-constraints');
 const startArg = args.indexOf('--start');
 const endArg = args.indexOf('--end');
 
@@ -55,9 +58,28 @@ if (endArg !== -1 && args[endArg + 1]) {
   endDate = args[endArg + 1];
 }
 
-console.log(`\n=== Data Integrity Verification ===`);
+// Define miner models
+const MINER_MODELS = ['S19J_PRO', 'M20S', 'S9'];
+
+console.log(`\n=== Enhanced Data Integrity Verification ===`);
 console.log(`Date Range: ${startDate} to ${endDate}`);
 console.log(`Auto-Fix: ${autoFix ? 'Enabled' : 'Disabled'}`);
+console.log(`Verbose Output: ${verbose ? 'Enabled' : 'Disabled'}`);
+console.log(`Check All Models: ${checkAll ? 'Enabled' : 'Disabled'}`);
+console.log(`Update Constraints: ${updateConstraints ? 'Enabled' : 'Disabled'}`);
+console.log(`Miner Models: ${MINER_MODELS.join(', ')}`);
+
+// If update constraints flag is set, run the migration first
+if (updateConstraints) {
+  console.log(`\n--- Running Database Constraint Migration ---`);
+  try {
+    execSync('npx tsx migrate_constraints.ts', { stdio: 'inherit' });
+    console.log(`✅ Successfully updated database constraints`);
+  } catch (error) {
+    console.error(`❌ Failed to update database constraints:`, error);
+    process.exit(1);
+  }
+}
 
 async function checkDataIntegrity() {
   try {
@@ -189,6 +211,14 @@ async function checkDataIntegrity() {
       
       if (r.status !== 'complete') {
         console.log(`   Status: ${r.status}`);
+        
+        if (r.status === 'incomplete_calculations') {
+          console.log(`   Expected: ${r.curtailmentCount * 3} calculations (${r.curtailmentCount} records × 3 miner models)`);
+          console.log(`   Actual: ${r.calculationCount} calculations`);
+          console.log(`   Missing: ${r.missingCalculations} calculations`);
+          console.log(`   Miner Models: S19J_PRO (${r.s19jProCount}), M20S (${r.m20sCount}), S9 (${r.s9Count})`);
+        }
+        
         if (r.curtailmentVolume) {
           console.log(`   Curtailment Volume: ${Number(r.curtailmentVolume).toFixed(2)} MWh`);
         }
@@ -209,22 +239,46 @@ async function checkDataIntegrity() {
         console.log("\n--- Auto-fixing missing data ---");
         
         for (const date of datesToFix) {
+          const dateResult = results.find(r => r.date === date);
+          const isIncompleteCalculations = dateResult?.status === 'incomplete_calculations';
+          
           console.log(`Processing ${date}...`);
           try {
-            await new Promise<void>((resolve, reject) => {
-              exec(`npx tsx server/scripts/reprocessDay.ts ${date}`, (error, stdout, stderr) => {
-                if (error) {
-                  console.error(`Error executing reprocessDay: ${error.message}`);
-                  reject(error);
-                  return;
-                }
-                if (stderr) {
-                  console.error(`reprocessDay stderr: ${stderr}`);
-                }
-                console.log(stdout);
-                resolve();
+            if (isIncompleteCalculations) {
+              // For incomplete calculations, we need to regenerate them with our new tool
+              console.log(`Using regenerate_bitcoin_calculations tool for incomplete calculations...`);
+              await new Promise<void>((resolve, reject) => {
+                exec(`npx tsx regenerate_bitcoin_calculations.ts --start ${date} --end ${date} --fix`, (error, stdout, stderr) => {
+                  if (error) {
+                    console.error(`Error executing regenerate_bitcoin_calculations: ${error.message}`);
+                    reject(error);
+                    return;
+                  }
+                  if (stderr) {
+                    console.error(`regenerate_bitcoin_calculations stderr: ${stderr}`);
+                  }
+                  console.log(stdout);
+                  resolve();
+                });
               });
-            });
+            } else {
+              // For missing data, use the standard reprocessDay script
+              await new Promise<void>((resolve, reject) => {
+                exec(`npx tsx server/scripts/reprocessDay.ts ${date}`, (error, stdout, stderr) => {
+                  if (error) {
+                    console.error(`Error executing reprocessDay: ${error.message}`);
+                    reject(error);
+                    return;
+                  }
+                  if (stderr) {
+                    console.error(`reprocessDay stderr: ${stderr}`);
+                  }
+                  console.log(stdout);
+                  resolve();
+                });
+              });
+            }
+            
             console.log(`✅ Successfully reprocessed ${date}`);
           } catch (error) {
             console.error(`❌ Failed to reprocess ${date}:`, error);
