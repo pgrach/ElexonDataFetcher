@@ -176,7 +176,7 @@ async function regenerateCalculations(date: string, applyFix: boolean = false): 
     `;
     
     const countResult = await db.execute(sql.raw(countQuery));
-    const curtailmentCount = parseInt(countResult.rows[0]?.record_count || '0');
+    const curtailmentCount = parseInt(String(countResult.rows[0]?.record_count) || '0');
     
     if (curtailmentCount === 0) {
       console.log(`No curtailment records found for ${date}`);
@@ -198,6 +198,23 @@ async function regenerateCalculations(date: string, applyFix: boolean = false): 
     
     await db.execute(sql.raw(deleteQuery));
     console.log(`Deleted existing bitcoin calculations for ${date}`);
+    
+    // Create a temporary table for bulk loading, including curtailment_id to avoid duplicates
+    const createTempTableQuery = `
+      CREATE TEMP TABLE temp_bitcoin_calculations (
+        settlement_date DATE NOT NULL,
+        settlement_period INTEGER NOT NULL,
+        farm_id TEXT NOT NULL,
+        miner_model TEXT NOT NULL,
+        bitcoin_mined NUMERIC NOT NULL,
+        difficulty NUMERIC NOT NULL,
+        calculated_at TIMESTAMP NOT NULL,
+        curtailment_id INTEGER
+      ) ON COMMIT DROP;
+    `;
+    
+    await db.execute(sql.raw(createTempTableQuery));
+    console.log(`Created temporary table for calculations`);
     
     // Get all curtailment records for this date
     const curtailmentQuery = `
@@ -227,7 +244,7 @@ async function regenerateCalculations(date: string, applyFix: boolean = false): 
       
       // Prepare batch insert data
       const batchInsertData = curtailmentRecords.map(record => {
-        const volume = parseFloat(record.volume);
+        const volume = parseFloat(String(record.volume));
         const bitcoinMined = calculateBitcoinForRecord(volume, minerModel, parseFloat(difficulty));
         
         return {
@@ -260,8 +277,8 @@ async function regenerateCalculations(date: string, applyFix: boolean = false): 
           ${record.curtailment_id}
         )`).join(', ');
         
-        const insertQuery = `
-          INSERT INTO historical_bitcoin_calculations (
+        const insertTempQuery = `
+          INSERT INTO temp_bitcoin_calculations (
             settlement_date,
             settlement_period,
             farm_id,
@@ -274,7 +291,7 @@ async function regenerateCalculations(date: string, applyFix: boolean = false): 
           VALUES ${valuesString}
         `;
         
-        await db.execute(sql.raw(insertQuery));
+        await db.execute(sql.raw(insertTempQuery));
       }
       
       console.log(`Generated ${batchInsertData.length} calculations for ${minerModel}`);
