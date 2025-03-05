@@ -90,7 +90,7 @@ async function retryOperation<T>(operation: () => Promise<T>, attempt = 1): Prom
   }
 }
 
-export async function getDifficultyData(date: string): Promise<number> {
+export async function getDifficultyData(date: string): Promise<number | { difficulty: number }>: Promise<number> {
   try {
     const formattedDate = formatDateForDifficulty(date);
     console.info(`[DynamoDB] Fetching difficulty for date: ${formattedDate}`);
