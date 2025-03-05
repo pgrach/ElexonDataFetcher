@@ -1,7 +1,7 @@
 import { processDailyCurtailment } from "./server/services/curtailment";
 import { processSingleDay } from "./server/services/bitcoinService";
 
-const targetDate = "2025-03-03";
+const targetDate = "2025-03-04";
 const minerModels = ["S19J_PRO", "S9", "M20S"];
 
 async function main() {
