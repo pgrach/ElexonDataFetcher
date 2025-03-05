@@ -1,0 +1,15 @@
+{
+  "totalDates": 258,
+  "processedDates": 1,
+  "successfulDates": 0,
+  "partialSuccessDates": 0,
+  "failedDates": 0,
+  "totalMissingCalculations": 0,
+  "totalFixedCalculations": 0,
+  "startTime": 1741173898361,
+  "lastUpdateTime": 1741173898551,
+  "percentComplete": "0.39%",
+  "duration": "0.00 minutes",
+  "timestamp": "2025-03-05T11:24:58.551Z",
+  "missingCalculationsByDate": {}
+}
