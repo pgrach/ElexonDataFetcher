@@ -40,6 +40,23 @@ app.use((req, res, next) => {
 let dataUpdateServiceStarted = false;
 let server: any;
 
+// Add global uncaught exception handler to prevent termination
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  // Log but don't exit in production to prevent crash loops
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+  // Log but don't exit in production to prevent crash loops
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
+});
+
 const startServer = async () => {
   try {
     server = registerRoutes(app);
