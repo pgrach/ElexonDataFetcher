@@ -6,46 +6,76 @@
  */
 
 import { processDailyCurtailment } from "./server/services/curtailment";
-import { processSingleDay } from "./server/services/bitcoinService";
+import { sql } from "drizzle-orm";
 import { db } from "./db";
-import { curtailmentRecords } from "./db/schema";
-import { eq } from "drizzle-orm";
 
 const TARGET_DATE = '2025-03-04';
 
+// Main function
 async function main() {
   try {
-    console.log(`\n=== Reprocessing Data for ${TARGET_DATE} ===\n`);
+    console.log(`\n=== Reprocessing Complete Day for ${TARGET_DATE} ===\n`);
     
-    // Step 1: Reprocess the day's curtailment data
-    console.log("Processing curtailment data...");
+    // First, check what periods we have data for
+    const result = await db.execute(sql`
+      SELECT 
+        settlement_period,
+        COUNT(*) as records,
+        SUM(ABS(volume::numeric)) as volume
+      FROM curtailment_records 
+      WHERE settlement_date = ${TARGET_DATE}
+      GROUP BY settlement_period
+      ORDER BY settlement_period
+    `);
+    
+    console.log(`Before reprocessing: ${result.rows.length} periods present`);
+    
+    // Process the daily curtailment
+    console.log(`\nReprocessing day ${TARGET_DATE}...`);
     await processDailyCurtailment(TARGET_DATE);
     
-    // Step 2: Count periods and records after processing
-    const periodCount = await db
-      .select({ periods: db.func.count() })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE))
-      .groupBy(curtailmentRecords.settlementPeriod);
+    // Check again after reprocessing
+    const afterResult = await db.execute(sql`
+      SELECT 
+        settlement_period,
+        COUNT(*) as records,
+        SUM(ABS(volume::numeric)) as volume
+      FROM curtailment_records 
+      WHERE settlement_date = ${TARGET_DATE}
+      GROUP BY settlement_period
+      ORDER BY settlement_period
+    `);
     
-    const recordCount = await db
-      .select({ count: db.func.count() })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+    console.log(`\nAfter reprocessing: ${afterResult.rows.length} periods present`);
     
-    console.log(`After processing: ${periodCount.length}/48 periods and ${recordCount[0]?.count || 0} total records`);
+    // Display missing periods
+    const missingAfter = await db.execute(sql`
+      WITH all_periods AS (
+        SELECT generate_series(1, 48) AS period
+      )
+      SELECT 
+        ap.period
+      FROM 
+        all_periods ap
+      LEFT JOIN (
+        SELECT DISTINCT settlement_period 
+        FROM curtailment_records 
+        WHERE settlement_date = ${TARGET_DATE}
+      ) cr ON ap.period = cr.settlement_period
+      WHERE 
+        cr.settlement_period IS NULL
+      ORDER BY 
+        ap.period
+    `);
     
-    // Step 3: Update Bitcoin calculations for all miner models
-    console.log("\nUpdating Bitcoin calculations...");
-    const minerModels = ['S19J_PRO', 'S9', 'M20S'];
-    
-    for (const minerModel of minerModels) {
-      console.log(`Processing ${minerModel}...`);
-      await processSingleDay(TARGET_DATE, minerModel);
+    if (missingAfter.rows.length > 0) {
+      const stillMissing = missingAfter.rows.map(row => Number(row.period));
+      console.log(`\nStill missing ${stillMissing.length} periods: ${stillMissing.join(', ')}`);
+    } else {
+      console.log(`\n✅ All 48 periods successfully processed!`);
     }
     
-    console.log("\n=== Processing Complete ===\n");
-    console.log(`Done! Reprocessed ${TARGET_DATE} with ${periodCount.length} periods.`);
+    console.log("\n=== Reprocessing Complete ===\n");
   } catch (error) {
     console.error('Error during reprocessing:', error);
   }
