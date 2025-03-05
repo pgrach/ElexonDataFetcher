@@ -4,7 +4,8 @@ export const BitcoinCalculationSchema = z.object({
   bitcoinMined: z.number(),
   difficulty: z.union([
     z.number(),
-    z.object({ difficulty: z.number() })
+    z.object({ difficulty: z.number() }),
+    z.null()
   ])
 });
 
