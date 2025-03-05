@@ -417,8 +417,9 @@ const DEFAULT_DIFFICULTY = 110000000000000; // Default difficulty value
 
 // Helper function to safely extract difficulty from DynamoDB response
 function extractDifficulty(difficultyData: unknown): number {
-  if (typeof difficultyData === 'object' && difficultyData !== null && 'difficulty' in difficultyData) {
-    return validateDifficulty(difficultyData);
+  if (typeof difficultyData === 'object' && difficultyData !== null && 'difficulty' in difficultyData && 
+      typeof (difficultyData as {difficulty: unknown}).difficulty === 'number') {
+    return (difficultyData as {difficulty: number}).difficulty;
   }
   return DEFAULT_DIFFICULTY;
 }
