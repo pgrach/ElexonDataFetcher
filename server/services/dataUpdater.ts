@@ -151,80 +151,98 @@ export function startDataUpdateService() {
   console.log(`Start Time: ${serviceStartTime.toISOString()}`);
 
   // Add startup delay to ensure server is ready
-  setTimeout(() => {
-    // Run initial update
-    updateLatestData().catch(error => {
-      console.error("Error during initial data update:", error);
-    });
+  return new Promise<NodeJS.Timeout | null>((resolve) => {
+    setTimeout(() => {
+      // Run initial update
+      updateLatestData().catch(error => {
+        console.error("Error during initial data update:", error);
+      });
 
-    // Set up regular interval
-    const intervalId = setInterval(async () => {
-      try {
-        await updateLatestData();
-      } catch (error) {
-        console.error("Error during scheduled update:", error);
-      }
-    }, UPDATE_INTERVAL);
-
-    // Enhanced heartbeat logging
-    setInterval(() => {
-      const now = new Date();
-      const status = getUpdateServiceStatus();
-
-      console.log(`\n=== Service Heartbeat ===`);
-      console.log(`Running Since: ${status.serviceStartTime?.toISOString()}`);
-      console.log(`Current Time: ${now.toISOString()}`);
-      console.log(`Last Update Attempt: ${status.lastUpdateTime?.toISOString() || 'Never'}`);
-      console.log(`Last Successful Update: ${status.lastSuccessfulUpdate?.toISOString() || 'Never'}`);
-      console.log(`Update In Progress: ${status.isCurrentlyUpdating}`);
-
-      // Alert if no successful updates in last 15 minutes
-      if (status.lastSuccessfulUpdate) {
-        const timeSinceUpdate = now.getTime() - status.lastSuccessfulUpdate.getTime();
-        if (timeSinceUpdate > 15 * 60 * 1000) {
-          console.error(`WARNING: No successful updates in the last ${Math.floor(timeSinceUpdate / 60000)} minutes`);
+      // Set up regular interval
+      const intervalId = setInterval(async () => {
+        try {
+          await updateLatestData();
+        } catch (error) {
+          console.error("Error during scheduled update:", error);
         }
-      }
-    }, 60 * 60 * 1000); // Every hour
-    
-    // Schedule daily reconciliation check at midnight
-    const setupDailyReconciliationCheck = () => {
-      const now = new Date();
-      const currentHour = now.getHours();
-      
-      // Calculate milliseconds until next midnight
-      const midnight = new Date(now);
-      midnight.setHours(24, 0, 0, 0);
-      const msUntilMidnight = midnight.getTime() - now.getTime();
-      
-      console.log(`Scheduling daily reconciliation check to run at midnight (in ${Math.round(msUntilMidnight / 3600000)} hours)`);
-      
-      // Schedule the first run
-      setTimeout(() => {
-        console.log("\n=== Running scheduled daily reconciliation check ===");
-        runDailyCheck()
-          .then(result => {
-            console.log("Daily reconciliation check completed:", {
-              datesChecked: result.dates.length,
-              missingDates: result.missingDates.length,
-              fixedDates: result.fixedDates.length,
-              status: result.status
-            });
-            
-            // Setup the next day's check
-            setupDailyReconciliationCheck();
-          })
-          .catch(error => {
-            console.error("Error during daily reconciliation check:", error);
-            // Still setup next check even if there was an error
-            setupDailyReconciliationCheck();
-          });
-      }, msUntilMidnight);
-    };
-    
-    // Start the daily reconciliation check scheduling
-    setupDailyReconciliationCheck();
+      }, UPDATE_INTERVAL);
 
-    return intervalId;
-  }, STARTUP_DELAY);
+      // Enhanced heartbeat logging
+      const heartbeatIntervalId = setInterval(() => {
+        const now = new Date();
+        const status = getUpdateServiceStatus();
+
+        console.log(`\n=== Service Heartbeat ===`);
+        console.log(`Running Since: ${status.serviceStartTime?.toISOString()}`);
+        console.log(`Current Time: ${now.toISOString()}`);
+        console.log(`Last Update Attempt: ${status.lastUpdateTime?.toISOString() || 'Never'}`);
+        console.log(`Last Successful Update: ${status.lastSuccessfulUpdate?.toISOString() || 'Never'}`);
+        console.log(`Update In Progress: ${status.isCurrentlyUpdating}`);
+
+        // Alert if no successful updates in last 15 minutes
+        if (status.lastSuccessfulUpdate) {
+          const timeSinceUpdate = now.getTime() - status.lastSuccessfulUpdate.getTime();
+          if (timeSinceUpdate > 15 * 60 * 1000) {
+            console.error(`WARNING: No successful updates in the last ${Math.floor(timeSinceUpdate / 60000)} minutes`);
+          }
+        }
+      }, 60 * 60 * 1000); // Every hour
+      
+      // Schedule daily reconciliation check at midnight
+      const setupDailyReconciliationCheck = () => {
+        const now = new Date();
+        
+        // Calculate milliseconds until next midnight
+        const midnight = new Date(now);
+        midnight.setHours(24, 0, 0, 0);
+        const msUntilMidnight = midnight.getTime() - now.getTime();
+        
+        console.log(`Scheduling daily reconciliation check to run at midnight (in ${Math.round(msUntilMidnight / 3600000)} hours)`);
+        
+        // Schedule the first run
+        const reconciliationTimerId = setTimeout(() => {
+          console.log("\n=== Running scheduled daily reconciliation check ===");
+          runDailyCheck()
+            .then(result => {
+              console.log("Daily reconciliation check completed:", {
+                datesChecked: result.dates.length,
+                missingDates: result.missingDates.length,
+                fixedDates: result.fixedDates.length,
+                status: result.status
+              });
+              
+              // Setup the next day's check
+              setupDailyReconciliationCheck();
+            })
+            .catch(error => {
+              console.error("Error during daily reconciliation check:", error);
+              // Still setup next check even if there was an error
+              setupDailyReconciliationCheck();
+            });
+        }, msUntilMidnight);
+        
+        // Return the timer ID for cleanup if needed
+        return reconciliationTimerId;
+      };
+      
+      // Start the daily reconciliation check scheduling
+      const reconciliationTimerId = setupDailyReconciliationCheck();
+
+      // Store all intervals for proper cleanup
+      const cleanupIntervals = {
+        updateInterval: intervalId,
+        heartbeatInterval: heartbeatIntervalId,
+        reconciliationTimer: reconciliationTimerId
+      };
+      
+      // Log success
+      console.log("Data update service initialized successfully with the following components:");
+      console.log("- Regular data updates every 5 minutes");
+      console.log("- Hourly service heartbeat monitoring");
+      console.log("- Daily midnight reconciliation check");
+      
+      // Resolve with the main interval ID for backward compatibility
+      resolve(intervalId);
+    }, STARTUP_DELAY);
+  });
 }

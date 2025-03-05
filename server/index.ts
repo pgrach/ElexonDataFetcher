@@ -87,10 +87,16 @@ const startServer = async () => {
             process.exit(0);
           });
 
+          process.on('SIGINT', () => {
+            console.log('Shutting down data update service...');
+            clearInterval(updateServiceInterval);
+            process.exit(0);
+          });
+
           dataUpdateServiceStarted = true;
           console.log("Data update service started successfully");
         } else {
-          console.warn("Data update service returned no interval");
+          console.warn("Data update service initialization returned no interval - this is unexpected but the service may still be running");
         }
       } catch (error) {
         console.error("Failed to start data update service:", error);
