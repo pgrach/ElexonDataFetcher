@@ -379,3 +379,5 @@ export {
   fetch2024Difficulties,
   calculateMonthlyBitcoinSummary
 };
+
+const DEFAULT_DIFFICULTY = 110568428300952; // Default difficulty value
