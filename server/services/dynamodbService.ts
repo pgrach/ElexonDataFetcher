@@ -124,11 +124,14 @@ export async function getDifficultyData(date: string): Promise<number | { diffic
     }
 
     const difficultyData = result.Items[0];
-    return typeof difficultyData.Difficulty === 'number' 
+    // Always return a consistent format to avoid type issues
+    const difficultyValue = typeof difficultyData.Difficulty === 'number' 
       ? difficultyData.Difficulty 
-      : { difficulty: difficultyData.Difficulty };
+      : DEFAULT_DIFFICULTY;
+      
+    return { difficulty: difficultyValue };
   } catch (error) {
     console.error('[DynamoDB] Error fetching difficulty:', error);
-    return DEFAULT_DIFFICULTY;
+    return { difficulty: DEFAULT_DIFFICULTY };
   }
 }

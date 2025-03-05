@@ -33,7 +33,14 @@ export interface DynamoDBHistoricalData {
 }
 
 // Type for DynamoDB response
-export type DynamoDBDifficultyResponse = number | DynamoDBHistoricalData | null;
+export type DynamoDBDifficultyResponse = { difficulty: number } | null;
+
+export function validateDifficulty(data: unknown): number {
+  if (typeof data === 'object' && data !== null && 'difficulty' in data && typeof data.difficulty === 'number') {
+    return data.difficulty;
+  }
+  return DEFAULT_DIFFICULTY;
+}
 
 export const minerModels: Record<string, MinerStats> = {
   S19J_PRO: {

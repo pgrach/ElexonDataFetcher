@@ -405,4 +405,11 @@ export {
   convertEmptyValues
 };
 
-const DEFAULT_DIFFICULTY = 110000000000000; // Default difficulty value
+import { validateDifficulty } from '../types/bitcoin';
+
+const DEFAULT_DIFFICULTY = 110000000000000; // Default difficulty val
+
+// Helper function to safely extract difficulty from DynamoDB response
+function extractDifficulty(difficultyData: unknown): number {
+  return validateDifficulty(difficultyData);
+}ue
