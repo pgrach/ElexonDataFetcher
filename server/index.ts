@@ -81,6 +81,17 @@ const startServer = async () => {
 
         if (updateServiceInterval) {
           // Handle cleanup on server shutdown
+          // Add global uncaught exception handler to prevent termination
+          process.on('uncaughtException', (error) => {
+            console.error('Uncaught exception:', error);
+            // Log but don't exit to prevent crash loops in production
+          });
+
+          process.on('unhandledRejection', (reason, promise) => {
+            console.error('Unhandled rejection at:', promise, 'reason:', reason);
+            // Log but don't exit to prevent crash loops in production
+          });
+
           process.on('SIGTERM', () => {
             console.log('Shutting down data update service...');
             clearInterval(updateServiceInterval);
