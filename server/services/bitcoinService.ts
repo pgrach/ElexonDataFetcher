@@ -91,9 +91,11 @@ async function fetch2024Difficulties(): Promise<void> {
         try {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
           const data = await getDifficultyData(date);
-          const difficultyValue = typeof data === 'number' ? data : 
-                                 typeof data === 'string' ? parseFloat(data) :
-                                 (data as { difficulty: number })?.difficulty || DEFAULT_DIFFICULTY;
+          // Type guard for difficulty
+          const difficultyValue = typeof data === 'object' && data !== null
+            ? (data as { difficulty: number }).difficulty
+            : typeof data === 'number' ? data : parseFloat(data as string) || DEFAULT_DIFFICULTY;
+
 
           DIFFICULTY_CACHE.set(date, difficultyValue.toString());
           console.log(`✓ Cached difficulty for ${date}: ${difficultyValue}`);
@@ -138,9 +140,9 @@ async function processSingleDay(
       if (!DIFFICULTY_CACHE.has(date)) {
         const difficultyData = await getDifficultyData(date);
         // Handle both possible return types (number or object with difficulty property)
-        const difficulty = typeof difficultyData === 'number' 
-          ? difficultyData 
-          : (difficultyData as { difficulty: number })?.difficulty;
+        const difficulty = typeof difficultyData === 'object' && difficultyData !== null
+          ? (difficultyData as { difficulty: number }).difficulty
+          : typeof difficultyData === 'number' ? difficultyData : parseFloat(difficultyData as string);
 
         difficultyValue = difficulty ?? DEFAULT_DIFFICULTY;
         DIFFICULTY_CACHE.set(date, difficultyValue.toString());
@@ -299,7 +301,8 @@ async function processHistoricalCalculations(
     MINER_MODELS.map(model =>
       limit(async () => {
         try {
-          await processSingleDay(startDate, model);
+          const dates = eachDayOfInterval({ start: new Date(startDate), end: new Date(endDate) });
+          await Promise.all(dates.map(date => processSingleDay(format(date, 'yyyy-MM-dd'), model)));
         } catch (error) {
           console.error(`Failed to process ${model} for ${startDate}:`, error);
           throw error;
@@ -308,6 +311,27 @@ async function processHistoricalCalculations(
     )
   );
 }
+
+
+function convertEmptyValues(data: any): any {
+  //Basic check for null and undefined
+  if (data === null || data === undefined) {
+    return null;
+  }
+
+  //Check for empty objects and arrays
+  if (typeof data === 'object' ) {
+    if (Array.isArray(data) && data.length === 0){
+      return null;
+    }
+    if (Object.keys(data).length === 0){
+      return null;
+    }
+  }
+
+  return data;
+}
+
 
 async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: string): Promise<void> {
   console.log(`Calculating monthly Bitcoin summary for ${yearMonth} with ${minerModel}`);
@@ -379,7 +403,8 @@ export {
   processHistoricalCalculations,
   processSingleDay,
   fetch2024Difficulties,
-  calculateMonthlyBitcoinSummary
+  calculateMonthlyBitcoinSummary,
+  convertEmptyValues
 };
 
 const DEFAULT_DIFFICULTY = 110000000000000; // Default difficulty value
