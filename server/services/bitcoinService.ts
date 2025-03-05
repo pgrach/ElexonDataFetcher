@@ -90,11 +90,13 @@ async function fetch2024Difficulties(): Promise<void> {
       while (!success && retries < MAX_RETRIES) {
         try {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
-          const difficulty = await getDifficultyData(date) as number | string;
-          const typedData = typeof difficulty === 'number' ? { difficulty: difficulty } : difficulty as { difficulty: number };
-          const diff = typedData.difficulty;
-          DIFFICULTY_CACHE.set(date, diff ? diff.toString() : '');
-          console.log(`✓ Cached difficulty for ${date}: ${diff}`);
+          const data = await getDifficultyData(date);
+          const difficultyValue = typeof data === 'number' ? data : 
+                                 typeof data === 'string' ? parseFloat(data) :
+                                 (data as any)?.difficulty || 0;
+
+          DIFFICULTY_CACHE.set(date, difficultyValue.toString());
+          console.log(`✓ Cached difficulty for ${date}: ${difficultyValue}`);
           success = true;
           await saveDifficultiesToCache();
         } catch (error) {
@@ -132,15 +134,17 @@ async function processSingleDay(
   const processingPromise = (async () => {
     try {
       // If difficulty is not in cache, fetch it
-      let difficulty:number|string;
+      let difficultyValue: number;
       if (!DIFFICULTY_CACHE.has(date)) {
-        difficulty = await getDifficultyData(date) as number | string;
-        const typedData = typeof difficulty === 'number' ? { difficulty: difficulty } : difficulty as { difficulty: number };
-        const diff = typedData.difficulty;
-        DIFFICULTY_CACHE.set(date, diff ? diff.toString() : '');
-        console.log(`Fetched and cached difficulty for ${date}: ${diff}`);
+        const data = await getDifficultyData(date);
+        difficultyValue = typeof data === 'number' ? data : 
+                         typeof data === 'string' ? parseFloat(data) :
+                         (data as any)?.difficulty || 0;
+
+        DIFFICULTY_CACHE.set(date, difficultyValue.toString());
+        console.log(`Fetched and cached difficulty for ${date}: ${difficultyValue}`);
       } else {
-        difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
+        difficultyValue = parseFloat(DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString());
       }
 
 
@@ -185,7 +189,7 @@ async function processSingleDay(
             )
           );
 
-        console.log(`Processing ${date} with difficulty ${difficulty}`);
+        console.log(`Processing ${date} with difficulty ${difficultyValue}`);
         console.log(`Found ${records.length} curtailment records across ${periods.length} periods and ${farmIds.length} farms`);
 
         const periodGroups = new Map<number, { totalVolume: number; farms: Map<string, number> }>();
@@ -221,7 +225,7 @@ async function processSingleDay(
           const periodBitcoin = calculateBitcoinForBMU(
             data.totalVolume,
             minerModel,
-            typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty
+            difficultyValue
           );
 
           for (const [farmId, farmVolume] of data.farms) {
@@ -232,7 +236,7 @@ async function processSingleDay(
               farmId,
               minerModel,
               bitcoinMined: bitcoinShare.toFixed(8),
-              difficulty: difficulty.toString(),
+              difficulty: difficultyValue.toString(),
               calculatedAt: new Date()
             });
           }
@@ -271,7 +275,7 @@ function calculateBitcoinForBMU(
   const curtailedKwh = curtailedMwh * 1000;
   const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
   const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
-  const difficultyNum = typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty;
+  const difficultyNum = difficulty;
   const hashesPerBlock = difficultyNum * Math.pow(2, 32);
   const networkHashRate = hashesPerBlock / 600;
   const networkHashRateTH = networkHashRate / 1e12;
