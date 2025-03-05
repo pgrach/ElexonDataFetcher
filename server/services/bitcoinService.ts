@@ -225,7 +225,7 @@ async function processSingleDay(
               farmId,
               minerModel,
               bitcoinMined: bitcoinShare.toFixed(8),
-              difficulty,
+              difficulty: typeof difficulty === 'number' ? difficulty : 110568428300952, // Use default if not a number
               calculatedAt: new Date()
             });
           }

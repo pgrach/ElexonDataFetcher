@@ -96,7 +96,7 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
           dataKey={chartConfig.rightAxis.dataKey}
           fill={chartConfig.rightAxis.color}
           name={chartConfig.rightAxis.label}
-          shape={(props: unknown) => {
+          shape={(props: any): React.ReactElement => {
             const { cx, cy, fill, payload } = props as ScatterProps;
             const value = payload[chartConfig.rightAxis.dataKey];
             if (value === 0) return null;
