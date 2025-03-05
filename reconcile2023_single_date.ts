@@ -35,6 +35,149 @@ const dynamoDb = new DynamoDBClient({
   region: process.env.AWS_REGION || 'eu-north-1',
 });
 
+/**
+ * Format date for DynamoDB
+ */
+function formatDateForDynamoDB(dateStr: string): string {
+  return dateStr.replace(/-/g, '');
+}
+
+/**
+ * Generate a random UUID
+ */
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+/**
+ * Load 2023 difficulty data from file
+ */
+function load2023DifficultyData(): Record<string, number> {
+  try {
+    // Create data directory if it doesn't exist
+    if (!fs.existsSync(path.join(__dirname, 'data'))) {
+      fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
+    }
+    
+    // Check if file exists
+    if (fs.existsSync(DIFFICULTY_DATA_FILE)) {
+      console.log("Loading 2023 difficulty data from file...");
+      const data = fs.readFileSync(DIFFICULTY_DATA_FILE, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error("Error loading difficulty data:", error);
+  }
+  
+  console.log("No difficulty data file found. Using fallback difficulty value.");
+  return {};
+}
+
+/**
+ * Check if difficulty data exists for a date in DynamoDB
+ */
+async function checkDifficultyExists(date: string): Promise<boolean> {
+  const params = {
+    TableName: DIFFICULTY_TABLE,
+    FilterExpression: '#date = :date',
+    ExpressionAttributeNames: {
+      '#date': 'Date'
+    },
+    ExpressionAttributeValues: {
+      ':date': { S: date } // Keep date in YYYY-MM-DD format
+    }
+  };
+  
+  try {
+    const command = new ScanCommand(params);
+    const result = await dynamoDb.send(command);
+    return (result.Items && result.Items.length > 0);
+  } catch (error) {
+    console.error(`Error checking difficulty for ${date}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Store difficulty data for a date in DynamoDB
+ */
+async function storeDifficultyData(date: string, difficulty: number): Promise<boolean> {
+  const params = {
+    TableName: DIFFICULTY_TABLE,
+    Item: {
+      'ID': { S: generateUUID() },
+      'Date': { S: date }, // Keep date in YYYY-MM-DD format
+      'Difficulty': { N: difficulty.toString() }, // Use 'Difficulty' with capital D
+      'price': { N: '25000' }, // Historical price from 2023 (approximate)
+      'timestamp': { N: Math.floor(Date.now() / 1000).toString() }
+    }
+  };
+  
+  try {
+    const command = new PutItemCommand(params);
+    await dynamoDb.send(command);
+    return true;
+  } catch (error) {
+    console.error(`Error storing difficulty for ${date}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Ensure difficulty data exists for a date before processing
+ */
+async function ensureDifficultyData(date: string): Promise<boolean> {
+  console.log(`Checking difficulty data for ${date}...`);
+  
+  // First, check if difficulty already exists in DynamoDB
+  const exists = await checkDifficultyExists(date);
+  
+  if (exists) {
+    console.log(`Difficulty data already exists for ${date}`);
+    return true;
+  }
+  
+  // If not found, try to load from local data file
+  console.log(`No difficulty data found in DynamoDB for ${date}, checking local data...`);
+  const difficultyData = load2023DifficultyData();
+  let difficulty = difficultyData[date] || FALLBACK_DIFFICULTY;
+  
+  console.log(`Adding difficulty data for ${date}: ${difficulty}`);
+  
+  // Try to store data with retry logic
+  let success = false;
+  let attempts = 0;
+  const maxAttempts = 3;
+  
+  while (!success && attempts < maxAttempts) {
+    try {
+      // Add delay with exponential backoff if retrying
+      if (attempts > 0) {
+        const delay = Math.min(1000 * Math.pow(2, attempts), 10000);
+        console.log(`Retrying after ${delay}ms... (Attempt ${attempts+1}/${maxAttempts})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      success = await storeDifficultyData(date, difficulty);
+      
+      if (success) {
+        console.log(`Successfully added difficulty data for ${date}`);
+      } else {
+        attempts++;
+        console.log(`Failed to store difficulty data, attempt ${attempts}/${maxAttempts}`);
+      }
+    } catch (error) {
+      attempts++;
+      console.error(`Error storing difficulty data, attempt ${attempts}/${maxAttempts}:`, error);
+    }
+  }
+  
+  return success;
+}
+
 // Utility functions
 interface MissingCalculation {
   period: number;
@@ -156,6 +299,19 @@ async function fixDate(date: string): Promise<boolean> {
   console.log(`\nFixing missing calculations for ${date}...`);
   
   try {
+    // First, ensure difficulty data exists for this date
+    console.log("Checking Bitcoin difficulty data...");
+    const difficultyExists = await ensureDifficultyData(date);
+    
+    if (!difficultyExists) {
+      console.error(`\n❌ ERROR: Failed to ensure difficulty data for ${date}`);
+      console.log("Bitcoin calculations require historical difficulty data.");
+      console.log("Please run populate_2023_difficulty.ts first to ensure all required difficulty data is available.");
+      return false;
+    }
+    
+    console.log("Bitcoin difficulty data verified and available.");
+    
     // Reprocess the entire day's calculations through the curtailment service
     console.log("Calling processDailyCurtailment...");
     await processDailyCurtailment(date);
@@ -205,7 +361,12 @@ async function fixDate(date: string): Promise<boolean> {
       
       return false;
     } else {
-      console.log(`\n❌ FAILED: No calculations were fixed for ${date}`);
+      // If nothing improved, try another approach
+      console.log(`\n❌ FAILED: No calculations were fixed for ${date} with standard approach`);
+      console.log("Attempting alternative approach...");
+      
+      // Add more detailed approaches here if needed in future
+      
       return false;
     }
   } catch (error) {

@@ -83,7 +83,7 @@ async function checkDifficultyExists(date: string): Promise<boolean> {
       '#date': 'Date'
     },
     ExpressionAttributeValues: {
-      ':date': { S: formatDateForDynamoDB(date) }
+      ':date': { S: date } // Keep date in YYYY-MM-DD format
     }
   };
   
@@ -184,8 +184,8 @@ async function storeDifficultyData(date: string, difficulty: number): Promise<bo
     TableName: DIFFICULTY_TABLE,
     Item: {
       'ID': { S: generateUUID() },
-      'Date': { S: formatDateForDynamoDB(date) },
-      'difficulty': { N: difficulty.toString() },
+      'Date': { S: date }, // Keep the date in YYYY-MM-DD format expected by the service
+      'Difficulty': { N: difficulty.toString() }, // Use 'Difficulty' (capital D) to match service expectations
       'price': { N: '25000' }, // Historical price from 2023 (approximate)
       'timestamp': { N: Math.floor(Date.now() / 1000).toString() }
     }
