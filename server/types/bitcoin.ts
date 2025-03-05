@@ -2,7 +2,10 @@ import { z } from 'zod';
 
 export const BitcoinCalculationSchema = z.object({
   bitcoinMined: z.number(),
-  difficulty: z.number()
+  difficulty: z.union([
+    z.number(),
+    z.object({ difficulty: z.number() })
+  ])
 });
 
 export type BitcoinCalculation = z.infer<typeof BitcoinCalculationSchema>;

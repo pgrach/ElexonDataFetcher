@@ -8,7 +8,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 const TODAY = format(new Date(), 'yyyy-MM-dd');
 
-async function fetchMinerstatDifficulty(): Promise<{ difficulty: number; price: number }> {
+async function fetchMinerstatDifficulty(): Promise<{ difficulty: number | null; price: number | null }> {
   try {
     console.log('Fetching from Minerstat API...');
     // Use the correct public endpoint
@@ -23,6 +23,8 @@ async function fetchMinerstatDifficulty(): Promise<{ difficulty: number; price: 
           difficulty: btcData.difficulty,
           price: btcData.price
         };
+      } else {
+        return { difficulty: null, price: null };
       }
     }
 
@@ -39,12 +41,19 @@ async function fetchMinerstatDifficulty(): Promise<{ difficulty: number; price: 
   }
 }
 
-async function formatNumber(num: number | string): Promise<string> {
+async function formatNumber(num: number | string | null): Promise<string> {
   return new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 8,
     minimumFractionDigits: 0
-  }).format(Number(num));
+  }).format(Number(num) || 0); // Handle null or undefined
 }
+
+function getDifficultyValue(data: { difficulty: number } | number | null): number | null {
+  if (data === null || data === undefined) return null;
+  if (typeof data === 'number') return data;
+  return data.difficulty;
+}
+
 
 async function auditDifficulty() {
   try {
@@ -57,8 +66,8 @@ async function auditDifficulty() {
     let minerstatData;
     try {
       minerstatData = await fetchMinerstatDifficulty();
-      console.log('Current network difficulty:', await formatNumber(minerstatData.difficulty));
-      console.log('Current BTC price: $', await formatNumber(minerstatData.price));
+      console.log('Current network difficulty:', await formatNumber(getDifficultyValue(minerstatData?.difficulty)));
+      console.log('Current BTC price: $', await formatNumber(getDifficultyValue(minerstatData?.price)));
     } catch (error) {
       console.error('Failed to fetch Minerstat data. Please try again in 5-10 minutes.');
       console.error('Note: Data refreshes every 5-10 minutes. API is rate limited to 12 requests per minute.');
@@ -69,7 +78,7 @@ async function auditDifficulty() {
     let storedDifficulty;
     try {
       storedDifficulty = await getDifficultyData(TODAY);
-      console.log('\nStored difficulty for today:', await formatNumber(storedDifficulty));
+      console.log('\nStored difficulty for today:', await formatNumber(getDifficultyValue(storedDifficulty)));
     } catch (error) {
       console.log('No stored difficulty found for today');
       storedDifficulty = null;
@@ -106,27 +115,27 @@ async function auditDifficulty() {
         console.log(`\n${model}:`);
 
         if (storedDifficulty) {
-          const storedBitcoin = calculateBitcoinForBMU(totalEnergy, model, typeof storedDifficulty === 'object' ? storedDifficulty.difficulty : storedDifficulty);
-          console.log(`Using stored difficulty (${await formatNumber(typeof storedDifficulty === 'object' ? storedDifficulty.difficulty : storedDifficulty)}):`);
+          const storedBitcoin = calculateBitcoinForBMU(totalEnergy, model, getDifficultyValue(storedDifficulty));
+          console.log(`Using stored difficulty (${await formatNumber(getDifficultyValue(storedDifficulty))}):`);
           console.log('- Bitcoin:', storedBitcoin.toFixed(8));
-          console.log('- Value: $', (storedBitcoin * minerstatData.price).toFixed(2));
+          console.log('- Value: $', (storedBitcoin * (getDifficultyValue(minerstatData?.price) || 0)).toFixed(2)); //Handle null price
         }
 
-        const currentBitcoin = calculateBitcoinForBMU(totalEnergy, model, typeof minerstatData.difficulty === 'object' ? minerstatData.difficulty.difficulty : minerstatData.difficulty);
-        console.log(`Using current difficulty (${await formatNumber(typeof minerstatData.difficulty === 'object' ? minerstatData.difficulty.difficulty : minerstatData.difficulty)}):`);
+        const currentBitcoin = calculateBitcoinForBMU(totalEnergy, model, getDifficultyValue(minerstatData?.difficulty));
+        console.log(`Using current difficulty (${await formatNumber(getDifficultyValue(minerstatData?.difficulty))}):`);
         console.log('- Bitcoin:', currentBitcoin.toFixed(8));
-        console.log('- Value: $', (currentBitcoin * minerstatData.price).toFixed(2));
+        console.log('- Value: $', (currentBitcoin * (getDifficultyValue(minerstatData?.price) || 0)).toFixed(2)); //Handle null price
       }
     }
 
     // 5. Report findings
     console.log('\n=== Audit Summary ===');
     if (storedDifficulty) {
-      const diffPct = ((typeof minerstatData.difficulty === 'object' ? minerstatData.difficulty.difficulty : minerstatData.difficulty) - (typeof storedDifficulty === 'object' ? storedDifficulty.difficulty : storedDifficulty)) / (typeof storedDifficulty === 'object' ? storedDifficulty.difficulty : storedDifficulty) * 100;
-      console.log('Difficulty delta:', diffPct.toFixed(2) + '%');
+      const diffPct = (getDifficultyValue(minerstatData?.difficulty) - getDifficultyValue(storedDifficulty)) / getDifficultyValue(storedDifficulty) * 100;
+      console.log('Difficulty delta:', (diffPct || 0).toFixed(2) + '%'); //Handle NaN
 
-      if (Math.abs(diffPct) > 1) {
-        console.log('WARNING: Current network difficulty differs from stored difficulty by more than 1%');
+      if (isNaN(diffPct) || Math.abs(diffPct) > 1) {
+        console.log('WARNING: Current network difficulty differs from stored difficulty by more than 1% or is NaN');
         console.log('Consider updating stored difficulty to current network value');
       } else {
         console.log('√ Stored difficulty is within acceptable range of current network difficulty');
