@@ -91,10 +91,9 @@ async function fetch2024Difficulties(): Promise<void> {
         try {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
           const data = await getDifficultyData(date);
-          // Add type assertion for difficulty
-          const typedData = data as { difficulty: number };
+          const typedData = typeof data === 'number' ? { difficulty: data } : data as { difficulty: number };
           const difficulty = typedData.difficulty;
-          DIFFICULTY_CACHE.set(date, difficulty.toString());
+          DIFFICULTY_CACHE.set(date, difficulty ? difficulty.toString() : '');
           console.log(`✓ Cached difficulty for ${date}: ${difficulty}`);
           success = true;
           await saveDifficultiesToCache();
@@ -135,10 +134,9 @@ async function processSingleDay(
       // If difficulty is not in cache, fetch it
       if (!DIFFICULTY_CACHE.has(date)) {
         const data = await getDifficultyData(date);
-        // Add type assertion for difficulty
-        const typedData = data as { difficulty: number };
+        const typedData = typeof data === 'number' ? { difficulty: data } : data as { difficulty: number };
         const difficulty = typedData.difficulty;
-        DIFFICULTY_CACHE.set(date, difficulty.toString());
+        DIFFICULTY_CACHE.set(date, difficulty ? difficulty.toString() : '');
         console.log(`Fetched and cached difficulty for ${date}: ${difficulty}`);
       }
 
@@ -231,7 +229,7 @@ async function processSingleDay(
               farmId,
               minerModel,
               bitcoinMined: bitcoinShare.toFixed(8),
-              difficulty: difficulty, //Fixed type error
+              difficulty: difficulty,
               calculatedAt: new Date()
             });
           }

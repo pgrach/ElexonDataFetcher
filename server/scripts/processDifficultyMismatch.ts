@@ -324,7 +324,7 @@ async function generateProgressReport() {
     if (progress.rows[0]) {
       console.log(`Last Processed Date: ${progress.rows[0].last_processed_date}`);
       console.log(`Successfully Processed: ${progress.rows[0].success_count} dates`);
-      console.log(`Failed Dates: ${progress.rows[0].failed_dates.length}`);
+      console.log(`Failed Dates: ${progress.rows[0]?.failed_dates?.length || 0}`);
       console.log(`Last Update: ${progress.rows[0].updated_at}`);
     }
 
