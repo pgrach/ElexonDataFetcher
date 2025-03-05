@@ -382,4 +382,4 @@ export {
   calculateMonthlyBitcoinSummary
 };
 
-const DEFAULT_DIFFICULTY = 110568428300952; // Default difficulty value
+const DEFAULT_DIFFICULTY = 110000000000000; // Default difficulty value

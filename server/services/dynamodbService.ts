@@ -23,6 +23,10 @@ const client = new DynamoDBClient({
 });
 
 const docClient = DynamoDBDocumentClient.from(client, {
+  unmarshallOptions: {
+    convertEmptyValues: true,
+    wrapNumbers: false // Ensures numbers are returned as regular numbers
+  },
   marshallOptions: {
     convertEmptyValues: true,
     removeUndefinedValues: true,
