@@ -90,7 +90,7 @@ async function retryOperation<T>(operation: () => Promise<T>, attempt = 1): Prom
   }
 }
 
-export async function getDifficultyData(date: string): Promise<number | { difficulty: number }>: Promise<number> {
+export async function getDifficultyData(date: string): Promise<number | { difficulty: number }> {
   try {
     const formattedDate = formatDateForDifficulty(date);
     console.info(`[DynamoDB] Fetching difficulty for date: ${formattedDate}`);
@@ -112,6 +112,18 @@ export async function getDifficultyData(date: string): Promise<number | { diffic
         ":date": formattedDate
       }
     });
+
+    const result = await retryOperation(() => docClient.send(scanCommand));
+    
+    if (!result.Items || result.Items.length === 0) {
+      console.warn(`[DynamoDB] No difficulty data found for ${formattedDate}, using default`);
+      return DEFAULT_DIFFICULTY;
+    }
+
+    const difficultyData = result.Items[0];
+    return typeof difficultyData.Difficulty === 'number' 
+      ? difficultyData.Difficulty 
+      : { difficulty: difficultyData.Difficulty };
 
     console.debug('[DynamoDB] Executing difficulty scan:', {
       table: DIFFICULTY_TABLE,
