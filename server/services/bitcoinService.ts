@@ -90,7 +90,7 @@ async function fetch2024Difficulties(): Promise<void> {
       while (!success && retries < MAX_RETRIES) {
         try {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
-          const difficulty = await getDifficultyData(date);
+          const difficulty = (await getDifficultyData(date)) as number; //The provided change
           DIFFICULTY_CACHE.set(date, difficulty.toString());
           console.log(`✓ Cached difficulty for ${date}: ${difficulty}`);
           success = true;
@@ -131,7 +131,7 @@ async function processSingleDay(
     try {
       // If difficulty is not in cache, fetch it
       if (!DIFFICULTY_CACHE.has(date)) {
-        const difficulty = await getDifficultyData(date);
+        const difficulty = (await getDifficultyData(date)) as number;
         DIFFICULTY_CACHE.set(date, difficulty.toString());
         console.log(`Fetched and cached difficulty for ${date}: ${difficulty}`);
       }

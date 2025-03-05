@@ -61,7 +61,7 @@ async function getDifficulty(date: string): Promise<number> {
 
   // Fetch from DynamoDB if not in cache
   console.log('Fetching difficulty from DynamoDB...');
-  const difficulty = await getDifficultyData(date);
+  const difficulty = (await getDifficultyData(date)) as number;
 
   // Cache the result
   difficultyCache.set(date, difficulty);
