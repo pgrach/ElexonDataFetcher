@@ -1,4 +1,7 @@
-import { updateLeadPartyNames } from "../services/curtailment";
+// Either implement the function or use an alternative
+// For example:
+// import { updateRecords } from "../services/curtailment";
+// const updateLeadPartyNames = updateRecords; // Alias or create your own implementation
 
 async function main() {
   try {

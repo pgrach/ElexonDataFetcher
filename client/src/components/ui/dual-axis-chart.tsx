@@ -29,6 +29,14 @@ interface DualAxisChartProps {
   chartConfig: ChartConfig;
 }
 
+interface ScatterProps {
+  cx: number;
+  cy: number;
+  fill: string;
+  payload: { [key: string]: number };
+}
+
+
 export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
   return (
     <ResponsiveContainer width="100%" height={400}>
@@ -88,9 +96,9 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
           dataKey={chartConfig.rightAxis.dataKey}
           fill={chartConfig.rightAxis.color}
           name={chartConfig.rightAxis.label}
-          shape={(props: any) => {
-            const { cx, cy, fill } = props;
-            const value = props.payload[chartConfig.rightAxis.dataKey];
+          shape={(props: ScatterProps) => {
+            const { cx, cy, fill, payload } = props;
+            const value = payload[chartConfig.rightAxis.dataKey];
             if (value === 0) return null;
 
             return (
