@@ -118,8 +118,8 @@ async function fetch2024Difficulties(): Promise<void> {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
           const data = await getDifficultyData(date);
           
-          // Use the type-safe validation function
-          const difficultyValue = validateDifficulty(data);
+          // Use the type-safe extraction function for consistent handling
+          const difficultyValue = extractDifficulty(data);
 
           DIFFICULTY_CACHE.set(date, difficultyValue.toString());
           console.log(`✓ Cached difficulty for ${date}: ${difficultyValue}`);
@@ -168,8 +168,8 @@ async function processSingleDay(
       if (!DIFFICULTY_CACHE.has(date)) {
         const difficultyData = await getDifficultyData(date);
         
-        // Proper type validation
-        const difficulty = validateDifficulty(difficultyData);
+        // Proper type validation using our helper function
+        const difficulty = extractDifficulty(difficultyData);
 
         difficultyValue = difficulty;
         DIFFICULTY_CACHE.set(date, difficultyValue.toString());
@@ -441,11 +441,21 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
  * Helper function to safely extract difficulty from DynamoDB response
  */
 function extractDifficulty(difficultyData: unknown): number {
-  if (typeof difficultyData === 'object' && difficultyData !== null && 'difficulty' in difficultyData &&
-    typeof (difficultyData as { difficulty: unknown }).difficulty === 'number') {
+  // If it's already a number, return it directly
+  if (typeof difficultyData === 'number') {
+    return difficultyData;
+  }
+  
+  // If it's an object with a difficulty property that's a number
+  if (difficultyData !== null && 
+      typeof difficultyData === 'object' && 
+      'difficulty' in difficultyData && 
+      typeof (difficultyData as { difficulty: number }).difficulty === 'number') {
     return (difficultyData as { difficulty: number }).difficulty;
   }
-  return DEFAULT_DIFFICULTY;
+  
+  // Use the validateDifficulty function for consistent handling
+  return validateDifficulty(difficultyData);
 }
 
 // Export all the functions

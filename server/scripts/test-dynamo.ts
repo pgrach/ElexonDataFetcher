@@ -44,14 +44,17 @@ async function testDynamoDBRetrieval() {
 
     // Now try to get the actual historical data for January 15th
     console.log('\nTesting getDifficultyData...');
-    const difficulty = await getDifficultyData(testDate);
+    const difficultyData = await getDifficultyData(testDate);
+    
+    // Extract the difficulty value from the response object
+    const difficultyValue = difficultyData.difficulty;
 
     console.log('\nRetrieved Historical Data:', {
       date: testDate,
       difficulty: {
-        value: difficulty,
-        isDefault: difficulty === 108105433845147,
-        formatted: difficulty.toLocaleString()
+        value: difficultyValue,
+        isDefault: difficultyValue === 108105433845147,
+        formatted: difficultyValue.toLocaleString()
       }
     });
 

@@ -35,10 +35,39 @@ export interface DynamoDBHistoricalData {
 // Type for DynamoDB response
 export type DynamoDBDifficultyResponse = { difficulty: number } | null;
 
+/**
+ * Validates and extracts difficulty value from various input types
+ * 
+ * @param data - The difficulty data which could be a number, an object with difficulty property, or unknown
+ * @returns A valid number representing Bitcoin network difficulty
+ */
 export function validateDifficulty(data: unknown): number {
-  if (typeof data === 'object' && data !== null && 'difficulty' in data && typeof data.difficulty === 'number') {
-    return data.difficulty;
+  // If it's already a number, return it directly
+  if (typeof data === 'number') {
+    return data;
   }
+  
+  // If it's an object with a difficulty property
+  if (data !== null && 
+      typeof data === 'object' && 
+      'difficulty' in data) {
+    
+    // If the difficulty property is a number
+    const difficultyValue = (data as { difficulty: unknown }).difficulty;
+    if (typeof difficultyValue === 'number') {
+      return difficultyValue;
+    }
+    
+    // If it's a string that can be parsed to a number
+    if (typeof difficultyValue === 'string') {
+      const parsed = parseFloat(difficultyValue);
+      if (!isNaN(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  
+  // Return default if we couldn't extract a valid number
   return DEFAULT_DIFFICULTY;
 }
 
