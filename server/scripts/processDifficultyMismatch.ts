@@ -104,7 +104,7 @@ async function findDatesWithMismatchedDifficulty(startDate?: string) {
   `;
 
   const result = await db.execute(query);
-  if (!result?.rows || !Array.isArray(result.rows)) {
+  if (!result?.rows || !Array.isArray(result.rows) || result.rows.length === 0) {
     return [];
   }
   return result.rows.map(row => ({
