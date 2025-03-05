@@ -1,4 +1,4 @@
-import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation, DEFAULT_DIFFICULTY } from '../types/bitcoin';
+import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation } from '../types/bitcoin';
 import axios from 'axios';
 import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations, bitcoinMonthlySummaries } from "@db/schema";
@@ -225,7 +225,7 @@ async function processSingleDay(
           const periodBitcoin = calculateBitcoinForBMU(
             data.totalVolume,
             minerModel,
-            difficultyValue
+            difficultyValue as number
           );
 
           for (const [farmId, farmVolume] of data.farms) {
@@ -236,7 +236,7 @@ async function processSingleDay(
               farmId,
               minerModel,
               bitcoinMined: bitcoinShare.toFixed(8),
-              difficulty: difficultyValue.toString(),
+              difficulty: String(difficultyValue ?? DEFAULT_DIFFICULTY),
               calculatedAt: new Date()
             });
           }
