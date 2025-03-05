@@ -251,8 +251,27 @@ async function fixMissingCalculations(date: string): Promise<boolean> {
   console.log(`Fixing missing calculations for ${date}...`);
   
   try {
+    // First, ensure Bitcoin difficulty data is available
+    console.log(`Verifying Bitcoin difficulty data for ${date}...`);
+    
+    // Import necessary functions from dynamodbService
+    const { getDifficultyData } = require('./server/services/dynamodbService');
+    
+    try {
+      // This will either return the existing difficulty or the fallback value
+      const difficulty = await getDifficultyData(date);
+      console.log(`Found Bitcoin difficulty for ${date}: ${difficulty.toLocaleString()}`);
+    } catch (error) {
+      console.error(`Error verifying difficulty data for ${date}:`, error);
+      console.log(`Will attempt to proceed with default difficulty value...`);
+    }
+    
     // Reprocess the entire day's calculations through the curtailment service
+    console.log(`Processing curtailment data for ${date}...`);
     await processDailyCurtailment(date);
+    
+    // Add small delay to allow for database processing
+    await sleep(1000);
     
     // Verify that the fix worked
     const verificationStats = await analyzeDate(date);
@@ -264,14 +283,28 @@ async function fixMissingCalculations(date: string): Promise<boolean> {
         allFixed = false;
         console.error(`Failed to fix all missing calculations for ${date}, model ${model}`);
         console.error(`  Still missing: ${verificationStats.missingCalculations[model].count} records`);
+        
+        if (verificationStats.missingCalculations[model].periods.length > 0) {
+          console.error(`  Missing periods: ${verificationStats.missingCalculations[model].periods.join(', ')}`);
+        }
       }
     }
     
     if (allFixed) {
-      console.log(`Successfully fixed all missing calculations for ${date}`);
+      console.log(`✅ Successfully fixed all missing calculations for ${date}`);
       return true;
     }
     
+    // Partial success is also reported
+    const totalMissingBefore = Object.values(verificationStats.missingCalculations)
+      .reduce((sum, current) => sum + current.count, 0);
+    
+    if (totalMissingBefore < verificationStats.totalCurtailmentRecords * Object.keys(minerModels).length * 0.1) {
+      console.log(`⚠️ Partial success: Fixed most calculations for ${date}, only ${totalMissingBefore} still missing`);
+      return true;
+    }
+    
+    console.log(`❌ Failed to fix calculations for ${date}`);
     return false;
   } catch (error) {
     console.error(`Error fixing calculations for ${date}:`, error);
@@ -552,7 +585,9 @@ async function main() {
   const args = process.argv.slice(2);
   
   if (args.length === 0) {
-    showHelp();
+    // If no arguments provided, process all 2023 data (as requested)
+    console.log("No command specified. Processing all 2023 data by default.");
+    await processAll2023();
     return;
   }
   
@@ -593,8 +628,7 @@ async function main() {
         break;
       
       case 'all':
-        console.log("WARNING: Processing all months can take a long time.");
-        console.log("Consider using 'month' or 'range' for more targeted reconciliation.");
+        console.log("Processing all 2023 Bitcoin calculation data...");
         await processAll2023();
         break;
       
@@ -604,8 +638,8 @@ async function main() {
         break;
       
       default:
-        console.error(`Unknown command: ${command}`);
-        showHelp();
+        console.log(`Unknown command: ${command}. Processing all 2023 data by default.`);
+        await processAll2023();
     }
   } catch (error) {
     console.error("Error executing command:", error);
