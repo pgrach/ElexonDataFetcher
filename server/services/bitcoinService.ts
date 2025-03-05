@@ -1,4 +1,4 @@
-import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation, validateDifficulty, DEFAULT_DIFFICULTY } from '../types/bitcoin';
+import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation, DEFAULT_DIFFICULTY } from '../types/bitcoin';
 import axios from 'axios';
 import { db } from "@db";
 import { curtailmentRecords, historicalBitcoinCalculations, bitcoinMonthlySummaries } from "@db/schema";
@@ -30,37 +30,17 @@ const CACHE_FILE = path.join(__dirname, '..', 'data', '2024_difficulties.json');
 const DIFFICULTY_CACHE = new Map<string, string>();
 const PROCESSING_LOCK = new Map<string, Promise<void>>();
 
-/**
- * Sleep utility with Promise
- */
-async function sleep(ms: number): Promise<void> {
+async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Load cached difficulties from file
- */
 async function loadCachedDifficulties(): Promise<void> {
   try {
     if (fs.existsSync(CACHE_FILE)) {
       const data = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
-      
-      // Type-safe iteration through object entries
-      for (const [date, difficultyValue] of Object.entries(data)) {
-        // Ensure difficulty is properly converted to string, with type safety
-        let difficultyStr: string;
-        
-        if (typeof difficultyValue === 'number') {
-          difficultyStr = difficultyValue.toString();
-        } else if (typeof difficultyValue === 'string') {
-          difficultyStr = difficultyValue;
-        } else {
-          difficultyStr = DEFAULT_DIFFICULTY.toString();
-        }
-        
-        DIFFICULTY_CACHE.set(date, difficultyStr);
-      }
-      
+      Object.entries(data).forEach(([date, difficulty]) => {
+        DIFFICULTY_CACHE.set(date, difficulty.toString());
+      });
       console.log(`Loaded ${DIFFICULTY_CACHE.size} difficulties from cache`);
     }
   } catch (error) {
@@ -68,9 +48,6 @@ async function loadCachedDifficulties(): Promise<void> {
   }
 }
 
-/**
- * Save difficulties to cache file
- */
 async function saveDifficultiesToCache(): Promise<void> {
   try {
     const cacheDir = path.dirname(CACHE_FILE);
@@ -85,9 +62,6 @@ async function saveDifficultiesToCache(): Promise<void> {
   }
 }
 
-/**
- * Fetch and cache difficulties for 2024
- */
 async function fetch2024Difficulties(): Promise<void> {
   console.log('Fetching 2024 difficulty data...');
   await loadCachedDifficulties();
@@ -116,13 +90,9 @@ async function fetch2024Difficulties(): Promise<void> {
       while (!success && retries < MAX_RETRIES) {
         try {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
-          const data = await getDifficultyData(date);
-          
-          // Use the type-safe extraction function for consistent handling
-          const difficultyValue = extractDifficulty(data);
-
-          DIFFICULTY_CACHE.set(date, difficultyValue.toString());
-          console.log(`✓ Cached difficulty for ${date}: ${difficultyValue}`);
+          const difficulty = await getDifficultyData(date);
+          DIFFICULTY_CACHE.set(date, difficulty.toString());
+          console.log(`✓ Cached difficulty for ${date}: ${difficulty}`);
           success = true;
           await saveDifficultiesToCache();
         } catch (error) {
@@ -146,9 +116,6 @@ async function fetch2024Difficulties(): Promise<void> {
   console.log(`Completed caching difficulties. Total cached: ${DIFFICULTY_CACHE.size}`);
 }
 
-/**
- * Process bitcoin calculations for a single day
- */
 async function processSingleDay(
   date: string,
   minerModel: string
@@ -163,21 +130,10 @@ async function processSingleDay(
   const processingPromise = (async () => {
     try {
       // If difficulty is not in cache, fetch it
-      let difficultyValue: number;
-      
       if (!DIFFICULTY_CACHE.has(date)) {
-        const difficultyData = await getDifficultyData(date);
-        
-        // Proper type validation using our helper function
-        const difficulty = extractDifficulty(difficultyData);
-
-        difficultyValue = difficulty;
-        DIFFICULTY_CACHE.set(date, difficultyValue.toString());
-        console.log(`Fetched and cached difficulty for ${date}: ${difficultyValue}`);
-      } else {
-        // Safe conversion from cache
-        const cachedValue = DIFFICULTY_CACHE.get(date);
-        difficultyValue = cachedValue ? parseFloat(cachedValue) : DEFAULT_DIFFICULTY;
+        const difficulty = await getDifficultyData(date);
+        DIFFICULTY_CACHE.set(date, difficulty.toString());
+        console.log(`Fetched and cached difficulty for ${date}: ${difficulty}`);
       }
 
       return await db.transaction(async (tx) => {
@@ -221,7 +177,8 @@ async function processSingleDay(
             )
           );
 
-        console.log(`Processing ${date} with difficulty ${difficultyValue}`);
+        const difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
+        console.log(`Processing ${date} with difficulty ${difficulty}`);
         console.log(`Found ${records.length} curtailment records across ${periods.length} periods and ${farmIds.length} farms`);
 
         const periodGroups = new Map<number, { totalVolume: number; farms: Map<string, number> }>();
@@ -257,7 +214,7 @@ async function processSingleDay(
           const periodBitcoin = calculateBitcoinForBMU(
             data.totalVolume,
             minerModel,
-            difficultyValue
+            parseFloat(difficulty)
           );
 
           for (const [farmId, farmVolume] of data.farms) {
@@ -268,7 +225,7 @@ async function processSingleDay(
               farmId,
               minerModel,
               bitcoinMined: bitcoinShare.toFixed(8),
-              difficulty: difficultyValue.toString(),
+              difficulty,
               calculatedAt: new Date()
             });
           }
@@ -296,33 +253,26 @@ async function processSingleDay(
   await processingPromise;
 }
 
-/**
- * Calculate Bitcoin mined for a BMU
- */
 function calculateBitcoinForBMU(
   curtailedMwh: number,
   minerModel: string,
-  difficultyValue: number
+  difficulty: number
 ): number {
   const miner = minerModels[minerModel];
   if (!miner) throw new Error(`Invalid miner model: ${minerModel}`);
 
-  // Convert MWh to joules
-  const energyInJoules = curtailedMwh * 3600000000;
-
-  // Bitcoin mining calculation
-  const hashesPerBlock = difficultyValue * Math.pow(2, 32);
-  const hashrateInHashes = (miner.hashrate * Math.pow(10, 12)); // TH/s to H/s
+  const curtailedKwh = curtailedMwh * 1000;
+  const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
+  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
+  const difficultyNum = typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty;
+  const hashesPerBlock = difficultyNum * Math.pow(2, 32);
   const networkHashRate = hashesPerBlock / 600;
   const networkHashRateTH = networkHashRate / 1e12;
-  const totalHashPower = miner.hashrate * 1e12;
+  const totalHashPower = potentialMiners * miner.hashrate;
   const ourNetworkShare = totalHashPower / networkHashRateTH;
   return Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
 }
 
-/**
- * Process historical calculations for multiple dates
- */
 async function processHistoricalCalculations(
   startDate: string,
   endDate: string,
@@ -336,8 +286,7 @@ async function processHistoricalCalculations(
     MINER_MODELS.map(model =>
       limit(async () => {
         try {
-          const dates = eachDayOfInterval({ start: new Date(startDate), end: new Date(endDate) });
-          await Promise.all(dates.map(date => processSingleDay(format(date, 'yyyy-MM-dd'), model)));
+          await processSingleDay(startDate, model);
         } catch (error) {
           console.error(`Failed to process ${model} for ${startDate}:`, error);
           throw error;
@@ -347,31 +296,6 @@ async function processHistoricalCalculations(
   );
 }
 
-/**
- * Convert empty values to null
- */
-function convertEmptyValues(data: any): any {
-  // Basic check for null and undefined
-  if (data === null || data === undefined) {
-    return null;
-  }
-
-  // Check for empty objects and arrays
-  if (typeof data === 'object') {
-    if (Array.isArray(data) && data.length === 0) {
-      return null;
-    }
-    if (Object.keys(data).length === 0) {
-      return null;
-    }
-  }
-
-  return data;
-}
-
-/**
- * Calculate monthly Bitcoin summary
- */
 async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: string): Promise<void> {
   console.log(`Calculating monthly Bitcoin summary for ${yearMonth} with ${minerModel}`);
 
@@ -437,34 +361,10 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
   }
 }
 
-/**
- * Helper function to safely extract difficulty from DynamoDB response
- */
-function extractDifficulty(difficultyData: unknown): number {
-  // If it's already a number, return it directly
-  if (typeof difficultyData === 'number') {
-    return difficultyData;
-  }
-  
-  // If it's an object with a difficulty property that's a number
-  if (difficultyData !== null && 
-      typeof difficultyData === 'object' && 
-      'difficulty' in difficultyData && 
-      typeof (difficultyData as { difficulty: number }).difficulty === 'number') {
-    return (difficultyData as { difficulty: number }).difficulty;
-  }
-  
-  // Use the validateDifficulty function for consistent handling
-  return validateDifficulty(difficultyData);
-}
-
-// Export all the functions
 export {
   calculateBitcoinForBMU,
   processHistoricalCalculations,
   processSingleDay,
   fetch2024Difficulties,
-  calculateMonthlyBitcoinSummary,
-  convertEmptyValues,
-  extractDifficulty
+  calculateMonthlyBitcoinSummary
 };

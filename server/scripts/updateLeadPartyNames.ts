@@ -1,8 +1,4 @@
-export async function updateLeadPartyNames() {
-  console.log('Updating lead party names...');
-  // Implementation details here
-  return { success: true };
-}
+import { updateLeadPartyNames } from "../services/curtailment";
 
 async function main() {
   try {

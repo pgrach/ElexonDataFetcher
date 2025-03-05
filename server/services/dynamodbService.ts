@@ -23,9 +23,6 @@ const client = new DynamoDBClient({
 });
 
 const docClient = DynamoDBDocumentClient.from(client, {
-  unmarshallOptions: {
-    wrapNumbers: false // Ensures numbers are returned as regular numbers
-  },
   marshallOptions: {
     convertEmptyValues: true,
     removeUndefinedValues: true,
@@ -93,7 +90,7 @@ async function retryOperation<T>(operation: () => Promise<T>, attempt = 1): Prom
   }
 }
 
-export async function getDifficultyData(date: string): Promise<{ difficulty: number }> {
+export async function getDifficultyData(date: string): Promise<number> {
   try {
     const formattedDate = formatDateForDifficulty(date);
     console.info(`[DynamoDB] Fetching difficulty for date: ${formattedDate}`);
@@ -101,7 +98,7 @@ export async function getDifficultyData(date: string): Promise<{ difficulty: num
     const tableExists = await verifyTableExists(DIFFICULTY_TABLE);
     if (!tableExists) {
       console.warn(`[DynamoDB] Table ${DIFFICULTY_TABLE} does not exist, using default difficulty (${DEFAULT_DIFFICULTY})`);
-      return { difficulty: DEFAULT_DIFFICULTY };
+      return DEFAULT_DIFFICULTY;
     }
 
     // First, scan the table to find records with our date
@@ -116,22 +113,40 @@ export async function getDifficultyData(date: string): Promise<{ difficulty: num
       }
     });
 
-    const result = await retryOperation(() => docClient.send(scanCommand));
+    console.debug('[DynamoDB] Executing difficulty scan:', {
+      table: DIFFICULTY_TABLE,
+      date: formattedDate,
+      command: 'ScanCommand'
+    });
 
-    if (!result.Items || result.Items.length === 0) {
-      console.warn(`[DynamoDB] No difficulty data found for ${formattedDate}, using default`);
-      return { difficulty: DEFAULT_DIFFICULTY };
+    const scanResponse = await retryOperation(() => docClient.send(scanCommand));
+
+    if (!scanResponse.Items?.length) {
+      console.warn(`[DynamoDB] No difficulty data found for ${formattedDate}, using default: ${DEFAULT_DIFFICULTY}`);
+      return DEFAULT_DIFFICULTY;
     }
 
-    const difficultyData = result.Items[0];
-    // Always return a consistent format to avoid type issues
-    const difficultyValue = typeof difficultyData.Difficulty === 'number' 
-      ? difficultyData.Difficulty 
-      : DEFAULT_DIFFICULTY;
-      
-    return { difficulty: difficultyValue };
+    // Sort items by date (descending) to get the most recent record if multiple exist
+    const sortedItems = scanResponse.Items.sort((a, b) => 
+      b.Date.localeCompare(a.Date)
+    );
+
+    const difficulty = Number(sortedItems[0].Difficulty);
+    console.info(`[DynamoDB] Found historical difficulty for ${formattedDate}:`, {
+      difficulty: difficulty.toLocaleString(),
+      id: sortedItems[0].ID,
+      totalRecords: sortedItems.length
+    });
+
+    if (isNaN(difficulty)) {
+      console.error(`[DynamoDB] Invalid difficulty value:`, sortedItems[0].Difficulty);
+      return DEFAULT_DIFFICULTY;
+    }
+
+    return difficulty;
+
   } catch (error) {
     console.error('[DynamoDB] Error fetching difficulty:', error);
-    return { difficulty: DEFAULT_DIFFICULTY };
+    return DEFAULT_DIFFICULTY;
   }
 }
