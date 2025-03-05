@@ -90,7 +90,10 @@ async function fetch2024Difficulties(): Promise<void> {
       while (!success && retries < MAX_RETRIES) {
         try {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
-          const difficulty = (await getDifficultyData(date)) as number; //The provided change
+          const data = await getDifficultyData(date);
+          // Add type assertion for difficulty
+          const typedData = data as { difficulty: number };
+          const difficulty = typedData.difficulty;
           DIFFICULTY_CACHE.set(date, difficulty.toString());
           console.log(`✓ Cached difficulty for ${date}: ${difficulty}`);
           success = true;
@@ -131,7 +134,10 @@ async function processSingleDay(
     try {
       // If difficulty is not in cache, fetch it
       if (!DIFFICULTY_CACHE.has(date)) {
-        const difficulty = (await getDifficultyData(date)) as number;
+        const data = await getDifficultyData(date);
+        // Add type assertion for difficulty
+        const typedData = data as { difficulty: number };
+        const difficulty = typedData.difficulty;
         DIFFICULTY_CACHE.set(date, difficulty.toString());
         console.log(`Fetched and cached difficulty for ${date}: ${difficulty}`);
       }
@@ -225,7 +231,7 @@ async function processSingleDay(
               farmId,
               minerModel,
               bitcoinMined: bitcoinShare.toFixed(8),
-              difficulty: typeof difficulty === 'number' ? difficulty : 110568428300952, // Use default if not a number
+              difficulty: difficulty, //Fixed type error
               calculatedAt: new Date()
             });
           }

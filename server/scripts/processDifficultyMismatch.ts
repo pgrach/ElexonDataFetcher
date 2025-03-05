@@ -62,16 +62,24 @@ async function getDifficulty(date: string): Promise<number> {
   // Fetch from DynamoDB if not in cache
   console.log('Fetching difficulty from DynamoDB...');
   const difficultyData = await getDifficultyData(date);
-if (typeof difficultyData !== 'number') {
+  // Add type assertion to handle unknown type
+  if (typeof difficultyData === 'object' && difficultyData !== null) {
+    const typedResult = difficultyData as { difficulty?: number };
+    if (typedResult.difficulty) {
+      const difficulty = typedResult.difficulty;
+      // Cache the result
+      difficultyCache.set(date, difficulty);
+      console.log(`Cached difficulty for ${date}: ${difficulty}`);
+      return difficulty;
+    }
+  } else if (typeof difficultyData === 'number') {
+    const difficulty = difficultyData;
+    // Cache the result
+    difficultyCache.set(date, difficulty);
+    console.log(`Cached difficulty for ${date}: ${difficulty}`);
+    return difficulty;
+  }
   throw new Error(`Invalid difficulty data for date ${date}`);
-}
-const difficulty = difficultyData;
-
-  // Cache the result
-  difficultyCache.set(date, difficulty);
-  console.log(`Cached difficulty for ${date}: ${difficulty}`);
-
-  return difficulty;
 }
 
 async function findDatesWithMismatchedDifficulty(startDate?: string) {

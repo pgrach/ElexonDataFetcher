@@ -38,6 +38,10 @@ interface ScatterProps {
 
 
 export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
+  // Return an empty div instead of null when no data is available
+  if (!data || data.length === 0) {
+    return <div className="h-full flex items-center justify-center">No data available</div>;
+  }
   return (
     <ResponsiveContainer width="100%" height={400}>
       <ComposedChart data={data} margin={{ top: 20, right: 60, left: 60, bottom: 20 }}>
@@ -99,7 +103,7 @@ export const DualAxisChart = ({ data, chartConfig }: DualAxisChartProps) => {
           shape={(props: any): React.ReactElement => {
             const { cx, cy, fill, payload } = props as ScatterProps;
             const value = payload[chartConfig.rightAxis.dataKey];
-            if (value === 0) return null;
+            if (value === 0) return <></>; // Return an empty react fragment instead of null
 
             return (
               <g transform={`translate(${cx - 8}, ${cy - 8})`}>
