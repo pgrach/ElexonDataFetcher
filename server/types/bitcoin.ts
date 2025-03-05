@@ -21,7 +21,11 @@ export interface BMUCalculation {
 
 export interface DynamoDBHistoricalData {
   difficulty: number;
+  date: string;
 }
+
+// Type for DynamoDB response
+export type DynamoDBDifficultyResponse = number | DynamoDBHistoricalData | null;
 
 export const minerModels: Record<string, MinerStats> = {
   S19J_PRO: {

@@ -137,9 +137,17 @@ async function processSingleDay(
       let difficultyValue: number;
       if (!DIFFICULTY_CACHE.has(date)) {
         const data = await getDifficultyData(date);
-        difficultyValue = typeof data === 'number' ? data : 
-                         typeof data === 'string' ? parseFloat(data) :
-                         (data as { difficulty: number })?.difficulty || DEFAULT_DIFFICULTY;
+        if (!data) {
+          difficultyValue = DEFAULT_DIFFICULTY;
+        } else if (typeof data === 'number') {
+          difficultyValue = data;
+        } else if (typeof data === 'string') {
+          difficultyValue = parseFloat(data);
+        } else if (typeof data === 'object' && data !== null) {
+          difficultyValue = (data as { difficulty: number })?.difficulty || DEFAULT_DIFFICULTY;
+        } else {
+          difficultyValue = DEFAULT_DIFFICULTY;
+        }
 
         DIFFICULTY_CACHE.set(date, difficultyValue.toString());
         console.log(`Fetched and cached difficulty for ${date}: ${difficultyValue}`);
