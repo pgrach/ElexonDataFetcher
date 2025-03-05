@@ -2,7 +2,7 @@ import { getDifficultyData } from '../services/dynamodbService';
 import { db } from "@db";
 import { historicalBitcoinCalculations } from "@db/schema";
 import { and, eq, sql } from "drizzle-orm";
-import { minerModels } from '../types/bitcoin';
+import { minerModels, validateDifficulty } from '../types/bitcoin';
 import { processSingleDay, fetch2024Difficulties } from '../services/bitcoinService';
 import { format, subDays, parseISO } from 'date-fns';
 

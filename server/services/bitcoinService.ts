@@ -92,7 +92,13 @@ async function fetch2024Difficulties(): Promise<void> {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
           const data = await getDifficultyData(date);
           // Type guard for difficulty - improved type handling
-          const difficultyValue: number = typeof data === 'number' ? data : (typeof data === 'string' ? parseFloat(data) : (data && typeof data.difficulty === 'number' ? data.difficulty : DEFAULT_DIFFICULTY));
+          const difficultyValue: number = typeof data === 'number' 
+            ? data 
+            : (typeof data === 'string' 
+                ? parseFloat(data) 
+                : (data && typeof data === 'object' && 'difficulty' in data && typeof data.difficulty === 'number' 
+                    ? data.difficulty 
+                    : DEFAULT_DIFFICULTY));
 
           DIFFICULTY_CACHE.set(date, difficultyValue.toString());
           console.log(`✓ Cached difficulty for ${date}: ${difficultyValue}`);
@@ -407,9 +413,9 @@ export {
 
 import { validateDifficulty } from '../types/bitcoin';
 
-const DEFAULT_DIFFICULTY = 110000000000000; // Default difficulty val
+const DEFAULT_DIFFICULTY = 110000000000000; // Default difficulty value
 
 // Helper function to safely extract difficulty from DynamoDB response
 function extractDifficulty(difficultyData: unknown): number {
   return validateDifficulty(difficultyData);
-}ue
+}
