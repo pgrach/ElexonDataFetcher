@@ -93,7 +93,7 @@ async function fetch2024Difficulties(): Promise<void> {
           const data = await getDifficultyData(date);
           const difficultyValue = typeof data === 'number' ? data : 
                                  typeof data === 'string' ? parseFloat(data) :
-                                 (data as any)?.difficulty || 0;
+                                 (data as { difficulty: number })?.difficulty || DEFAULT_DIFFICULTY;
 
           DIFFICULTY_CACHE.set(date, difficultyValue.toString());
           console.log(`✓ Cached difficulty for ${date}: ${difficultyValue}`);
@@ -139,7 +139,7 @@ async function processSingleDay(
         const data = await getDifficultyData(date);
         difficultyValue = typeof data === 'number' ? data : 
                          typeof data === 'string' ? parseFloat(data) :
-                         (data as any)?.difficulty || 0;
+                         (data as { difficulty: number })?.difficulty || DEFAULT_DIFFICULTY;
 
         DIFFICULTY_CACHE.set(date, difficultyValue.toString());
         console.log(`Fetched and cached difficulty for ${date}: ${difficultyValue}`);
