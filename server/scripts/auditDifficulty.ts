@@ -106,14 +106,14 @@ async function auditDifficulty() {
         console.log(`\n${model}:`);
 
         if (storedDifficulty) {
-          const storedBitcoin = calculateBitcoinForBMU(totalEnergy, model, Number(storedDifficulty));
-          console.log(`Using stored difficulty (${await formatNumber(storedDifficulty)}):`);
+          const storedBitcoin = calculateBitcoinForBMU(totalEnergy, model, typeof storedDifficulty === 'object' ? storedDifficulty.difficulty : storedDifficulty);
+          console.log(`Using stored difficulty (${await formatNumber(typeof storedDifficulty === 'object' ? storedDifficulty.difficulty : storedDifficulty)}):`);
           console.log('- Bitcoin:', storedBitcoin.toFixed(8));
           console.log('- Value: $', (storedBitcoin * minerstatData.price).toFixed(2));
         }
 
-        const currentBitcoin = calculateBitcoinForBMU(totalEnergy, model, minerstatData.difficulty);
-        console.log(`Using current difficulty (${await formatNumber(minerstatData.difficulty)}):`);
+        const currentBitcoin = calculateBitcoinForBMU(totalEnergy, model, typeof minerstatData.difficulty === 'object' ? minerstatData.difficulty.difficulty : minerstatData.difficulty);
+        console.log(`Using current difficulty (${await formatNumber(typeof minerstatData.difficulty === 'object' ? minerstatData.difficulty.difficulty : minerstatData.difficulty)}):`);
         console.log('- Bitcoin:', currentBitcoin.toFixed(8));
         console.log('- Value: $', (currentBitcoin * minerstatData.price).toFixed(2));
       }
@@ -122,7 +122,7 @@ async function auditDifficulty() {
     // 5. Report findings
     console.log('\n=== Audit Summary ===');
     if (storedDifficulty) {
-      const diffPct = ((minerstatData.difficulty - Number(storedDifficulty)) / Number(storedDifficulty) * 100);
+      const diffPct = ((typeof minerstatData.difficulty === 'object' ? minerstatData.difficulty.difficulty : minerstatData.difficulty) - (typeof storedDifficulty === 'object' ? storedDifficulty.difficulty : storedDifficulty)) / (typeof storedDifficulty === 'object' ? storedDifficulty.difficulty : storedDifficulty) * 100;
       console.log('Difficulty delta:', diffPct.toFixed(2) + '%');
 
       if (Math.abs(diffPct) > 1) {
