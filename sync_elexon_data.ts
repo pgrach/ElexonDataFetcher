@@ -5,8 +5,8 @@
  * and adds any missing curtailment records.
  */
 
-import { db } from "@db";
-import { curtailmentRecords } from "@db/schema";
+import { db } from "./db";
+import { curtailmentRecords } from "./db/schema";
 import { eq, sql } from "drizzle-orm";
 import { fetchBidsOffers } from "./server/services/elexon";
 import { ElexonBidOffer } from "./server/types/elexon";
