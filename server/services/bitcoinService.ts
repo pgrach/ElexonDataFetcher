@@ -90,11 +90,11 @@ async function fetch2024Difficulties(): Promise<void> {
       while (!success && retries < MAX_RETRIES) {
         try {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
-          const data = await getDifficultyData(date);
-          const typedData = typeof data === 'number' ? { difficulty: data } : data as { difficulty: number };
-          const difficulty = typedData.difficulty;
-          DIFFICULTY_CACHE.set(date, difficulty ? difficulty.toString() : '');
-          console.log(`✓ Cached difficulty for ${date}: ${difficulty}`);
+          const difficulty = await getDifficultyData(date) as number | string;
+          const typedData = typeof difficulty === 'number' ? { difficulty: difficulty } : difficulty as { difficulty: number };
+          const diff = typedData.difficulty;
+          DIFFICULTY_CACHE.set(date, diff ? diff.toString() : '');
+          console.log(`✓ Cached difficulty for ${date}: ${diff}`);
           success = true;
           await saveDifficultiesToCache();
         } catch (error) {
@@ -132,13 +132,17 @@ async function processSingleDay(
   const processingPromise = (async () => {
     try {
       // If difficulty is not in cache, fetch it
+      let difficulty:number|string;
       if (!DIFFICULTY_CACHE.has(date)) {
-        const data = await getDifficultyData(date);
-        const typedData = typeof data === 'number' ? { difficulty: data } : data as { difficulty: number };
-        const difficulty = typedData.difficulty;
-        DIFFICULTY_CACHE.set(date, difficulty ? difficulty.toString() : '');
-        console.log(`Fetched and cached difficulty for ${date}: ${difficulty}`);
+        difficulty = await getDifficultyData(date) as number | string;
+        const typedData = typeof difficulty === 'number' ? { difficulty: difficulty } : difficulty as { difficulty: number };
+        const diff = typedData.difficulty;
+        DIFFICULTY_CACHE.set(date, diff ? diff.toString() : '');
+        console.log(`Fetched and cached difficulty for ${date}: ${diff}`);
+      } else {
+        difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
       }
+
 
       return await db.transaction(async (tx) => {
         const curtailmentData = await tx
@@ -181,7 +185,6 @@ async function processSingleDay(
             )
           );
 
-        const difficulty = DIFFICULTY_CACHE.get(date) || DEFAULT_DIFFICULTY.toString();
         console.log(`Processing ${date} with difficulty ${difficulty}`);
         console.log(`Found ${records.length} curtailment records across ${periods.length} periods and ${farmIds.length} farms`);
 
@@ -218,7 +221,7 @@ async function processSingleDay(
           const periodBitcoin = calculateBitcoinForBMU(
             data.totalVolume,
             minerModel,
-            parseFloat(difficulty)
+            typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty
           );
 
           for (const [farmId, farmVolume] of data.farms) {
@@ -229,7 +232,7 @@ async function processSingleDay(
               farmId,
               minerModel,
               bitcoinMined: bitcoinShare.toFixed(8),
-              difficulty: difficulty,
+              difficulty: difficulty.toString(),
               calculatedAt: new Date()
             });
           }
