@@ -1,10 +1,5 @@
 import { fetchBidsOffers } from "./server/services/elexon";
-import { Pool } from 'pg';
-
-// Create PostgreSQL connection pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+import { db } from "./db/index";
 
 async function checkElexonTotals(date: string) {
   console.log(`Checking Elexon totals for ${date}...`);
