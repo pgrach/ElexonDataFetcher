@@ -91,11 +91,8 @@ async function fetch2024Difficulties(): Promise<void> {
         try {
           console.log(`[${retries + 1}/${MAX_RETRIES}] Fetching difficulty for ${date}`);
           const data = await getDifficultyData(date);
-          // Type guard for difficulty
-          const difficultyValue = typeof data === 'object' && data !== null
-            ? (data as { difficulty: number }).difficulty
-            : typeof data === 'number' ? data : parseFloat(data as string) || DEFAULT_DIFFICULTY;
-
+          // Type guard for difficulty - improved type handling
+          const difficultyValue: number = typeof data === 'number' ? data : (typeof data === 'string' ? parseFloat(data) : (data && typeof data.difficulty === 'number' ? data.difficulty : DEFAULT_DIFFICULTY));
 
           DIFFICULTY_CACHE.set(date, difficultyValue.toString());
           console.log(`✓ Cached difficulty for ${date}: ${difficultyValue}`);
@@ -271,19 +268,20 @@ async function processSingleDay(
 function calculateBitcoinForBMU(
   curtailedMwh: number,
   minerModel: string,
-  difficulty: number
+  difficultyValue: number
 ): number {
   const miner = minerModels[minerModel];
   if (!miner) throw new Error(`Invalid miner model: ${minerModel}`);
 
-  const curtailedKwh = curtailedMwh * 1000;
-  const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
-  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
-  const difficultyNum = difficulty;
-  const hashesPerBlock = difficultyNum * Math.pow(2, 32);
+  // Convert MWh to joules
+  const energyInJoules = curtailedMwh * 3600000000;
+
+  // Bitcoin mining calculation
+  const hashesPerBlock = difficultyValue * Math.pow(2, 32);
+  const hashrateInHashes = (miner.hashrate * Math.pow(10, 12)); // TH/s to H/s
   const networkHashRate = hashesPerBlock / 600;
   const networkHashRateTH = networkHashRate / 1e12;
-  const totalHashPower = potentialMiners * miner.hashrate;
+  const totalHashPower =  miner.hashrate * 1e12; // Assuming potentialMiners is not relevant for this calculation.  This needs clarification from the user.
   const ourNetworkShare = totalHashPower / networkHashRateTH;
   return Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
 }

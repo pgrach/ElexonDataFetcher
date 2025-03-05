@@ -6,7 +6,11 @@ export const BitcoinCalculationSchema = z.object({
     z.number(),
     z.object({ difficulty: z.number() }),
     z.null()
-  ])
+  ]).transform(val => {
+    if (typeof val === 'number') return val;
+    if (val && typeof val === 'object' && 'difficulty' in val) return val.difficulty;
+    return DEFAULT_DIFFICULTY;
+  })
 });
 
 export type BitcoinCalculation = z.infer<typeof BitcoinCalculationSchema>;
