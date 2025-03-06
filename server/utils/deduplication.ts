@@ -48,6 +48,7 @@ function parseQueryResult<T>(result: any, defaultValue: T): T {
  */
 export async function findDuplicateRecords(date: string): Promise<DuplicateGroup[]> {
   try {
+    logger.info(`Finding duplicate records for date ${date}`);
     // First identify groups with duplicates
     const duplicateGroups = await db.execute(sql`
       WITH duplicate_groups AS (
@@ -78,12 +79,20 @@ export async function findDuplicateRecords(date: string): Promise<DuplicateGroup
       ORDER BY d.record_count DESC, d.settlement_period
     `);
 
+    logger.info(`Found ${duplicateGroups?.length || 0} duplicate groups for date ${date}`);
+    
+    // Handle case where result might not be an array
+    if (!duplicateGroups || !Array.isArray(duplicateGroups)) {
+      logger.warning(`Unexpected result format for duplicate groups query: ${typeof duplicateGroups}`);
+      return [];
+    }
+    
     return duplicateGroups as unknown as DuplicateGroup[];
   } catch (error: unknown) {
     logger.error(`Error finding duplicate records for date ${date}`, { 
       error: error instanceof Error ? error : new Error(String(error)) 
     });
-    throw error;
+    return [];
   }
 }
 
