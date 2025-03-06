@@ -4,7 +4,7 @@ import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays, subMonth
 import { processDailyCurtailment } from "./curtailment";
 import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
-import { processSingleDay, calculateMonthlyBitcoinSummary } from "./bitcoinService";
+import { processSingleDay, calculateMonthlyBitcoinSummary, manualUpdateYearlyBitcoinSummary } from "./bitcoinService";
 
 // Configuration constants
 const MAX_CONCURRENT_DAYS = 5;
@@ -107,11 +107,13 @@ async function needsReprocessing(date: string): Promise<boolean> {
 /**
  * Update the monthly Bitcoin summary for the given date
  * This ensures monthly summaries stay in sync with daily calculations
+ * Also triggers yearly summary updates to maintain data consistency
  */
 async function updateMonthlyBitcoinSummary(date: string): Promise<void> {
   try {
     // Extract year and month from the given date
     const yearMonth = date.substring(0, 7); // "YYYY-MM" format
+    const year = date.substring(0, 4); // "YYYY" format
     console.log(`[${date}] Updating monthly Bitcoin summary for ${yearMonth}...`);
 
     // Update monthly summaries for all miner models
@@ -124,6 +126,17 @@ async function updateMonthlyBitcoinSummary(date: string): Promise<void> {
     }
 
     console.log(`[${date}] Monthly Bitcoin summaries updated for ${yearMonth}`);
+    
+    // After updating monthly summaries, also update yearly summaries
+    // This ensures yearly data stays in sync with monthly data
+    try {
+      console.log(`[${date}] Updating yearly Bitcoin summary for ${year}...`);
+      await manualUpdateYearlyBitcoinSummary(year);
+      console.log(`[${date}] Yearly Bitcoin summaries updated for ${year}`);
+    } catch (yearlyError) {
+      console.error(`Error updating yearly Bitcoin summary for ${year}:`, yearlyError);
+      // Don't throw the error to avoid disrupting the main reconciliation process
+    }
   } catch (error) {
     console.error(`Error updating monthly Bitcoin summary for ${date}:`, error);
     // Don't throw the error to avoid disrupting the main reconciliation process
