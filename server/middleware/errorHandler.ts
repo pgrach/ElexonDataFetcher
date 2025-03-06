@@ -6,79 +6,102 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { ApiError, DatabaseError, ValidationError, AppError } from '../utils/errors';
 import { logger } from '../utils/logger';
-import { AppError, ApiError, DatabaseError, ValidationError } from '../utils/errors';
 
 /**
  * Global API error handler middleware
  */
 export function errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
-  // Default to internal server error
+  // Default status code and error structure
   let statusCode = 500;
-  let responseBody: any = {
+  let errorResponse = {
     error: {
-      message: 'Internal server error',
-      statusCode: 500
+      message: err.message || 'Internal server error',
+      type: err.name,
+      timestamp: new Date().toISOString()
     }
   };
   
-  // Log the error
-  if (err instanceof AppError) {
-    // Use our structured error
-    logger.logError(err, {
-      module: 'api',
-      context: {
-        path: req.path,
-        method: req.method,
-        query: req.query,
-        params: req.params,
-        ip: req.ip,
-        userId: (req as any).user?.id
-      }
-    });
+  // Enhance logging and response based on error type
+  if (err instanceof ApiError) {
+    // Handle API errors with status code
+    statusCode = err.statusCode;
+    errorResponse = err.toResponse();
     
-    if (err instanceof ApiError) {
-      // Use the API error format
-      statusCode = err.statusCode;
-      responseBody = err.toResponse();
-    } else if (err instanceof ValidationError) {
-      // Default validation errors to 400
-      statusCode = 400;
-      responseBody = {
-        error: {
-          message: err.message,
-          statusCode: 400,
-          details: process.env.NODE_ENV !== 'production' ? err.context : undefined
-        }
-      };
-    } else if (err instanceof DatabaseError) {
-      // Database errors are 500 by default
-      responseBody = {
-        error: {
-          message: 'Database operation failed',
-          statusCode: 500
-        }
-      };
-    }
-  } else {
-    // Unknown error type
-    logger.error('Unhandled error in API request', {
+    logger.error(`API Error: ${err.message}`, {
       module: 'api',
-      error: err,
       context: {
         path: req.path,
         method: req.method,
-        query: req.query,
-        params: req.params
-      }
+        statusCode,
+        ...err.context
+      },
+      error: err
+    });
+  } else if (err instanceof ValidationError) {
+    // Handle validation errors as 400 Bad Request
+    statusCode = 400;
+    errorResponse.error.type = 'ValidationError';
+    
+    logger.warning(`Validation Error: ${err.message}`, {
+      module: 'validation',
+      context: {
+        path: req.path,
+        method: req.method,
+        ...err.context
+      },
+      error: err
+    });
+  } else if (err instanceof DatabaseError) {
+    // Handle database errors (but hide implementation details)
+    statusCode = 503;
+    errorResponse.error.message = 'Database operation failed';
+    
+    // Log the actual database error details
+    logger.error(`Database Error: ${err.message}`, {
+      module: 'database',
+      context: {
+        path: req.path,
+        method: req.method,
+        ...err.context
+      },
+      error: err
+    });
+  } else if (err instanceof AppError) {
+    // Handle other application errors
+    statusCode = 500;
+    
+    logger.error(`Application Error: ${err.toLogFormat()}`, {
+      module: err.category,
+      context: {
+        path: req.path,
+        method: req.method,
+        ...err.context
+      },
+      error: err
+    });
+  } else {
+    // Handle unexpected errors
+    logger.error(`Unexpected Error: ${err.message}`, {
+      module: 'server',
+      context: {
+        path: req.path,
+        method: req.method,
+        stack: err.stack
+      },
+      error: err
     });
   }
   
-  // Scrub error details in production
-  if (process.env.NODE_ENV === 'production' && statusCode === 500) {
-    responseBody.error.message = 'Internal server error';
-    delete responseBody.error.details;
+  // In development, include stack trace
+  if (process.env.NODE_ENV !== 'production') {
+    errorResponse.error = {
+      ...errorResponse.error,
+      stack: err.stack
+    };
   }
   
-  res.status(statusCode).json(responseBody);
+  // Send error response
+  res.status(statusCode).json(errorResponse);
 }

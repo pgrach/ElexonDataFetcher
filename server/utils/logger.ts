@@ -7,9 +7,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { ErrorSeverity } from './errors';
 
-// Log levels and colors for console output
 export enum LogLevel {
   DEBUG = 'debug',
   INFO = 'info',
@@ -39,35 +37,19 @@ export interface LogEntry {
   timestamp: string;
 }
 
-// Map from ErrorSeverity to LogLevel
-const severityToLevel = {
-  [ErrorSeverity.INFO]: LogLevel.INFO,
-  [ErrorSeverity.WARNING]: LogLevel.WARNING,
-  [ErrorSeverity.ERROR]: LogLevel.ERROR,
-  [ErrorSeverity.CRITICAL]: LogLevel.CRITICAL
-} as const;
+// Helper function to get a date format string for file naming
+function getDateString(date = new Date()): string {
+  return date.toISOString().split('T')[0];
+}
 
-// Terminal colors
-const colors = {
-  reset: '\x1b[0m',
-  black: '\x1b[30m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  cyan: '\x1b[36m',
-  white: '\x1b[37m',
-  bold: '\x1b[1m'
-};
-
-// Map log levels to colors
-const levelColors: Record<LogLevel, string> = {
-  [LogLevel.DEBUG]: colors.cyan,
-  [LogLevel.INFO]: colors.green,
-  [LogLevel.WARNING]: colors.yellow,
-  [LogLevel.ERROR]: colors.red,
-  [LogLevel.CRITICAL]: `${colors.red}${colors.bold}`
+// Color codes for console output
+const consoleColors = {
+  [LogLevel.DEBUG]: '\x1b[36m', // Cyan
+  [LogLevel.INFO]: '\x1b[32m',  // Green
+  [LogLevel.WARNING]: '\x1b[33m', // Yellow
+  [LogLevel.ERROR]: '\x1b[31m', // Red
+  [LogLevel.CRITICAL]: '\x1b[41m\x1b[37m', // White on Red background
+  reset: '\x1b[0m'
 };
 
 /**
@@ -93,29 +75,22 @@ class Logger {
    * Log a message
    */
   log(message: string, options: LogOptions = {}): void {
-    const {
-      level = LogLevel.INFO,
-      module = 'app',
-      context = {},
-      error,
-      timestamp = new Date()
-    } = options;
+    const timestamp = options.timestamp || new Date();
     
-    // Format the log entry
     const entry: LogEntry = {
       message,
-      level,
-      module,
-      context,
+      level: options.level || LogLevel.INFO,
+      module: options.module || 'app',
+      context: options.context,
       timestamp: timestamp.toISOString()
     };
     
-    // Add error details if provided
-    if (error) {
+    // Add error information if provided
+    if (options.error) {
       entry.error = {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
+        message: options.error.message,
+        stack: options.error.stack,
+        name: options.error.name
       };
     }
     
@@ -134,19 +109,19 @@ class Logger {
   debug(message: string, options: Omit<LogOptions, 'level'> = {}): void {
     this.log(message, { ...options, level: LogLevel.DEBUG });
   }
-  
+
   info(message: string, options: Omit<LogOptions, 'level'> = {}): void {
     this.log(message, { ...options, level: LogLevel.INFO });
   }
-  
+
   warning(message: string, options: Omit<LogOptions, 'level'> = {}): void {
     this.log(message, { ...options, level: LogLevel.WARNING });
   }
-  
+
   error(message: string, options: Omit<LogOptions, 'level'> = {}): void {
     this.log(message, { ...options, level: LogLevel.ERROR });
   }
-  
+
   critical(message: string, options: Omit<LogOptions, 'level'> = {}): void {
     this.log(message, { ...options, level: LogLevel.CRITICAL });
   }
@@ -155,36 +130,19 @@ class Logger {
    * Log an error object
    */
   logError(error: Error, options: Omit<LogOptions, 'error'> = {}): void {
-    // Check if the error has severity property and use it to determine log level
-    let level = LogLevel.ERROR;
-    if ((error as any).severity && 
-        typeof (error as any).severity === 'string' && 
-        Object.values(ErrorSeverity).includes((error as any).severity)) {
-      const severity = (error as any).severity as ErrorSeverity;
-      level = severityToLevel[severity] || LogLevel.ERROR;
-    }
-    
-    this.log(
-      error.message,
-      {
-        ...options,
-        level,
-        error,
-        context: {
-          ...options.context,
-          ...((error as any)['context'] || {})
-        }
-      }
-    );
+    this.error(error.message, { ...options, error });
   }
   
   /**
    * Get the current log file name based on date
    */
   private getLogFileName(): string {
-    const date = new Date();
-    const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    return path.join(this.logDir, `app_${formattedDate}.log`);
+    const date = getDateString();
+    const fileName = options?.module ? 
+      `${options.module}_${date}.log` : 
+      `app_${date}.log`;
+    
+    return path.join(this.logDir, fileName);
   }
   
   /**
@@ -192,22 +150,30 @@ class Logger {
    */
   private writeToFile(entry: LogEntry): void {
     try {
-      const logFileName = this.getLogFileName();
+      // Determine the current log file
+      const logFile = path.join(this.logDir, `app_${getDateString()}.log`);
       
-      // If log file has changed, close current stream and open new one
-      if (this.currentLogFile !== logFileName) {
-        if (this.currentLogStream) {
-          this.currentLogStream.end();
-        }
-        
-        this.currentLogFile = logFileName;
-        this.currentLogStream = fs.createWriteStream(logFileName, { flags: 'a' });
+      // If the log file has changed, close the current stream
+      if (this.currentLogFile !== logFile && this.currentLogStream) {
+        this.currentLogStream.end();
+        this.currentLogStream = null;
       }
       
-      // Write the entry as JSON
-      this.currentLogStream!.write(JSON.stringify(entry) + '\n');
+      // Open a new stream if needed
+      if (!this.currentLogStream) {
+        this.currentLogFile = logFile;
+        this.currentLogStream = fs.createWriteStream(logFile, { flags: 'a' });
+      }
+      
+      // Convert entry to a string, pretty-print with newlines and tabs
+      const entryString = JSON.stringify(entry, null, 2);
+      
+      // Write to the log file
+      this.currentLogStream.write(`${entryString}\n`);
     } catch (err) {
-      console.error(`Failed to write to log file: ${err}`);
+      // If logging to file fails, fallback to console
+      console.error('Failed to write to log file:', err);
+      console.error('Original log entry:', entry);
     }
   }
   
@@ -215,34 +181,34 @@ class Logger {
    * Write log entry to console with colors
    */
   private writeToConsole(entry: LogEntry): void {
-    try {
-      const levelColor = levelColors[entry.level] || colors.reset;
-      const timestamp = entry.timestamp.split('T')[1].replace('Z', '');
-      
-      // Format: [TIMESTAMP] [LEVEL] [MODULE] MESSAGE
-      const prefix = `${colors.cyan}[${timestamp}]${colors.reset} ${levelColor}[${entry.level.toUpperCase()}]${colors.reset} ${colors.blue}[${entry.module}]${colors.reset}`;
-      
-      // Basic message
-      console.log(`${prefix} ${entry.message}`);
-      
-      // Context (if non-empty and in debug/error modes)
-      if (entry.level === LogLevel.DEBUG || entry.level === LogLevel.ERROR || entry.level === LogLevel.CRITICAL) {
-        if (Object.keys(entry.context || {}).length > 0) {
-          console.log(`${colors.cyan}Context:${colors.reset}`, entry.context);
-        }
-      }
-      
-      // Error stack (if present)
-      if (entry.error?.stack && (entry.level === LogLevel.ERROR || entry.level === LogLevel.CRITICAL)) {
-        console.log(`${colors.red}Stack:${colors.reset} ${entry.error.stack}`);
-      }
-    } catch (err) {
-      console.error(`Failed to write to console: ${err}`);
+    const color = consoleColors[entry.level] || '';
+    const timestamp = new Date(entry.timestamp).toLocaleTimeString();
+    
+    // Format the main log line
+    console.log(
+      `${color}[${entry.level.toUpperCase()}]${consoleColors.reset} ` +
+      `[${timestamp}] ` +
+      `[${entry.module}] ${entry.message}`
+    );
+    
+    // If there's context, print it indented
+    if (entry.context && Object.keys(entry.context).length > 0) {
+      console.log('  Context:', entry.context);
+    }
+    
+    // If there's an error, print the stack trace
+    if (entry.error?.stack) {
+      console.log('  Error Stack:', entry.error.stack);
     }
   }
 }
 
-// Create and export a singleton logger instance
 export const logger = new Logger();
 
-// No need to re-export the types as they are already exported above
+// For convenience, export the logger methods directly
+export const debug = logger.debug.bind(logger);
+export const info = logger.info.bind(logger);
+export const warning = logger.warning.bind(logger);
+export const error = logger.error.bind(logger);
+export const critical = logger.critical.bind(logger);
+export const logError = logger.logError.bind(logger);

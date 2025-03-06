@@ -6,9 +6,9 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
 
-// Add custom property to Response for tracking
 interface RequestWithId extends Request {
   requestId?: string;
 }
@@ -17,47 +17,53 @@ interface RequestWithId extends Request {
  * Request logger middleware
  */
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
-  // Record request start time
-  const startTime = Date.now();
+  const requestId = uuidv4();
+  const requestWithId = req as RequestWithId;
+  requestWithId.requestId = requestId;
   
-  // Generate request ID for correlation
-  const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-  (req as RequestWithId).requestId = requestId;
-  req.headers['x-request-id'] = requestId;
+  // Add request ID to response headers
+  res.setHeader('X-Request-ID', requestId);
   
-  // Log request received
-  logger.info(`Request received: ${req.method} ${req.path}`, {
-    module: 'api',
+  // Log the incoming request
+  logger.info(`${req.method} ${req.originalUrl}`, {
+    module: 'request',
     context: {
       requestId,
       method: req.method,
-      path: req.originalUrl || req.url,
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
+      url: req.originalUrl,
+      path: req.path,
       query: req.query,
-      params: req.params
+      params: req.params,
+      ip: req.ip,
+      userAgent: req.get('user-agent')
     }
   });
   
-  // Log response when it completes
+  // Track response time and status
+  const startTime = Date.now();
+  
+  // Track completion
   res.on('finish', () => {
-    const responseTime = Date.now() - startTime;
+    const duration = Date.now() - startTime;
+    const statusCode = res.statusCode;
     
-    // Log with appropriate level based on status code
-    const logLevel = 
-      res.statusCode >= 500 ? 'error' :
-      res.statusCode >= 400 ? 'warning' : 'info';
+    // Define log level based on status code
+    const isError = statusCode >= 500;
+    const isWarning = statusCode >= 400 && statusCode < 500;
     
-    logger[logLevel as 'info' | 'warning' | 'error'](`Request completed: ${req.method} ${req.path} ${res.statusCode} (${responseTime}ms)`, {
-      module: 'api',
+    const logFn = isError ? 
+      logger.error.bind(logger) : 
+      (isWarning ? logger.warning.bind(logger) : logger.debug.bind(logger));
+    
+    // Log the response
+    logFn(`${req.method} ${req.originalUrl} ${statusCode} ${duration}ms`, {
+      module: 'response',
       context: {
         requestId,
         method: req.method,
-        path: req.originalUrl || req.url,
-        statusCode: res.statusCode,
-        responseTime,
-        requestSize: req.headers['content-length'] ? 
-          parseInt(req.headers['content-length'] as string, 10) : undefined
+        url: req.originalUrl,
+        statusCode,
+        duration
       }
     });
   });

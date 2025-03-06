@@ -49,32 +49,15 @@ export class AppError extends Error {
     this.severity = options.severity || ErrorSeverity.ERROR;
     this.category = options.category || ErrorCategory.UNKNOWN;
     this.context = options.context || {};
-    this.originalError = options.originalError;
     this.timestamp = new Date();
-    
-    // Capture stack trace
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, this.constructor);
-    }
+    this.originalError = options.originalError;
   }
   
   /**
    * Format error for logging
    */
   toLogFormat(): string {
-    return JSON.stringify({
-      name: this.name,
-      message: this.message,
-      severity: this.severity,
-      category: this.category,
-      context: this.context,
-      timestamp: this.timestamp.toISOString(),
-      stack: this.stack,
-      originalError: this.originalError ? {
-        message: this.originalError.message,
-        stack: this.originalError.stack
-      } : undefined
-    }, null, 2);
+    return `[${this.severity.toUpperCase()}] [${this.category}] ${this.message}`;
   }
 }
 
@@ -93,21 +76,21 @@ export class DatabaseError extends AppError {
    * Create DatabaseError from pg error
    */
   static fromPgError(error: any, context: ErrorContext = {}): DatabaseError {
-    return new DatabaseError(
-      `Database error: ${error.message}`,
-      {
-        severity: ErrorSeverity.ERROR,
-        context: {
-          ...context,
-          code: error.code,
-          detail: error.detail,
-          hint: error.hint,
-          position: error.position,
-          table: error.table
-        },
-        originalError: error
-      }
-    );
+    const message = error.message || 'Unknown database error';
+    const severity = error.code?.startsWith('08') ? 
+      ErrorSeverity.CRITICAL : ErrorSeverity.ERROR;
+    
+    return new DatabaseError(message, {
+      severity,
+      context: {
+        ...context,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint,
+        position: error.position
+      },
+      originalError: error
+    });
   }
 }
 
@@ -133,8 +116,7 @@ export class ApiError extends AppError {
       error: {
         message: this.message,
         statusCode: this.statusCode,
-        category: this.category,
-        ...(process.env.NODE_ENV !== 'production' ? { details: this.context } : {})
+        timestamp: this.timestamp.toISOString()
       }
     };
   }
@@ -148,7 +130,7 @@ export class ValidationError extends AppError {
     super(message, {
       ...options,
       category: ErrorCategory.VALIDATION,
-      severity: ErrorSeverity.WARNING
+      severity: options.severity || ErrorSeverity.WARNING
     });
   }
   
@@ -156,16 +138,15 @@ export class ValidationError extends AppError {
    * Create from Zod error
    */
   static fromZodError(error: any, context: ErrorContext = {}): ValidationError {
-    return new ValidationError(
-      `Validation error: ${error.message}`,
-      {
-        context: {
-          ...context,
-          issues: error.errors
-        },
-        originalError: error
-      }
-    );
+    const message = error.errors?.[0]?.message || 'Validation failed';
+    
+    return new ValidationError(message, {
+      context: {
+        ...context,
+        validationErrors: error.errors
+      },
+      originalError: error
+    });
   }
 }
 
@@ -184,18 +165,19 @@ export class NetworkError extends AppError {
    * Create from fetch/axios error
    */
   static fromFetchError(error: any, url: string, context: ErrorContext = {}): NetworkError {
-    return new NetworkError(
-      `Network error: ${error.message}`,
-      {
-        context: {
-          ...context,
-          url,
-          status: error.status || error.response?.status,
-          statusText: error.statusText || error.response?.statusText
-        },
-        originalError: error
-      }
-    );
+    const message = error.message || `Request to ${url} failed`;
+    const isTimeout = message.includes('timeout') || message.includes('ETIMEDOUT');
+    
+    return new NetworkError(message, {
+      severity: isTimeout ? ErrorSeverity.WARNING : ErrorSeverity.ERROR,
+      context: {
+        ...context,
+        url,
+        status: error.status || error.response?.status,
+        statusText: error.statusText || error.response?.statusText
+      },
+      originalError: error
+    });
   }
 }
 
@@ -230,7 +212,8 @@ export class ConfigurationError extends AppError {
   constructor(message: string, options: ErrorOptions = {}) {
     super(message, {
       ...options,
-      category: ErrorCategory.CONFIGURATION
+      category: ErrorCategory.CONFIGURATION,
+      severity: options.severity || ErrorSeverity.CRITICAL
     });
   }
 }
