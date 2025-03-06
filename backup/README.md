@@ -20,6 +20,18 @@ This directory contains files that have been moved from the active codebase as p
 - **server_scripts/auditDifficulty.ts**: One-time validation script for difficulty data.
 - **server_scripts/auditHistoricalData.ts**: Historical data audit script.
 - **server_scripts/test-dynamo.ts**: Test script for DynamoDB functionality.
+- **updateLeadPartyNames.ts**: Script with broken dependency - attempts to import a non-existent function from curtailment service.
+- **updateDifficulty.ts**: One-time script to update Bitcoin calculations for a specific date (2025-02-10) with corrected difficulty.
+- **reprocessMonthlySummaries.ts**: One-time utility for bulk recalculation of monthly summaries for a specific date range.
+
+## Remaining Active Scripts
+
+The following scripts remain in the main codebase as they are used for regular maintenance tasks:
+
+- **updateBmuMapping.ts**: Updates BMU mapping data file from the Elexon API. This is a maintenance script that may need to be run periodically.
+- **ingestMonthlyData.ts**: Processes monthly data ingestion for settlement periods.
+- **updateHistoricalCalculations.ts**: Updates historical bitcoin calculations with proper batching and validation.
+- **processDifficultyMismatch.ts**: Detects and corrects difficulty mismatches in historical records.
 
 ## Rationale
 
