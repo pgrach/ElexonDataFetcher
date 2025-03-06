@@ -64,7 +64,7 @@ async function main() {
       .orderBy(curtailmentRecords.settlementPeriod);
     
     const periodNumbers = periods.map(p => p.period);
-    const missingPeriods = [];
+    const missingPeriods: number[] = [];
     
     // Check for all periods 1-48
     for (let i = 1; i <= 48; i++) {
@@ -92,7 +92,7 @@ async function main() {
         .orderBy(curtailmentRecords.settlementPeriod);
       
       const updatedPeriodNumbers = updatedPeriods.map(p => p.period);
-      const stillMissingPeriods = [];
+      const stillMissingPeriods: number[] = [];
       
       for (let i = 1; i <= 48; i++) {
         if (!updatedPeriodNumbers.includes(i)) {

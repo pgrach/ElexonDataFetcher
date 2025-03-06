@@ -36,7 +36,7 @@ async function checkForMissingPeriods(date: string): Promise<number[]> {
     .orderBy(curtailmentRecords.settlementPeriod);
   
   const periodNumbers = periods.map(p => p.period);
-  const missingPeriods = [];
+  const missingPeriods: number[] = [];
   
   // Check for all periods 1-48
   for (let i = 1; i <= 48; i++) {
@@ -80,7 +80,7 @@ async function main() {
         recordCount: count(curtailmentRecords.id),
         totalVolume: sql<string>`SUM(ABS(volume::numeric))`,
         totalPayment: sql<string>`SUM(payment::numeric)`,
-        uniqueFarms: sql<number>`COUNT(DISTINCT bmu_id)`,
+        uniqueFarms: sql<number>`COUNT(DISTINCT farm_id)`,
         uniquePeriods: sql<number>`COUNT(DISTINCT settlement_period)`
       })
       .from(curtailmentRecords)
