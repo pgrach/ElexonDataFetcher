@@ -1,30 +1,10 @@
-# Bitcoin Mining Analytics Platform
+# Bitcoin Mining Reingestion & Reconciliation System
 
-An advanced Bitcoin and renewable energy analytics platform providing comprehensive cryptocurrency and wind farm performance insights through sophisticated data reconciliation and real-time tracking technologies.
+This system provides a comprehensive solution for reingesting curtailment data from the Elexon API and calculating Bitcoin mining potential across all settlement periods for multiple miner models.
 
 ## Overview
 
 The Bitcoin Mining Analytics platform processes curtailment data from wind farms and calculates the potential Bitcoin that could have been mined if that curtailed energy had been used for Bitcoin mining. This system handles the reingestion of data for specific dates, ensuring all 48 settlement periods are properly processed and Bitcoin calculations are performed for multiple miner models.
-
-## Project Structure
-
-The project has been reorganized into a more maintainable directory structure:
-
-- `client/` - React frontend application
-- `server/` - Node.js/Express backend API
-- `db/` - Database schemas and connection setup using Drizzle ORM
-- `config/` - Configuration files for the application
-- `scripts/` - Utility scripts organized by function
-  - `scripts/reconciliation/` - Scripts for data reconciliation processes
-  - `scripts/data-processing/` - Scripts for data ingestion and processing
-  - `scripts/migrations/` - Database migration scripts
-- `migrations/` - Raw SQL migration files
-- `data/` - Data files and checkpoints
-  - `data/checkpoints/` - Checkpoint files for long-running processes
-- `logs/` - Application logs organized by date and subsystem
-- `backup/` - Archived files kept for reference
-
-Each directory contains a README.md file explaining its contents and usage.
 
 ## Features
 
