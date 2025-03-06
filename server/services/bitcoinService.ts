@@ -1,7 +1,7 @@
 import { BitcoinCalculation, MinerStats, minerModels, BMUCalculation, DEFAULT_DIFFICULTY } from '../types/bitcoin';
 import axios from 'axios';
 import { db } from "@db";
-import { curtailmentRecords, historicalBitcoinCalculations, bitcoinMonthlySummaries } from "@db/schema";
+import { curtailmentRecords, historicalBitcoinCalculations, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
 import { and, eq, between, sql, inArray } from "drizzle-orm";
 import { format, parseISO, eachDayOfInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { getDifficultyData } from './dynamodbService';
@@ -398,6 +398,15 @@ async function manualUpdateMonthlyBitcoinSummary(yearMonth: string): Promise<voi
     console.log(`No summaries found for ${yearMonth} after update attempt`);
   }
   
+  // Since a monthly summary was updated, also update the yearly summary
+  const year = yearMonth.substring(0, 4);
+  try {
+    console.log(`Updating yearly summary for ${year} based on monthly changes...`);
+    await manualUpdateYearlyBitcoinSummary(year);
+  } catch (error) {
+    console.error(`Error updating yearly summary for ${year}:`, error);
+  }
+  
   console.log(`=== Monthly Summary Update Complete ===\n`);
 }
 
@@ -430,11 +439,139 @@ if (process.argv[1].includes('bitcoinService.ts')) {
   })();
 }
 
+/**
+ * Calculate yearly Bitcoin summary from monthly summaries
+ * This aggregates all monthly data for a specific year and miner model
+ */
+async function calculateYearlyBitcoinSummary(year: string, minerModel: string): Promise<void> {
+  console.log(`Calculating yearly Bitcoin summary for ${year} with ${minerModel}`);
+  
+  try {
+    // Find all monthly summaries for this year and miner model
+    const monthlySummaries = await db
+      .select({
+        yearMonth: bitcoinMonthlySummaries.yearMonth,
+        bitcoinMined: bitcoinMonthlySummaries.bitcoinMined,
+        averageDifficulty: bitcoinMonthlySummaries.averageDifficulty
+      })
+      .from(bitcoinMonthlySummaries)
+      .where(
+        and(
+          sql`${bitcoinMonthlySummaries.yearMonth} LIKE ${year + '-%'}`,
+          eq(bitcoinMonthlySummaries.minerModel, minerModel)
+        )
+      )
+      .orderBy(bitcoinMonthlySummaries.yearMonth);
+    
+    if (monthlySummaries.length === 0) {
+      console.log(`No monthly summaries found for ${year} with ${minerModel}`);
+      return;
+    }
+    
+    console.log(`Found ${monthlySummaries.length} monthly summaries for ${year}`);
+    
+    // Calculate totals and averages
+    let totalBitcoin = 0;
+    let totalDifficulty = 0;
+    
+    for (const summary of monthlySummaries) {
+      totalBitcoin += Number(summary.bitcoinMined);
+      totalDifficulty += Number(summary.averageDifficulty);
+    }
+    
+    const avgDifficulty = totalDifficulty / monthlySummaries.length;
+    
+    // Check if yearly summary already exists
+    const existingSummary = await db
+      .select()
+      .from(bitcoinYearlySummaries)
+      .where(
+        and(
+          eq(bitcoinYearlySummaries.year, year),
+          eq(bitcoinYearlySummaries.minerModel, minerModel)
+        )
+      );
+    
+    // Update or insert the yearly summary
+    if (existingSummary.length > 0) {
+      await db
+        .update(bitcoinYearlySummaries)
+        .set({
+          bitcoinMined: totalBitcoin.toString(),
+          valueAtMining: "0", // Set to 0 as this will be calculated with current price when queried
+          averageDifficulty: avgDifficulty.toString(),
+          updatedAt: new Date()
+        })
+        .where(
+          and(
+            eq(bitcoinYearlySummaries.year, year),
+            eq(bitcoinYearlySummaries.minerModel, minerModel)
+          )
+        );
+    } else {
+      await db
+        .insert(bitcoinYearlySummaries)
+        .values({
+          year,
+          minerModel,
+          bitcoinMined: totalBitcoin.toString(),
+          valueAtMining: "0", // Set to 0 as this will be calculated with current price when queried
+          averageDifficulty: avgDifficulty.toString(),
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+    }
+    
+    console.log(`Updated yearly summary for ${year}: ${totalBitcoin.toFixed(8)} BTC with ${minerModel}`);
+  } catch (error) {
+    console.error(`Error calculating yearly summary for ${year}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Manually update yearly Bitcoin summaries for a specific year
+ * This recalculates the yearly summary based on the monthly data
+ */
+async function manualUpdateYearlyBitcoinSummary(year: string): Promise<void> {
+  console.log(`\n=== Manual Yearly Bitcoin Summary Update ===`);
+  console.log(`Updating summaries for ${year}`);
+  
+  // Process all miner models
+  for (const minerModel of Object.keys(minerModels)) {
+    try {
+      console.log(`- Processing ${minerModel}`);
+      await calculateYearlyBitcoinSummary(year, minerModel);
+    } catch (error) {
+      console.error(`Error updating ${year} for ${minerModel}:`, error);
+    }
+  }
+  
+  // Verify the update was successful
+  const summaries = await db
+    .select()
+    .from(bitcoinYearlySummaries)
+    .where(eq(bitcoinYearlySummaries.year, year));
+  
+  if (summaries.length > 0) {
+    console.log(`\nVerification Results for ${year}:`);
+    for (const summary of summaries) {
+      console.log(`- ${summary.minerModel}: ${Number(summary.bitcoinMined).toFixed(8)} BTC`);
+    }
+  } else {
+    console.log(`No summaries found for ${year} after update attempt`);
+  }
+  
+  console.log(`=== Yearly Summary Update Complete ===\n`);
+}
+
 export {
   calculateBitcoinForBMU,
   processHistoricalCalculations,
   processSingleDay,
   fetch2024Difficulties,
   calculateMonthlyBitcoinSummary,
-  manualUpdateMonthlyBitcoinSummary
+  manualUpdateMonthlyBitcoinSummary,
+  calculateYearlyBitcoinSummary,
+  manualUpdateYearlyBitcoinSummary
 };

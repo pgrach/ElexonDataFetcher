@@ -38,6 +38,17 @@ export const bitcoinMonthlySummaries = pgTable("bitcoin_monthly_summaries", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const bitcoinYearlySummaries = pgTable("bitcoin_yearly_summaries", {
+  id: serial("id").primaryKey(),
+  year: text("year").notNull(),
+  minerModel: text("miner_model").notNull(),
+  bitcoinMined: numeric("bitcoin_mined").notNull(),
+  valueAtMining: numeric("value_at_mining").notNull(),
+  averageDifficulty: numeric("average_difficulty").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const dailySummaries = pgTable("daily_summaries", {
   summaryDate: date("summary_date").primaryKey(),
   totalCurtailedEnergy: numeric("total_curtailed_energy"),
@@ -130,6 +141,8 @@ export const insertHistoricalBitcoinCalculationSchema = createInsertSchema(histo
 export const selectHistoricalBitcoinCalculationSchema = createSelectSchema(historicalBitcoinCalculations);
 export const insertBitcoinMonthlySummarySchema = createInsertSchema(bitcoinMonthlySummaries);
 export const selectBitcoinMonthlySummarySchema = createSelectSchema(bitcoinMonthlySummaries);
+export const insertBitcoinYearlySummarySchema = createInsertSchema(bitcoinYearlySummaries);
+export const selectBitcoinYearlySummarySchema = createSelectSchema(bitcoinYearlySummaries);
 
 // @deprecated - Schemas for materialized view tables
 // Keeping these for backward compatibility
@@ -156,6 +169,8 @@ export type HistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.
 export type InsertHistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferInsert;
 export type BitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferSelect;
 export type InsertBitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferInsert;
+export type BitcoinYearlySummary = typeof bitcoinYearlySummaries.$inferSelect;
+export type InsertBitcoinYearlySummary = typeof bitcoinYearlySummaries.$inferInsert;
 
 // @deprecated - Types for materialized view tables
 // Keeping these for backward compatibility
