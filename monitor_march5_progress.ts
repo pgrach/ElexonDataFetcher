@@ -57,12 +57,14 @@ async function main() {
   console.log(`Period | Records | Volume (MWh) | Payment (£)`);
   console.log(`-------|---------|-------------|------------`);
   for (const period of periodStats) {
-    console.log(`${period.period.toString().padStart(6, ' ')} | ${period.recordCount.toString().padStart(7, ' ')} | ${period.totalVolume?.toFixed(2).padStart(11, ' ')} | ${period.totalPayment?.toFixed(2).padStart(10, ' ')}`);
+    const periodVolume = Number(period.totalVolume || 0).toFixed(2);
+    const periodPayment = Number(period.totalPayment || 0).toFixed(2);
+    console.log(`${period.period.toString().padStart(6, ' ')} | ${period.recordCount.toString().padStart(7, ' ')} | ${periodVolume.padStart(11, ' ')} | ${periodPayment.padStart(10, ' ')}`);
   }
   
   // Find missing periods
   const processedPeriods = new Set(periodStats.map(p => p.period));
-  const missingPeriods = [];
+  const missingPeriods: number[] = [];
   for (let i = 1; i <= 48; i++) {
     if (!processedPeriods.has(i)) {
       missingPeriods.push(i);

@@ -104,7 +104,7 @@ async function main() {
               totalBitcoin += scaledBitcoin;
 
               // Insert the calculation into the database
-              await db.insert(historicalBitcoinCalculations).values({
+              await db.insert(historicalBitcoinCalculations).values([{
                 settlementDate: DATE_TO_PROCESS,
                 settlementPeriod: period.period,
                 farmId: farm.farmId,
@@ -113,7 +113,7 @@ async function main() {
                 curtailedMwh: curtailedMwh.toString(),
                 difficulty: difficulty.toString(),
                 calculatedAt: new Date(),
-              });
+              }]);
 
               insertedCount++;
             } catch (error) {
@@ -175,7 +175,7 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
 
     if (summary.length > 0 && summary[0].totalBitcoin) {
       // Insert the monthly summary
-      await db.insert(bitcoinMonthlySummaries).values({
+      await db.insert(bitcoinMonthlySummaries).values([{
         yearMonth: yearMonth,
         minerModel: minerModel,
         bitcoinMined: summary[0].totalBitcoin,
@@ -183,7 +183,7 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
         difficulty: summary[0].difficulty || '0',
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      }]);
 
       console.log(`✅ Monthly summary for ${yearMonth} ${minerModel}: ${parseFloat(summary[0].totalBitcoin).toFixed(8)} BTC from ${parseFloat(summary[0].totalCurtailedMwh || '0').toFixed(2)} MWh`);
     } else {
