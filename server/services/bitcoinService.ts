@@ -361,10 +361,80 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
   }
 }
 
+/**
+ * Manually update monthly Bitcoin summaries for a specific month
+ * This is used to fix the current issue with March 2025 and can be used
+ * for any month that needs to be recalculated.
+ */
+async function manualUpdateMonthlyBitcoinSummary(yearMonth: string): Promise<void> {
+  console.log(`\n=== Manual Monthly Bitcoin Summary Update ===`);
+  console.log(`Updating summaries for ${yearMonth}`);
+  
+  // Process all miner models
+  for (const minerModel of Object.keys(minerModels)) {
+    try {
+      console.log(`- Processing ${minerModel}`);
+      await calculateMonthlyBitcoinSummary(yearMonth, minerModel);
+    } catch (error) {
+      console.error(`Error updating ${yearMonth} for ${minerModel}:`, error);
+    }
+  }
+  
+  // Verify results
+  const summaries = await db
+    .select({
+      minerModel: bitcoinMonthlySummaries.minerModel,
+      bitcoinMined: bitcoinMonthlySummaries.bitcoinMined
+    })
+    .from(bitcoinMonthlySummaries)
+    .where(eq(bitcoinMonthlySummaries.yearMonth, yearMonth));
+    
+  if (summaries.length > 0) {
+    console.log(`\nVerification Results for ${yearMonth}:`);
+    for (const summary of summaries) {
+      console.log(`- ${summary.minerModel}: ${Number(summary.bitcoinMined).toFixed(8)} BTC`);
+    }
+  } else {
+    console.log(`No summaries found for ${yearMonth} after update attempt`);
+  }
+  
+  console.log(`=== Monthly Summary Update Complete ===\n`);
+}
+
+// Process command line arguments if run directly
+if (process.argv[1].includes('bitcoinService.ts')) {
+  const args = process.argv.slice(2);
+  
+  (async () => {
+    try {
+      if (args.includes('--update-monthly') && args.length > 1) {
+        const yearMonthIndex = args.indexOf('--update-monthly') + 1;
+        if (yearMonthIndex < args.length) {
+          const yearMonth = args[yearMonthIndex];
+          if (/^\d{4}-\d{2}$/.test(yearMonth)) {
+            await manualUpdateMonthlyBitcoinSummary(yearMonth);
+            process.exit(0);
+          } else {
+            console.error('Invalid year-month format. Must be YYYY-MM.');
+            process.exit(1);
+          }
+        }
+      } else {
+        console.log('Usage: npx tsx bitcoinService.ts --update-monthly YYYY-MM');
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      process.exit(1);
+    }
+  })();
+}
+
 export {
   calculateBitcoinForBMU,
   processHistoricalCalculations,
   processSingleDay,
   fetch2024Difficulties,
-  calculateMonthlyBitcoinSummary
+  calculateMonthlyBitcoinSummary,
+  manualUpdateMonthlyBitcoinSummary
 };

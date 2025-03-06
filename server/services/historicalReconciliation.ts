@@ -4,7 +4,7 @@ import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays, subMonth
 import { processDailyCurtailment } from "./curtailment";
 import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
-import { processSingleDay } from "./bitcoinService";
+import { processSingleDay, calculateMonthlyBitcoinSummary } from "./bitcoinService";
 
 // Configuration constants
 const MAX_CONCURRENT_DAYS = 5;
@@ -104,6 +104,32 @@ async function needsReprocessing(date: string): Promise<boolean> {
   }
 }
 
+/**
+ * Update the monthly Bitcoin summary for the given date
+ * This ensures monthly summaries stay in sync with daily calculations
+ */
+async function updateMonthlyBitcoinSummary(date: string): Promise<void> {
+  try {
+    // Extract year and month from the given date
+    const yearMonth = date.substring(0, 7); // "YYYY-MM" format
+    console.log(`[${date}] Updating monthly Bitcoin summary for ${yearMonth}...`);
+
+    // Update monthly summaries for all miner models
+    for (const minerModel of MINER_MODEL_LIST) {
+      await calculateMonthlyBitcoinSummary(yearMonth, minerModel)
+        .catch(error => {
+          console.error(`Error updating monthly Bitcoin summary for ${yearMonth} with ${minerModel}:`, error);
+          // Continue with other models even if one fails
+        });
+    }
+
+    console.log(`[${date}] Monthly Bitcoin summaries updated for ${yearMonth}`);
+  } catch (error) {
+    console.error(`Error updating monthly Bitcoin summary for ${date}:`, error);
+    // Don't throw the error to avoid disrupting the main reconciliation process
+  }
+}
+
 export async function reconcileDay(date: string): Promise<void> {
   try {
     if (await needsReprocessing(date)) {
@@ -134,6 +160,9 @@ export async function reconcileDay(date: string): Promise<void> {
       }
 
       console.log(`[${date}] Bitcoin calculations updated for models: ${minerModels.join(', ')}`);
+      
+      // Update monthly Bitcoin summaries after daily calculations are updated
+      await updateMonthlyBitcoinSummary(date);
     } else {
       console.log(`[${date}] Data is up to date`);
     }
