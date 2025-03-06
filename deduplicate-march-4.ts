@@ -10,7 +10,7 @@ import { db } from "./db";
 import { findDuplicateRecords, deduplicateRecords, previewDeduplication } from "./server/utils/deduplication";
 import { historicalBitcoinCalculations } from "./db/schema";
 import { eq, between, sql } from "drizzle-orm";
-import { processBitcoinCalculations } from "./server/services/bitcoinService";
+import { processSingleDay } from "./server/services/bitcoinService";
 
 // Configuration
 const TARGET_DATE = '2025-03-04';
@@ -91,7 +91,7 @@ async function main() {
     // Process Bitcoin calculations for all miner models
     for (const minerModel of MINER_MODELS) {
       log(`Calculating Bitcoin for ${minerModel}...`, "info");
-      await processBitcoinCalculations(TARGET_DATE, minerModel);
+      await processSingleDay(TARGET_DATE, minerModel);
       log(`Completed Bitcoin calculations for ${minerModel}`, "success");
     }
 

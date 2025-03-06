@@ -9,6 +9,7 @@ import { db } from "../../db";
 import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "../../db/schema";
 import { eq, sql, count, and } from "drizzle-orm";
 import { logger } from "./logger";
+import { sql as drizzleSql } from "drizzle-orm";
 
 /**
  * Interface representing duplicate record groups
@@ -30,6 +31,16 @@ interface DeduplicationResult {
   recordsRemoved: number;
   volumeReduced: number;
   paymentReduced: number;
+}
+
+/**
+ * Helper to safely parse SQL query results
+ */
+function parseQueryResult<T>(result: any, defaultValue: T): T {
+  if (!result || !Array.isArray(result) || result.length === 0) {
+    return defaultValue;
+  }
+  return result[0] as unknown as T;
 }
 
 /**
@@ -68,8 +79,10 @@ export async function findDuplicateRecords(date: string): Promise<DuplicateGroup
     `);
 
     return duplicateGroups as unknown as DuplicateGroup[];
-  } catch (error) {
-    logger.error(`Error finding duplicate records for date ${date}`, { error });
+  } catch (error: unknown) {
+    logger.error(`Error finding duplicate records for date ${date}`, { 
+      error: error instanceof Error ? error : new Error(String(error)) 
+    });
     throw error;
   }
 }
@@ -102,11 +115,19 @@ export async function getDuplicateStatistics(date: string): Promise<{
     FROM duplicate_groups
   `);
 
-  const stats = result[0] as {
+  interface StatResult {
     totalDuplicateGroups: string;
     totalDuplicateRecords: string;
     totalDuplicateVolume: string;
+  }
+
+  const defaultStats: StatResult = {
+    totalDuplicateGroups: "0",
+    totalDuplicateRecords: "0",
+    totalDuplicateVolume: "0"
   };
+
+  const stats = parseQueryResult<StatResult>(result, defaultStats);
 
   return {
     totalDuplicateGroups: parseInt(stats.totalDuplicateGroups || '0'),
@@ -132,9 +153,23 @@ export async function deduplicateRecords(date: string): Promise<DeduplicationRes
       WHERE settlement_date = ${date}
     `);
     
-    const beforeVolume = parseFloat(beforeTotals[0].total_volume || '0');
-    const beforePayment = parseFloat(beforeTotals[0].total_payment || '0');
-    const beforeCount = parseInt(beforeTotals[0].record_count || '0');
+    interface TotalResult {
+      total_volume: string;
+      total_payment: string;
+      record_count: string;
+    }
+
+    const defaultTotals: TotalResult = {
+      total_volume: "0",
+      total_payment: "0",
+      record_count: "0"
+    };
+    
+    const beforeData = parseQueryResult<TotalResult>(beforeTotals, defaultTotals);
+    
+    const beforeVolume = parseFloat(beforeData.total_volume || '0');
+    const beforePayment = parseFloat(beforeData.total_payment || '0');
+    const beforeCount = parseInt(beforeData.record_count || '0');
     
     // Get duplicate groups
     const duplicateGroups = await findDuplicateRecords(date);
@@ -167,9 +202,11 @@ export async function deduplicateRecords(date: string): Promise<DeduplicationRes
       WHERE settlement_date = ${date}
     `);
     
-    const afterVolume = parseFloat(afterTotals[0].total_volume || '0');
-    const afterPayment = parseFloat(afterTotals[0].total_payment || '0');
-    const afterCount = parseInt(afterTotals[0].record_count || '0');
+    const afterData = parseQueryResult<TotalResult>(afterTotals, defaultTotals);
+    
+    const afterVolume = parseFloat(afterData.total_volume || '0');
+    const afterPayment = parseFloat(afterData.total_payment || '0');
+    const afterCount = parseInt(afterData.record_count || '0');
     
     const volumeReduced = beforeVolume - afterVolume;
     const paymentReduced = beforePayment - afterPayment;
@@ -178,8 +215,7 @@ export async function deduplicateRecords(date: string): Promise<DeduplicationRes
     await db.update(dailySummaries)
       .set({
         totalCurtailedEnergy: afterVolume.toString(),
-        totalPayment: afterPayment.toString(),
-        updatedAt: new Date()
+        totalPayment: afterPayment.toString()
       })
       .where(eq(dailySummaries.summaryDate, date));
     
@@ -198,12 +234,11 @@ export async function deduplicateRecords(date: string): Promise<DeduplicationRes
       .from(dailySummaries)
       .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${date}::date)`);
     
-    if (monthlyTotals[0].totalCurtailedEnergy && monthlyTotals[0].totalPayment) {
+    if (monthlyTotals && monthlyTotals.length > 0 && monthlyTotals[0].totalCurtailedEnergy && monthlyTotals[0].totalPayment) {
       await db.update(monthlySummaries)
         .set({
           totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
-          totalPayment: monthlyTotals[0].totalPayment,
-          updatedAt: new Date()
+          totalPayment: monthlyTotals[0].totalPayment
         })
         .where(eq(monthlySummaries.yearMonth, yearMonth));
       
@@ -219,12 +254,11 @@ export async function deduplicateRecords(date: string): Promise<DeduplicationRes
       .from(dailySummaries)
       .where(sql`date_trunc('year', ${dailySummaries.summaryDate}::date) = date_trunc('year', ${date}::date)`);
     
-    if (yearlyTotals[0].totalCurtailedEnergy && yearlyTotals[0].totalPayment) {
+    if (yearlyTotals && yearlyTotals.length > 0 && yearlyTotals[0].totalCurtailedEnergy && yearlyTotals[0].totalPayment) {
       await db.update(yearlySummaries)
         .set({
           totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
-          totalPayment: yearlyTotals[0].totalPayment,
-          updatedAt: new Date()
+          totalPayment: yearlyTotals[0].totalPayment
         })
         .where(eq(yearlySummaries.year, year));
       
@@ -237,8 +271,10 @@ export async function deduplicateRecords(date: string): Promise<DeduplicationRes
       volumeReduced,
       paymentReduced
     };
-  } catch (error) {
-    logger.error(`Error during deduplication for date ${date}`, { error });
+  } catch (error: unknown) {
+    logger.error(`Error during deduplication for date ${date}`, { 
+      error: error instanceof Error ? error : new Error(String(error)) 
+    });
     throw error;
   }
 }
@@ -266,9 +302,23 @@ export async function previewDeduplication(date: string): Promise<{
     WHERE settlement_date = ${date}
   `);
   
-  const beforeVolume = parseFloat(beforeTotals[0].total_volume || '0');
-  const beforePayment = parseFloat(beforeTotals[0].total_payment || '0');
-  const beforeCount = parseInt(beforeTotals[0].record_count || '0');
+  interface TotalResult {
+    total_volume: string;
+    total_payment: string;
+    record_count: string;
+  }
+
+  const defaultTotals: TotalResult = {
+    total_volume: "0",
+    total_payment: "0",
+    record_count: "0"
+  };
+  
+  const beforeData = parseQueryResult<TotalResult>(beforeTotals, defaultTotals);
+  
+  const beforeVolume = parseFloat(beforeData.total_volume || '0');
+  const beforePayment = parseFloat(beforeData.total_payment || '0');
+  const beforeCount = parseInt(beforeData.record_count || '0');
   
   // Get statistics about what would be removed
   const stats = await getDuplicateStatistics(date);
@@ -313,5 +363,10 @@ export async function needsDeduplication(date: string): Promise<boolean> {
     ) as has_duplicates
   `);
   
-  return result[0].has_duplicates;
+  interface ExistsResult {
+    has_duplicates: boolean;
+  }
+  
+  const parsedResult = parseQueryResult<ExistsResult>(result, { has_duplicates: false });
+  return parsedResult.has_duplicates;
 }
