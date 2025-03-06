@@ -1,283 +1,215 @@
-import { format } from 'date-fns';
 import { db } from "./db";
-import { curtailmentRecords, dailySummaries } from "./db/schema";
-import { fetchBidsOffers } from "./server/services/elexon";
-import { eq, sql, inArray } from "drizzle-orm";
+import { curtailmentRecords } from "./db/schema";
+import { eq, sql } from "drizzle-orm";
 
 const TARGET_DATE = '2025-03-05';
-// Only check these specific periods to avoid timeout
-const PERIODS_TO_CHECK = [1, 5, 10, 15, 20];
+const EXPECTED_PERIODS = 48; // A full day should have 48 half-hour periods
 
 async function getDatabaseStats(date: string) {
   try {
-    // Get curtailment records stats
-    const curtailmentStats = await db
-      .select({
-        recordCount: sql<number>`COUNT(*)::int`,
-        periodCount: sql<number>`COUNT(DISTINCT settlement_period)::int`,
-        farmCount: sql<number>`COUNT(DISTINCT farm_id)::int`,
-        totalVolume: sql<string>`SUM(ABS(volume::numeric))::text`,
-        totalPayment: sql<string>`SUM(payment::numeric)::text`
-      })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date));
-
-    // Get counts by period
+    console.log(`\n=== Database Stats for ${date} ===`);
+    
+    // Get periods and their record counts
     const periodStats = await db
       .select({
         period: curtailmentRecords.settlementPeriod,
-        recordCount: sql<number>`COUNT(*)::int`,
-        totalVolume: sql<string>`SUM(ABS(volume::numeric))::text`,
+        count: sql<number>`count(*)::int`,
+        totalVolume: sql<string>`sum(abs(volume::numeric))::text`,
+        totalPayment: sql<string>`sum(payment::numeric)::text`,
       })
       .from(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, date))
       .groupBy(curtailmentRecords.settlementPeriod)
       .orderBy(curtailmentRecords.settlementPeriod);
-
-    // Get daily summary
-    const summary = await db
-      .select()
-      .from(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, date));
-
+    
+    // List all periods
+    console.log(`\nDetailed Period Stats:`);
+    console.log('Period | Records | Volume (MWh) | Payment (£)');
+    console.log('-------|---------|--------------|------------');
+    
+    for (const period of periodStats) {
+      console.log(`${period.period.toString().padStart(6, ' ')} | ${period.count.toString().padStart(7, ' ')} | ${parseFloat(period.totalVolume).toFixed(2).padStart(12, ' ')} | ${parseFloat(period.totalPayment).toFixed(2).padStart(12, ' ')}`);
+    }
+    
+    // Calculate totals
+    const totalStats = await db
+      .select({
+        recordCount: sql<number>`count(*)::int`,
+        periodCount: sql<number>`count(distinct settlement_period)::int`,
+        totalVolume: sql<string>`sum(abs(volume::numeric))::text`,
+        totalPayment: sql<string>`sum(payment::numeric)::text`,
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, date));
+    
+    console.log(`\nDatabase Total: ${totalStats[0].recordCount} records across ${totalStats[0].periodCount} periods`);
+    console.log(`Total Volume: ${parseFloat(totalStats[0].totalVolume).toFixed(2)} MWh`);
+    console.log(`Total Payment: £${parseFloat(totalStats[0].totalPayment).toFixed(2)}`);
+    
+    // Check for missing periods
+    const existingPeriods = new Set(periodStats.map(p => p.period));
+    const missingPeriods = [];
+    
+    for (let i = 1; i <= EXPECTED_PERIODS; i++) {
+      if (!existingPeriods.has(i)) {
+        missingPeriods.push(i);
+      }
+    }
+    
+    if (missingPeriods.length > 0) {
+      console.log(`\nMissing periods: ${missingPeriods.join(', ')}`);
+    } else {
+      console.log(`\nAll ${EXPECTED_PERIODS} periods are present in the database.`);
+    }
+    
+    // Check for unexpected periods
+    const unexpectedPeriods = [];
+    for (const period of existingPeriods) {
+      if (period < 1 || period > EXPECTED_PERIODS) {
+        unexpectedPeriods.push(period);
+      }
+    }
+    
+    if (unexpectedPeriods.length > 0) {
+      console.log(`\nUnexpected periods found: ${unexpectedPeriods.join(', ')}`);
+    }
+    
     return {
-      curtailment: curtailmentStats[0],
-      periodStats,
-      summary: summary[0]
+      date,
+      periodCount: totalStats[0].periodCount,
+      recordCount: totalStats[0].recordCount,
+      totalVolume: parseFloat(totalStats[0].totalVolume),
+      totalPayment: parseFloat(totalStats[0].totalPayment),
+      missingPeriods,
+      existingPeriods: Array.from(existingPeriods).sort((a, b) => a - b)
     };
   } catch (error) {
-    console.error('Error getting database stats:', error);
-    throw error;
+    console.error(`Error getting database stats:`, error);
+    return null;
   }
 }
 
 async function getAPIData(date: string, periodsToCheck: number[]) {
-  const apiData = {
-    recordCount: 0,
-    periodCount: new Set<number>(),
-    farmCount: new Set<string>(),
-    totalVolume: 0,
-    totalPayment: 0,
-    records: [] as any[],
-    missingRecords: [] as any[],
-    periodStats: {} as Record<number, {
-      recordCount: number,
-      totalVolume: number,
-      totalPayment: number
-    }>
-  };
-
-  console.log('\nFetching API data for selected periods...');
-
-  for (const period of periodsToCheck) {
-    try {
-      // Initialize period stats
-      apiData.periodStats[period] = {
-        recordCount: 0,
-        totalVolume: 0,
-        totalPayment: 0
-      };
-
+  try {
+    // Only for verification purposes - we'll check a few key periods
+    console.log(`\n=== API Data for ${date} (sample of ${periodsToCheck.length} periods) ===`);
+    
+    const { fetchBidsOffers } = await import('./server/services/elexon');
+    
+    const apiResults = [];
+    
+    for (const period of periodsToCheck) {
       const records = await fetchBidsOffers(date, period);
-      const validRecords = records.filter(record =>
-        record.volume < 0 && (record.soFlag || record.cadlFlag)
-      );
-
-      for (const record of validRecords) {
-        apiData.recordCount++;
-        apiData.periodCount.add(period);
-        apiData.farmCount.add(record.id);
-        apiData.totalVolume += Math.abs(record.volume);
-        apiData.totalPayment += Math.abs(record.volume) * record.originalPrice;
+      
+      if (records.length > 0) {
+        const totalVolume = records.reduce((sum, r) => sum + Math.abs(r.volume), 0);
+        const totalPayment = records.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice), 0);
         
-        // Update period stats
-        apiData.periodStats[period].recordCount++;
-        apiData.periodStats[period].totalVolume += Math.abs(record.volume);
-        apiData.periodStats[period].totalPayment += Math.abs(record.volume) * record.originalPrice;
+        apiResults.push({
+          period,
+          recordCount: records.length,
+          totalVolume: totalVolume,
+          totalPayment: totalPayment,
+        });
         
-        apiData.records.push({
-          ...record,
-          settlementPeriod: period
+        console.log(`Period ${period}: ${records.length} records, ${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)}`);
+      } else {
+        console.log(`Period ${period}: No records found in API`);
+        apiResults.push({
+          period,
+          recordCount: 0,
+          totalVolume: 0,
+          totalPayment: 0,
         });
       }
-
-      if (validRecords.length > 0) {
-        const periodVolume = validRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-        const periodPayment = validRecords.reduce((sum, r) => sum + Math.abs(r.volume) * r.originalPrice, 0);
-        console.log(`Period ${period}: ${validRecords.length} records (${periodVolume.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
-      } else {
-        console.log(`Period ${period}: No records found`);
-      }
-    } catch (error) {
-      console.error(`Error fetching period ${period}:`, error);
     }
-  }
-
-  // Now check for records in API that aren't in the database for these specific periods
-  let dbRecords: Array<{ farmId: string, period: number, volume: string }> = [];
-  
-  // Query each period individually to avoid the ANY/ALL array issue
-  for (const period of periodsToCheck) {
-    const periodRecords = await db
-      .select({
-        farmId: curtailmentRecords.farmId,
-        period: curtailmentRecords.settlementPeriod,
-        volume: curtailmentRecords.volume
-      })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, date))
-      .where(eq(curtailmentRecords.settlementPeriod, period));
     
-    dbRecords = [...dbRecords, ...periodRecords];
+    return apiResults;
+  } catch (error) {
+    console.error(`Error getting API data:`, error);
+    return null;
   }
-
-  // Create a map of existing DB records
-  const dbRecordMap = new Map();
-  for (const record of dbRecords) {
-    const key = `${record.farmId}-${record.period}`;
-    dbRecordMap.set(key, record);
-  }
-
-  // Find API records not in DB
-  for (const record of apiData.records) {
-    const key = `${record.id}-${record.settlementPeriod}`;
-    if (!dbRecordMap.has(key)) {
-      apiData.missingRecords.push(record);
-    }
-  }
-
-  return {
-    date,
-    recordCount: apiData.recordCount,
-    periodCount: apiData.periodCount.size,
-    farmCount: apiData.farmCount.size,
-    totalVolume: apiData.totalVolume,
-    totalPayment: apiData.totalPayment,
-    records: apiData.records,
-    missingRecords: apiData.missingRecords,
-    periodStats: apiData.periodStats
-  };
 }
 
 async function auditCurtailmentData() {
   try {
-    console.log(`\n=== Auditing Curtailment Data for ${TARGET_DATE} ===\n`);
-
-    // Get current database stats
-    console.log('Fetching current database stats...');
+    // Get database stats
     const dbStats = await getDatabaseStats(TARGET_DATE);
-
-    console.log('\nDatabase Current State:');
-    console.log('Curtailment Records:', {
-      records: dbStats.curtailment.recordCount,
-      periods: dbStats.curtailment.periodCount,
-      farms: dbStats.curtailment.farmCount,
-      volume: Number(dbStats.curtailment.totalVolume).toFixed(2),
-      payment: Number(dbStats.curtailment.totalPayment).toFixed(2)
-    });
-
-    if (dbStats.summary) {
-      console.log('Daily Summary:', {
-        energy: Number(dbStats.summary.totalCurtailedEnergy).toFixed(2),
-        payment: Number(dbStats.summary.totalPayment).toFixed(2)
-      });
+    
+    // Select some periods to verify from the API 
+    // We'll check: lowest period, highest period, middle period, and one missing period if any
+    const periodsToCheck = [];
+    
+    if (dbStats) {
+      // Add lowest existing period
+      if (dbStats.existingPeriods.length > 0) {
+        periodsToCheck.push(dbStats.existingPeriods[0]);
+      }
+      
+      // Add highest existing period
+      if (dbStats.existingPeriods.length > 0) {
+        periodsToCheck.push(dbStats.existingPeriods[dbStats.existingPeriods.length - 1]);
+      }
+      
+      // Add middle period
+      if (dbStats.existingPeriods.length > 0) {
+        const middleIndex = Math.floor(dbStats.existingPeriods.length / 2);
+        periodsToCheck.push(dbStats.existingPeriods[middleIndex]);
+      }
+      
+      // Add a missing period (if any)
+      if (dbStats.missingPeriods.length > 0) {
+        periodsToCheck.push(dbStats.missingPeriods[0]);
+      }
+      
+      // Add periods 32, 33, and 34 to specifically check the gaps we saw
+      if (!periodsToCheck.includes(32)) periodsToCheck.push(32);
+      if (!periodsToCheck.includes(33)) periodsToCheck.push(33);
+      if (!periodsToCheck.includes(34)) periodsToCheck.push(34);
     }
-
-    // Get API data for sample periods
-    const apiStats = await getAPIData(TARGET_DATE, PERIODS_TO_CHECK);
-
-    console.log('\nAPI Sample Data (for selected periods):', {
-      checkedPeriods: PERIODS_TO_CHECK.length,
-      records: apiStats.recordCount,
-      periods: apiStats.periodCount.size,
-      farms: apiStats.farmCount.size,
-      volume: apiStats.totalVolume.toFixed(2),
-      payment: apiStats.totalPayment.toFixed(2)
-    });
-
-    // Compare each period
-    console.log('\nPeriod-by-Period Comparison:');
-    for (const period of PERIODS_TO_CHECK) {
-      const apiPeriodStat = apiStats.periodStats[period];
+    
+    // Get API data for selected periods
+    const apiData = await getAPIData(TARGET_DATE, periodsToCheck);
+    
+    // Compare database and API data
+    if (dbStats && apiData) {
+      console.log(`\n=== Comparison ===`);
       
-      // Find matching DB stat for this period
-      const dbPeriodStat = dbStats.periodStats.find(p => p.period === period);
-      
-      if (apiPeriodStat && dbPeriodStat) {
-        const apiRecords = apiPeriodStat.recordCount;
-        const dbRecords = dbPeriodStat.recordCount;
-        const recordDiff = apiRecords - dbRecords;
+      for (const apiPeriod of apiData) {
+        const dbPeriod = dbStats.existingPeriods.includes(apiPeriod.period);
         
-        const apiVolume = apiPeriodStat.totalVolume;
-        const dbVolume = Number(dbPeriodStat.totalVolume);
-        const volumeDiff = apiVolume - dbVolume;
-        
-        console.log(`Period ${period}:`);
-        console.log(`  - API: ${apiRecords} records, ${apiVolume.toFixed(2)} MWh`);
-        console.log(`  - DB:  ${dbRecords} records, ${dbVolume.toFixed(2)} MWh`);
-        
-        if (recordDiff !== 0 || Math.abs(volumeDiff) > 0.01) {
-          console.log(`  - DIFFERENCE: ${recordDiff} records, ${volumeDiff.toFixed(2)} MWh`);
+        if (dbPeriod) {
+          console.log(`Period ${apiPeriod.period}: Present in database`);
         } else {
-          console.log(`  - ✓ No significant differences`);
+          if (apiPeriod.recordCount > 0) {
+            console.log(`Period ${apiPeriod.period}: MISSING from database but has ${apiPeriod.recordCount} records in API`);
+          } else {
+            console.log(`Period ${apiPeriod.period}: Not in database, no records in API`);
+          }
         }
-      } else if (apiPeriodStat && !dbPeriodStat) {
-        console.log(`Period ${period}:`);
-        console.log(`  - API: ${apiPeriodStat.recordCount} records, ${apiPeriodStat.totalVolume.toFixed(2)} MWh`);
-        console.log(`  - DB:  No records found`);
-        console.log(`  - MISSING: All ${apiPeriodStat.recordCount} records missing from DB`);
-      } else if (!apiPeriodStat && dbPeriodStat) {
-        console.log(`Period ${period}:`);
-        console.log(`  - API: No records found`);
-        console.log(`  - DB:  ${dbPeriodStat.recordCount} records, ${Number(dbPeriodStat.totalVolume).toFixed(2)} MWh`);
-        console.log(`  - EXTRA: All ${dbPeriodStat.recordCount} records in DB not found in API`);
-      } else {
-        console.log(`Period ${period}: No records in API or DB`);
-      }
-    }
-
-    // Report missing records
-    if (apiStats.missingRecords.length > 0) {
-      console.log('\nMissing Records:');
-      console.log(`Found ${apiStats.missingRecords.length} records in API that are not in the database`);
-      
-      // Group by period for better readability
-      const missingByPeriod = {};
-      for (const record of apiStats.missingRecords) {
-        const period = record.settlementPeriod;
-        if (!missingByPeriod[period]) {
-          missingByPeriod[period] = [];
-        }
-        missingByPeriod[period].push(record);
       }
       
-      // Print summary by period
-      for (const period in missingByPeriod) {
-        const records = missingByPeriod[period];
-        const volume = records.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-        const payment = records.reduce((sum, r) => sum + Math.abs(r.volume) * r.originalPrice, 0);
+      // Summarize findings
+      console.log(`\n=== Findings ===`);
+      console.log(`Database has ${dbStats.recordCount} records across ${dbStats.periodCount} periods`);
+      console.log(`Expected ${EXPECTED_PERIODS} periods, missing ${dbStats.missingPeriods.length} periods`);
+      
+      if (dbStats.missingPeriods.length > 0) {
+        const missingPeriodsWithData = apiData
+          .filter(a => dbStats.missingPeriods.includes(a.period) && a.recordCount > 0)
+          .map(a => a.period);
         
-        console.log(`Period ${period}: ${records.length} missing records (${volume.toFixed(2)} MWh, £${payment.toFixed(2)})`);
-        
-        // Print details for first few records in each period
-        const samplesToShow = Math.min(3, records.length);
-        for (let i = 0; i < samplesToShow; i++) {
-          const r = records[i];
-          console.log(`  - ${r.id}: ${Math.abs(r.volume).toFixed(2)} MWh, £${(Math.abs(r.volume) * r.originalPrice).toFixed(2)}`);
-        }
-        if (records.length > samplesToShow) {
-          console.log(`  - ... and ${records.length - samplesToShow} more`);
+        if (missingPeriodsWithData.length > 0) {
+          console.log(`CRITICAL: Periods ${missingPeriodsWithData.join(', ')} have data in API but are missing from database`);
+        } else {
+          console.log(`The checked missing periods don't appear to have data in the API`);
         }
       }
-    } else {
-      console.log('\n✓ All sampled API records are present in the database');
     }
-
   } catch (error) {
-    console.error('Error during curtailment audit:', error);
-    process.exit(1);
+    console.error(`Error during audit:`, error);
   }
 }
 
-// Run audit
+// Run the audit
 auditCurtailmentData();
