@@ -153,11 +153,16 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
     const month = yearMonth.split('-')[1];
 
     // Delete existing summary if it exists
-    await db.delete(bitcoinMonthlySummaries)
-      .where(and(
-        eq(bitcoinMonthlySummaries.yearMonth, yearMonth),
-        eq(bitcoinMonthlySummaries.minerModel, minerModel)
-      ));
+    try {
+      await db.delete(bitcoinMonthlySummaries)
+        .where(and(
+          eq(bitcoinMonthlySummaries.yearMonth, yearMonth),
+          eq(bitcoinMonthlySummaries.minerModel, minerModel)
+        ));
+      console.log(`Deleted existing monthly summary for ${yearMonth} ${minerModel}`);
+    } catch (error) {
+      console.error(`Error deleting existing monthly summary: ${error}`);
+    }
 
     // Aggregate Bitcoin calculations for the month
     const summary = await db.select({
