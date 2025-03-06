@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url';
 
 // Constants
 const TARGET_DATE = '2025-03-05';
-const PRIORITY_PERIODS = [30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 43, 44, 45, 46, 47, 48]; // Remaining periods to process
+const PRIORITY_PERIODS = [40, 41, 43, 44, 45, 46, 47, 48]; // Remaining periods to process
 const DELAY_BETWEEN_PERIODS = 50; // 0.05 second delay between API calls
 const BMU_MAPPING_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'server/data/bmuMapping.json');
 
@@ -62,6 +62,21 @@ async function processPeriod(period: number): Promise<{
 }> {
   try {
     console.log(`Processing period ${period} for date ${TARGET_DATE}`);
+    
+    // Check if this period has already been processed
+    const existingRecords = await db.select({ count: sql<number>`count(*)` })
+      .from(curtailmentRecords)
+      .where(
+        and(
+          eq(curtailmentRecords.settlementDate, TARGET_DATE),
+          eq(curtailmentRecords.settlementPeriod, period)
+        )
+      );
+    
+    if (existingRecords[0].count > 0) {
+      console.log(`Period ${period} already has ${existingRecords[0].count} records. Skipping.`);
+      return { processed: 0, added: 0, totalVolume: 0, totalPayment: 0 };
+    }
     
     // Load wind farm IDs
     const validWindFarmIds = await loadWindFarmIds();

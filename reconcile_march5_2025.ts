@@ -110,7 +110,6 @@ async function main() {
                 farmId: farm.farmId,
                 minerModel: minerModel,
                 bitcoinMined: scaledBitcoin.toString(),
-                curtailedMwh: curtailedMwh.toString(),
                 difficulty: difficulty.toString(),
                 calculatedAt: new Date(),
               }]);
@@ -179,8 +178,8 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
         yearMonth: yearMonth,
         minerModel: minerModel,
         bitcoinMined: summary[0].totalBitcoin,
-        curtailedMwh: summary[0].totalCurtailedMwh || '0',
-        difficulty: summary[0].difficulty || '0',
+        valueAtMining: '0', // Default value, can be updated later
+        averageDifficulty: summary[0].difficulty || '0',
         createdAt: new Date(),
         updatedAt: new Date(),
       }]);
