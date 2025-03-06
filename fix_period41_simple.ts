@@ -175,8 +175,7 @@ async function insertRecordsIntoDb(records: any[]): Promise<void> {
           original_price, 
           final_price, 
           lead_party_name,
-          created_at, 
-          updated_at
+          created_at
         ) VALUES (
           ${record.id},
           ${TARGET_DATE},
@@ -188,7 +187,6 @@ async function insertRecordsIntoDb(records: any[]): Promise<void> {
           ${record.originalPrice.toString()},
           ${record.finalPrice.toString()},
           ${record.leadPartyName || null},
-          ${new Date()},
           ${new Date()}
         )
       `);
@@ -244,8 +242,7 @@ async function updateDailySummary(): Promise<void> {
         UPDATE daily_summaries
         SET 
           total_curtailed_energy = ${totalVolume.toString()},
-          total_payment = ${totalPayment.toString()},
-          updated_at = ${new Date()}
+          total_payment = ${totalPayment.toString()}
         WHERE summary_date = ${TARGET_DATE}
       `);
       
@@ -257,13 +254,11 @@ async function updateDailySummary(): Promise<void> {
           summary_date,
           total_curtailed_energy,
           total_payment,
-          created_at,
-          updated_at
+          created_at
         ) VALUES (
           ${TARGET_DATE},
           ${totalVolume.toString()},
           ${totalPayment.toString()},
-          ${new Date()},
           ${new Date()}
         )
       `);
