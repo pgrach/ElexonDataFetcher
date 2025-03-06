@@ -19,7 +19,7 @@ const __dirname = path.dirname(__filename);
 
 const BMU_MAPPING_PATH = path.join(__dirname, "server/data/bmuMapping.json");
 const TARGET_DATE = '2025-03-04';
-const MISSING_PERIODS = [41, 42, 43, 44];
+const MISSING_PERIODS = [47, 48];
 const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
 
 // Helper function for logging
