@@ -11,7 +11,10 @@
 import { db } from "../../db";
 import { 
   historicalBitcoinCalculations, 
-  curtailmentRecords
+  curtailmentRecords,
+  bitcoinYearlySummaries,
+  yearlySummaries,
+  bitcoinMonthlySummaries
 } from "../../db/schema";
 import { sql, eq, and, or, desc, asc } from "drizzle-orm";
 import { format } from "date-fns";
@@ -136,46 +139,120 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
   console.log(`Calculating yearly mining potential for ${year}, model: ${minerModel}, farm: ${farmId || 'all'}`);
   
   try {
-    // Query for Bitcoin calculations with year filter
-    let bitcoinQuery = db
+    // If requesting for a specific farm, we still need to use the detailed calculation approach
+    if (farmId) {
+      // Query for Bitcoin calculations with year filter by farm
+      let bitcoinQuery = db
+        .select({
+          totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`,
+          avgDifficulty: sql<number>`AVG(difficulty)` // Average difficulty for the year
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
+            eq(historicalBitcoinCalculations.minerModel, minerModel),
+            eq(historicalBitcoinCalculations.farmId, farmId)
+          )
+        );
+        
+      const bitcoinResults = await bitcoinQuery;
+      
+      // Query for curtailment data with year filter by farm
+      let curtailmentQuery = db
+        .select({
+          totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`,
+          totalPayment: sql<number>`SUM(payment)`
+        })
+        .from(curtailmentRecords)
+        .where(
+          and(
+            sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
+            eq(curtailmentRecords.farmId, farmId)
+          )
+        );
+        
+      const curtailmentResults = await curtailmentQuery;
+      
+      // Return consolidated results
+      return {
+        year,
+        totalCurtailedEnergy: Number(curtailmentResults[0]?.totalCurtailedEnergy || 0),
+        totalBitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
+        totalPayment: Number(curtailmentResults[0]?.totalPayment || 0),
+        averageDifficulty: Number(bitcoinResults[0]?.avgDifficulty || 0)
+      };
+    }
+    
+    // For all farms (no farmId filter), use the yearly summaries table for better performance
+    const yearlySummary = await db
       .select({
-        totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`,
-        avgDifficulty: sql<number>`AVG(difficulty)` // Average difficulty for the year
+        bitcoinMined: bitcoinYearlySummaries.bitcoinMined,
+        averageDifficulty: bitcoinYearlySummaries.averageDifficulty
       })
-      .from(historicalBitcoinCalculations)
+      .from(bitcoinYearlySummaries)
       .where(
         and(
-          sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
-          eq(historicalBitcoinCalculations.minerModel, minerModel),
-          farmId ? eq(historicalBitcoinCalculations.farmId, farmId) : undefined
+          eq(bitcoinYearlySummaries.year, year),
+          eq(bitcoinYearlySummaries.minerModel, minerModel)
         )
       );
       
-    const bitcoinResults = await bitcoinQuery;
-    
-    // Query for curtailment data with year filter
-    let curtailmentQuery = db
-      .select({
-        totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`,
-        totalPayment: sql<number>`SUM(payment)`
-      })
-      .from(curtailmentRecords)
-      .where(
-        and(
-          sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
-          farmId ? eq(curtailmentRecords.farmId, farmId) : undefined
-        )
-      );
+    // If we don't have a yearly summary yet, calculate it on the fly
+    if (!yearlySummary.length) {
+      console.log(`No yearly summary found in bitcoin_yearly_summaries for ${year}, calculating on the fly`);
       
-    const curtailmentResults = await curtailmentQuery;
+      // Query for Bitcoin calculations directly from the historical data
+      let bitcoinQuery = db
+        .select({
+          totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`,
+          avgDifficulty: sql<number>`AVG(difficulty)` // Average difficulty for the year
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
+            eq(historicalBitcoinCalculations.minerModel, minerModel)
+          )
+        );
+        
+      const bitcoinResults = await bitcoinQuery;
+      
+      // Query for yearly summary from yearly_summaries table for total payment
+      const yearlySummaryData = await db
+        .select({
+          totalCurtailedEnergy: yearlySummaries.totalCurtailedEnergy,
+          totalPayment: yearlySummaries.totalPayment
+        })
+        .from(yearlySummaries)
+        .where(eq(yearlySummaries.year, year));
+      
+      // Return consolidated results
+      return {
+        year,
+        totalCurtailedEnergy: Number(yearlySummaryData[0]?.totalCurtailedEnergy || 0),
+        totalBitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
+        totalPayment: Number(yearlySummaryData[0]?.totalPayment || 0),
+        averageDifficulty: Number(bitcoinResults[0]?.avgDifficulty || 0)
+      };
+    }
     
-    // Return consolidated results
+    // Get curtailment energy and payment data from yearlySummaries table
+    const generalYearlySummary = await db
+      .select({
+        totalCurtailedEnergy: yearlySummaries.totalCurtailedEnergy,
+        totalPayment: yearlySummaries.totalPayment
+      })
+      .from(yearlySummaries)
+      .where(eq(yearlySummaries.year, year));
+    
+    // Return consolidated results from the summaries tables
     return {
       year,
-      totalCurtailedEnergy: Number(curtailmentResults[0]?.totalCurtailedEnergy || 0),
-      totalBitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
-      totalPayment: Number(curtailmentResults[0]?.totalPayment || 0),
-      averageDifficulty: Number(bitcoinResults[0]?.avgDifficulty || 0)
+      totalCurtailedEnergy: Number(generalYearlySummary[0]?.totalCurtailedEnergy || 0),
+      totalBitcoinMined: Number(yearlySummary[0]?.bitcoinMined || 0),
+      totalPayment: Number(generalYearlySummary[0]?.totalPayment || 0),
+      averageDifficulty: Number(yearlySummary[0]?.averageDifficulty || 0)
     };
   } catch (error) {
     console.error(`Error calculating yearly mining potential for ${year}:`, error);

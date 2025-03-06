@@ -428,8 +428,21 @@ if (process.argv[1].includes('bitcoinService.ts')) {
             process.exit(1);
           }
         }
+      } else if (args.includes('--update-yearly') && args.length > 1) {
+        const yearIndex = args.indexOf('--update-yearly') + 1;
+        if (yearIndex < args.length) {
+          const year = args[yearIndex];
+          if (/^\d{4}$/.test(year)) {
+            await manualUpdateYearlyBitcoinSummary(year);
+            process.exit(0);
+          } else {
+            console.error('Invalid year format. Must be YYYY.');
+            process.exit(1);
+          }
+        }
       } else {
         console.log('Usage: npx tsx bitcoinService.ts --update-monthly YYYY-MM');
+        console.log('   or: npx tsx bitcoinService.ts --update-yearly YYYY');
         process.exit(1);
       }
     } catch (error) {
