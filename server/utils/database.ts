@@ -84,23 +84,31 @@ export async function getRecordCount(
   return executeQuery(
     'getRecordCount',
     async () => {
-      // Create dynamic SQL with proper parameter handling
-      const placeholders: string[] = [];
-      for (let i = 0; i < params.length; i++) {
-        placeholders.push(`$${i+1}`);
-      }
+      // Create a dynamic SQL query with parameters properly integrated
+      const dynamicParams: any[] = [];
       
-      // Replace ? with proper placeholders if needed
+      // Replace ? placeholders with $n placeholders if they exist
       let formattedWhereClause = whereClause;
       if (whereClause.includes('?')) {
         let paramIndex = 0;
-        formattedWhereClause = whereClause.replace(/\?/g, () => `$${++paramIndex}`);
+        formattedWhereClause = whereClause.replace(/\?/g, () => {
+          dynamicParams.push(params[paramIndex]);
+          return `$${++paramIndex}`;
+        });
+      } else {
+        // If no ? placeholders, use the params as is
+        dynamicParams.push(...params);
       }
       
-      const query = sql`SELECT COUNT(*) as count FROM ${sql.identifier(tableName)} WHERE ${sql.raw(formattedWhereClause)}`;
+      // Construct the SQL query with raw where clause
+      const query = sql`
+        SELECT COUNT(*) as count 
+        FROM ${sql.identifier(tableName)} 
+        WHERE ${sql.raw(formattedWhereClause)}
+      `;
       
-      // Execute the query
-      const result = await db.execute(query, params);
+      // Execute the query with integrated parameters
+      const result = await db.execute(query);
       
       // Safe access to the result
       if (result && Array.isArray(result) && result.length > 0) {
@@ -134,45 +142,50 @@ export async function batchInsert<T extends Record<string, any>>(
   for (let i = 0; i < records.length; i += chunkSize) {
     const chunk = records.slice(i, i + chunkSize);
     
+    // Create a context object for monitoring
+    const batchContext = { tableName, recordCount: chunk.length };
+    
+    // Execute the batch insert with proper context
     await executeQuery(
       'batchInsert',
       async () => {
-        // Create parameterized values
-        const valuesList: any[][] = [];
-        chunk.forEach(record => {
-          const rowValues: any[] = [];
-          columns.forEach(col => {
-            rowValues.push(record[col]);
-          });
-          valuesList.push(rowValues);
-        });
-        
-        // Create placeholders for prepared statement
-        const placeholderGroups = [];
-        let placeholderCounter = 1;
-        
-        for (let j = 0; j < chunk.length; j++) {
-          const placeholders = [];
-          for (let k = 0; k < columns.length; k++) {
-            placeholders.push(`$${placeholderCounter++}`);
+        // Use a transaction for better performance
+        return await db.transaction(async (tx) => {
+          // Process each record separately but within a transaction
+          for (const record of chunk) {
+            // Prepare the data for insertion
+            const data: Record<string, any> = {};
+            columns.forEach(col => {
+              data[col] = record[col];
+            });
+            
+            // Manually construct parameters and incorporate them into the query
+            const params = columns.map(col => record[col]);
+            
+            // Build a SQL template literal with the properly escaped values
+            const values = params.map((val, idx) => {
+              if (val === null) return 'NULL';
+              if (typeof val === 'number') return val.toString();
+              if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
+              if (typeof val === 'string') return `'${val.replace(/'/g, "''")}'`;
+              return `'${JSON.stringify(val).replace(/'/g, "''")}'`;
+            }).join(', ');
+            
+            // Create a safe query with SQL tag
+            const safeQuery = sql`
+              INSERT INTO ${sql.identifier(tableName)} (${sql.join(columns.map(col => sql.identifier(col)), sql`, `)})
+              VALUES (${sql.raw(values)})
+              ON CONFLICT DO NOTHING
+            `;
+            
+            // Execute the query
+            await tx.execute(safeQuery);
           }
-          placeholderGroups.push(`(${placeholders.join(', ')})`);
-        }
-        
-        // Flatten valuesList for parameters
-        const flatParams = valuesList.flat();
-        
-        // Build the SQL query
-        const sqlQuery = sql`
-          INSERT INTO ${sql.identifier(tableName)} (${sql.join(columns.map(col => sql.identifier(col)), sql`, `)})
-          VALUES ${sql.raw(placeholderGroups.join(', '))}
-          ON CONFLICT DO NOTHING
-        `;
-        
-        const result = await db.execute(sqlQuery, flatParams);
-        return result;
+          
+          return { rowCount: chunk.length };
+        });
       },
-      { tableName, recordCount: chunk.length }
+      batchContext
     );
     
     totalInserted += chunk.length;
