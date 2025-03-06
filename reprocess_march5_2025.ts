@@ -2,8 +2,9 @@
  * Reprocess Curtailment Records for March 5, 2025
  * 
  * This script is specifically designed to fix missing records in the curtailment_records table
- * for March 5, 2025. It fetches data from the Elexon API, compares it with existing records,
- * and inserts any missing records without creating duplicates.
+ * for March 5, 2025. A major discrepancy has been identified - the API shows 105,247.85 MWh
+ * while our database only has 51,577.75 MWh. This script will completely reprocess the data,
+ * deleting existing records and reinserting fresh data from the Elexon API.
  */
 
 import { db } from './db';
@@ -106,22 +107,8 @@ async function processPeriod(period: number, retryCount = 0): Promise<{
     // Process each curtailment record
     for (const curtailment of curtailments) {
       try {
-        // Check if record already exists to avoid duplicates
-        const existingRecords = await db.select({ count: sql<number>`count(*)` })
-          .from(curtailmentRecords)
-          .where(
-            and(
-              eq(curtailmentRecords.settlementDate, TARGET_DATE),
-              eq(curtailmentRecords.settlementPeriod, period),
-              eq(curtailmentRecords.farmId, curtailment.id)
-            )
-          );
-
-        if (existingRecords[0].count > 0) {
-          // Record already exists, skip it
-          skipped++;
-          continue;
-        }
+        // Since we deleted all records for this date, we don't need to check if records exist
+    // This is now a clean reprocessing
         
         const volume = curtailment.volume;
         const payment = Math.abs(volume) * curtailment.originalPrice;
@@ -227,6 +214,12 @@ async function main() {
   .where(sql`${curtailmentRecords.settlementDate}::text = ${TARGET_DATE}`);
   
   console.log(`Initial database stats: ${initialStats[0].recordCount} records with total volume ${initialStats[0].totalVolume}`);
+  
+  // Delete all existing records for this date to avoid duplicates and ensure clean data
+  console.log(`Deleting all existing records for ${TARGET_DATE}...`);
+  const deleteResult = await db.delete(curtailmentRecords)
+    .where(sql`${curtailmentRecords.settlementDate}::text = ${TARGET_DATE}`);
+  console.log(`Deleted all existing records. Starting fresh processing.`);
   
   // Process all 48 settlement periods for the day
   const results = {

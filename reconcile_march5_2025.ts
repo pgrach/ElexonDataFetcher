@@ -50,7 +50,6 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string) {
     // Get all calculations for the month
     const monthlyData = await db.select({
       totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)`,
-      totalEnergy: sql<string>`SUM(volume::numeric)`,
       avgDifficulty: sql<string>`AVG(difficulty::numeric)`
     })
     .from(historicalBitcoinCalculations)
@@ -74,7 +73,7 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string) {
         updatedAt: new Date()
       });
       
-      console.log(`Updated ${yearMonth} summary for ${minerModel}: ${parseFloat(monthlyData[0].totalBitcoin).toFixed(8)} BTC from ${parseFloat(monthlyData[0].totalEnergy).toFixed(2)} MWh`);
+      console.log(`Updated ${yearMonth} summary for ${minerModel}: ${parseFloat(monthlyData[0].totalBitcoin).toFixed(8)} BTC`);
     }
   }
 }
