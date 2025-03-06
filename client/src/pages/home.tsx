@@ -27,6 +27,16 @@ interface BitcoinCalculation {
   currentPrice: number;
 }
 
+interface YearlyBitcoinCalculation {
+  bitcoinMined: number;
+  valueAtCurrentPrice: number;
+  curtailedEnergy: number;
+  totalPayment: number;
+  averageDifficulty: number;
+  currentPrice: number;
+  year: string;
+}
+
 interface DailySummary {
   totalCurtailedEnergy: number;
   totalPayment: number;
@@ -192,6 +202,40 @@ export default function Home() {
 
       const result = await response.json();
       console.log("Monthly Bitcoin calculation result:", result);
+      return result;
+    },
+    enabled: !!date
+  });
+  
+  const {
+    data: yearlyBitcoinPotential,
+    isLoading: isYearlyBitcoinLoading,
+    error: yearlyBitcoinError
+  } = useQuery<YearlyBitcoinCalculation>({
+    queryKey: [
+      `/api/mining-potential/yearly/${format(date, 'yyyy')}`,
+      selectedMinerModel,
+      selectedLeadParty
+    ],
+    queryFn: async () => {
+      const url = new URL(
+        `/api/mining-potential/yearly/${format(date, 'yyyy')}`,
+        window.location.origin,
+      );
+      url.searchParams.set("minerModel", selectedMinerModel);
+      if (selectedLeadParty) {
+        url.searchParams.set("leadParty", selectedLeadParty);
+      }
+
+      console.log("Fetching yearly Bitcoin data from URL:", url.toString());
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error("Failed to fetch yearly mining potential");
+      }
+
+      const result = await response.json();
+      console.log("Yearly Bitcoin calculation result:", result);
       return result;
     },
     enabled: !!date
@@ -363,22 +407,21 @@ export default function Home() {
                   <div className="text-sm font-medium">
                     Bitcoin could be mined
                   </div>
-                  {isYearlyLoading ? (
+                  {isYearlyBitcoinLoading ? (
                     <div className="text-2xl font-bold animate-pulse">
                       Loading...
                     </div>
-                  ) : yearlyError ? (
+                  ) : yearlyBitcoinError ? (
                     <div className="text-sm text-red-500">
-                      Failed to load yearly data
+                      Failed to load yearly Bitcoin data
                     </div>
-                  ) : yearlyData ? (
+                  ) : yearlyBitcoinPotential ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      ₿{(((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.bitcoinMined ?? 0)) / 
-                        (dailyData?.totalCurtailedEnergy ?? 1))).toFixed(8)}
+                      ₿{yearlyBitcoinPotential.bitcoinMined.toFixed(8)}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
-                      No yearly data available
+                      No yearly mining data available
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
@@ -437,22 +480,21 @@ export default function Home() {
                   <div className="text-sm font-medium">
                     Value if Bitcoin was mined
                   </div>
-                  {isYearlyLoading ? (
+                  {isYearlyBitcoinLoading ? (
                     <div className="text-2xl font-bold animate-pulse">
                       Loading...
                     </div>
-                  ) : yearlyError ? (
+                  ) : yearlyBitcoinError ? (
                     <div className="text-sm text-red-500">
-                      Failed to load yearly data
+                      Failed to load yearly Bitcoin data
                     </div>
-                  ) : yearlyData ? (
+                  ) : yearlyBitcoinPotential ? (
                     <div className="text-2xl font-bold text-[#F7931A]">
-                      £{(((yearlyData.totalCurtailedEnergy * (bitcoinPotential?.valueAtCurrentPrice ?? 0)) / 
-                        (dailyData?.totalCurtailedEnergy ?? 1))).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                      £{yearlyBitcoinPotential.valueAtCurrentPrice.toLocaleString('en-GB', { maximumFractionDigits: 2 })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
-                      No yearly data available
+                      No yearly mining data available
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
