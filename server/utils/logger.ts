@@ -40,12 +40,12 @@ export interface LogEntry {
 }
 
 // Map from ErrorSeverity to LogLevel
-const severityToLevel: Record<ErrorSeverity, LogLevel> = {
+const severityToLevel = {
   [ErrorSeverity.INFO]: LogLevel.INFO,
   [ErrorSeverity.WARNING]: LogLevel.WARNING,
   [ErrorSeverity.ERROR]: LogLevel.ERROR,
   [ErrorSeverity.CRITICAL]: LogLevel.CRITICAL
-};
+} as const;
 
 // Terminal colors
 const colors = {
@@ -155,9 +155,14 @@ class Logger {
    * Log an error object
    */
   logError(error: Error, options: Omit<LogOptions, 'error'> = {}): void {
-    const level = (error as any)['severity'] ? 
-      severityToLevel[(error as any)['severity']] : 
-      LogLevel.ERROR;
+    // Check if the error has severity property and use it to determine log level
+    let level = LogLevel.ERROR;
+    if ((error as any).severity && 
+        typeof (error as any).severity === 'string' && 
+        Object.values(ErrorSeverity).includes((error as any).severity)) {
+      const severity = (error as any).severity as ErrorSeverity;
+      level = severityToLevel[severity] || LogLevel.ERROR;
+    }
     
     this.log(
       error.message,
@@ -240,8 +245,4 @@ class Logger {
 // Create and export a singleton logger instance
 export const logger = new Logger();
 
-// Export types for consumers
-export {
-  type LogOptions,
-  type LogEntry
-};
+// No need to re-export the types as they are already exported above

@@ -8,18 +8,21 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 
+// Add custom property to Response for tracking
+interface RequestWithId extends Request {
+  requestId?: string;
+}
+
 /**
- * Calculate request processing time
+ * Request logger middleware
  */
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
   // Record request start time
   const startTime = Date.now();
   
-  // Store original end method
-  const originalEnd = res.end;
-  
-  // Add request id for correlation
+  // Generate request ID for correlation
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+  (req as RequestWithId).requestId = requestId;
   req.headers['x-request-id'] = requestId;
   
   // Log request received
@@ -36,12 +39,8 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
     }
   });
   
-  // Override end method to log response
-  res.end = function(chunk?: any, encoding?: BufferEncoding | undefined, callback?: (() => void) | undefined): any {
-    // Restore original end method
-    res.end = originalEnd;
-    
-    // Log response details
+  // Log response when it completes
+  res.on('finish', () => {
     const responseTime = Date.now() - startTime;
     
     // Log with appropriate level based on status code
@@ -61,10 +60,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
           parseInt(req.headers['content-length'] as string, 10) : undefined
       }
     });
-    
-    // Call original method
-    return originalEnd.call(this, chunk, encoding, callback);
-  };
+  });
   
   next();
 }

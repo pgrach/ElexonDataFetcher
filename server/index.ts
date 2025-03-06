@@ -4,6 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { startDataUpdateService } from "./services/dataUpdater";
 import { requestLogger } from "./middleware/requestLogger";
 import { errorHandler } from "./middleware/errorHandler";
+import { performanceMonitor } from "./middleware/performanceMonitor";
 import { logger } from "./utils/logger";
 
 // Initialize Express app
@@ -11,8 +12,11 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Use our standardized request logger middleware
+// Apply middleware in the correct order
+// 1. Request logging (should be early to capture all requests)
 app.use(requestLogger);
+// 2. Performance monitoring
+app.use(performanceMonitor);
 
 // Legacy middleware for backward compatibility
 app.use((req, res, next) => {
@@ -57,12 +61,8 @@ const startServer = async () => {
       res.status(200).json({ status: 'ok', startTime: new Date().toISOString() });
     });
 
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
-      console.error(`Server error: ${message}`, err);
-      res.status(status).json({ message });
-    });
+    // Use our standardized error handler middleware
+    app.use(errorHandler);
 
     if (app.get("env") === "development") {
       await setupVite(app, server);
@@ -87,8 +87,8 @@ const startServer = async () => {
         console.log("Initializing data update service...");
         const updateServiceInterval = await startDataUpdateService();
 
-        if (updateServiceInterval) {
-          // Handle cleanup on server shutdown
+        // Handle cleanup on server shutdown if we have an interval
+        if (updateServiceInterval !== undefined && updateServiceInterval !== null) {
           process.on('SIGTERM', () => {
             console.log('Shutting down data update service...');
             clearInterval(updateServiceInterval);
