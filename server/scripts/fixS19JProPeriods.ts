@@ -1,9 +1,17 @@
 /**
  * Script to fix missing S19J_PRO historical bitcoin calculations for specific date and periods
  */
-import { pool } from '../../db';
+import pg from 'pg';
 import { minerModels, DEFAULT_DIFFICULTY } from '../types/bitcoin';
 import { getDifficultyData } from '../services/dynamodbService';
+
+// Initialize database connection pool
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
+});
 
 // Constants
 const BLOCK_REWARD = 3.125;
