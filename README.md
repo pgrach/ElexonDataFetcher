@@ -34,7 +34,19 @@ npx tsx complete_reingestion_process.ts 2025-03-04
 2. **Curtailment Data Reingestion**: Processes data from the Elexon API in batches
 3. **Data Cleanup**: Removes any existing Bitcoin calculations to prevent duplicates
 4. **Bitcoin Calculation**: Calculates mining potential for each miner model across all periods
-5. **Verification**: Confirms all calculations are complete and valid
+5. **Summary Updates**: Updates monthly and yearly Bitcoin summaries automatically
+6. **Verification**: Confirms all calculations are complete and valid
+
+## Automatic Update Chain
+
+The system implements a robust data consistency mechanism to ensure changes propagate through all summary levels:
+
+1. **Hourly Data Updates**: New settlement period data triggers the update process
+2. **Daily Calculations**: When hourly data changes, daily Bitcoin calculations are refreshed
+3. **Monthly Aggregation**: Daily updates automatically trigger monthly summary recalculation 
+4. **Yearly Aggregation**: Monthly summary updates automatically trigger yearly summary recalculation
+
+This automatic update chain ensures that all summary levels (daily, monthly, and yearly) remain consistent even when new hourly data is added or existing data is modified.
 
 ## Alternative Scripts
 
@@ -49,10 +61,20 @@ For targeted operations, the following scripts are available:
 
 ### Database Schema
 
-The system relies on two primary tables:
+The system relies on several interconnected tables that form the data hierarchy:
 
+**Primary Tables:**
 - `curtailment_records`: Stores raw curtailment data from Elexon API
-- `historical_bitcoin_calculations`: Stores Bitcoin mining potential calculations
+- `historical_bitcoin_calculations`: Stores Bitcoin mining potential calculations for each period and farm
+
+**Summary Tables:**
+- `daily_summaries`: Aggregates curtailment data by day
+- `monthly_summaries`: Aggregates curtailment data by month
+- `yearly_summaries`: Aggregates curtailment data by year
+- `bitcoin_monthly_summaries`: Aggregates Bitcoin calculations by month for each miner model
+- `bitcoin_yearly_summaries`: Aggregates Bitcoin calculations by year for each miner model
+
+The automatic update chain ensures that changes to the primary tables propagate through all summary tables.
 
 ### Calculation Formula
 
@@ -73,10 +95,20 @@ For a typical day with 48 settlement periods:
 
 ## Example Outputs
 
-Example of Bitcoin yield for 2025-03-04:
-- S19J_PRO: 39.21754996 BTC
-- M20S: 23.41375966 BTC
-- S9: 11.80551586 BTC
+**Daily Bitcoin Yield (2025-03-06):**
+- S19J_PRO: 34.58136172 BTC
+- M20S: 21.28012335 BTC
+- S9: 10.71975614 BTC
+
+**Monthly Bitcoin Yield (March 2025):**
+- S19J_PRO: 260.28916727 BTC
+- M20S: 159.87284065 BTC
+- S9: 80.60844328 BTC
+
+**Yearly Bitcoin Yield (2025):**
+- S19J_PRO: 903.24720919 BTC
+- M20S: 556.74644712 BTC
+- S9: 280.71290970 BTC
 
 ## Troubleshooting
 
