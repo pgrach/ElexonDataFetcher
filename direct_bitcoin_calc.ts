@@ -6,22 +6,21 @@
  * value extracted from our existing calculations.
  */
 
-import { db } from "./db";
-import { curtailmentRecords, historicalBitcoinCalculations } from "./db/schema";
-import { calculateBitcoin } from "./server/utils/bitcoin";
-import { eq, sql, and, between } from "drizzle-orm";
+import { db } from "@db";
+import { sql, and, eq } from "drizzle-orm";
+import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
 import { minerModels } from "./server/types/bitcoin";
 
 // Configuration
 const DATE = "2025-03-04";
-const DEFAULT_DIFFICULTY = 108105433845147; // Known difficulty value as fallback
-const BATCH_SIZE = 100; // Number of records to process in each batch
 const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
+const BATCH_SIZE = 100;
+const DEFAULT_DIFFICULTY = 108105433845147; // Current network difficulty as fallback
 
-// Console colors for better logging
+// ANSI color codes for console output
 const colors = {
   reset: "\x1b[0m",
-  bright: "\x1b[1m", 
+  bright: "\x1b[1m",
   dim: "\x1b[2m",
   red: "\x1b[31m",
   green: "\x1b[32m",
@@ -53,20 +52,23 @@ function log(message: string, type: "info" | "success" | "warning" | "error" | "
 }
 
 async function clearExistingBitcoinCalculations(): Promise<void> {
-  // Delete all Bitcoin calculations for the date
-  const deletedCalculations = await db
-    .delete(historicalBitcoinCalculations)
-    .where(eq(historicalBitcoinCalculations.settlementDate, DATE))
-    .returning();
+  // First get the count of records we'll delete
+  const countResult = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(historicalBitcoinCalculations)
+    .where(eq(historicalBitcoinCalculations.settlementDate, DATE));
+    
+  const count = countResult[0]?.count || 0;
   
-  log(`Cleared ${deletedCalculations.length} existing Bitcoin calculation records`, "info");
+  // Then delete them
+  await db.delete(historicalBitcoinCalculations)
+    .where(eq(historicalBitcoinCalculations.settlementDate, DATE));
+    
+  log(`Cleared ${count} existing Bitcoin calculation records`, "info");
 }
 
 async function processPeriodRange(startPeriod: number, endPeriod: number, minerModel: string, difficulty: number): Promise<number> {
-  // Get all curtailment records for the period range that don't already have Bitcoin calculations
-  // This approach uses direct querying to find curtailment records without corresponding Bitcoin calculations
-  // Let's use a simpler approach - just get the curtailment records for the periods
-  // and we'll ensure uniqueness based on the model and farm ID
+  // Get all curtailment records for the period range
   const result = await db.execute(sql`
     SELECT 
       cr.id, 
@@ -85,7 +87,7 @@ async function processPeriodRange(startPeriod: number, endPeriod: number, minerM
   const records = Array.isArray(result) ? result : [];
   
   if (records.length === 0) {
-    log(`No new curtailment records found for periods ${startPeriod}-${endPeriod}`, "info");
+    log(`No curtailment records found for periods ${startPeriod}-${endPeriod}`, "info");
     return 0;
   }
   
@@ -108,16 +110,14 @@ async function processPeriodRange(startPeriod: number, endPeriod: number, minerM
         difficulty
       );
       
-      // Create a calculation record with explicit conversion to string for bitcoinMined
+      // Create a calculation record
       return {
         settlementDate: record.settlement_date,
         settlementPeriod: record.settlement_period,
         farmId: record.farm_id,
-        curtailmentId: record.id,
         minerModel: minerModel,
-        difficulty: difficulty.toString(), // Convert to string
-        curtailedMwh: Math.abs(parseFloat(record.volume.toString())),
-        bitcoinMined: bitcoinMined.toString(), // Convert to string
+        difficulty: difficulty.toString(),
+        bitcoinMined: bitcoinMined.toString(),
         calculatedAt: new Date()
       };
     });
@@ -170,6 +170,34 @@ async function retrieveDifficultyFromExistingData(): Promise<number> {
   
   // Fallback to default
   return DEFAULT_DIFFICULTY;
+}
+
+function calculateBitcoin(
+  curtailedMwh: number,
+  minerModel: string, 
+  difficulty: number
+): number {
+  // Bitcoin network constants
+  const BLOCK_REWARD = 3.125;
+  const SETTLEMENT_PERIOD_MINUTES = 30;
+  const BLOCKS_PER_SETTLEMENT_PERIOD = 3;
+
+  const miner = minerModels[minerModel];
+  if (!miner) throw new Error(`Invalid miner model: ${minerModel}`);
+
+  const curtailedKwh = curtailedMwh * 1000;
+  const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
+  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
+  
+  const difficultyNum = typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty;
+  const hashesPerBlock = difficultyNum * Math.pow(2, 32);
+  const networkHashRate = hashesPerBlock / 600;
+  const networkHashRateTH = networkHashRate / 1e12;
+  
+  const totalHashPower = potentialMiners * miner.hashrate;
+  const ourNetworkShare = totalHashPower / networkHashRateTH;
+  
+  return Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
 }
 
 async function main() {
