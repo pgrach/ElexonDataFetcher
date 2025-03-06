@@ -127,7 +127,7 @@ async function checkDailySummaries() {
       WHERE summary_date = ${TARGET_DATE}
     `);
     
-    if (result.length > 0) {
+    if (Array.isArray(result) && result.length > 0) {
       const summary = result[0];
       const volume = parseFloat(summary.total_curtailed_energy as string);
       const payment = parseFloat(summary.total_payment as string);
