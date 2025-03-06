@@ -54,15 +54,20 @@ export async function tableExists(tableName: string): Promise<boolean> {
   return executeQuery(
     'tableExists',
     async () => {
-      const result = await db.execute<{ exists: boolean }>(sql`
+      const result = await db.execute(sql`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.tables 
           WHERE table_schema = 'public' 
           AND table_name = ${tableName}
-        )
+        ) as exists
       `);
       
-      return result[0]?.exists || false;
+      // Safe access to the result
+      if (result && Array.isArray(result) && result.length > 0) {
+        return (result[0] as { exists: boolean }).exists;
+      }
+      
+      return false;
     },
     { tableName }
   );
@@ -79,12 +84,30 @@ export async function getRecordCount(
   return executeQuery(
     'getRecordCount',
     async () => {
-      const result = await db.execute<{ count: number }>(
-        sql`SELECT COUNT(*) as count FROM ${sql.identifier(tableName)} WHERE ${sql.raw(whereClause)}`,
-        params
-      );
+      // Create dynamic SQL with proper parameter handling
+      const placeholders: string[] = [];
+      for (let i = 0; i < params.length; i++) {
+        placeholders.push(`$${i+1}`);
+      }
       
-      return result[0]?.count || 0;
+      // Replace ? with proper placeholders if needed
+      let formattedWhereClause = whereClause;
+      if (whereClause.includes('?')) {
+        let paramIndex = 0;
+        formattedWhereClause = whereClause.replace(/\?/g, () => `$${++paramIndex}`);
+      }
+      
+      const query = sql`SELECT COUNT(*) as count FROM ${sql.identifier(tableName)} WHERE ${sql.raw(formattedWhereClause)}`;
+      
+      // Execute the query
+      const result = await db.execute(query, params);
+      
+      // Safe access to the result
+      if (result && Array.isArray(result) && result.length > 0) {
+        return Number((result[0] as { count: number | string }).count) || 0;
+      }
+      
+      return 0;
     },
     { tableName, whereClause, params }
   );
@@ -114,26 +137,39 @@ export async function batchInsert<T extends Record<string, any>>(
     await executeQuery(
       'batchInsert',
       async () => {
-        // Create the bulk insert query
-        const values = chunk.map(record => 
-          '(' + columns.map(col => `$${col}`).join(', ') + ')'
-        ).join(', ');
-        
-        const placeholders: any[] = [];
+        // Create parameterized values
+        const valuesList: any[][] = [];
         chunk.forEach(record => {
+          const rowValues: any[] = [];
           columns.forEach(col => {
-            placeholders.push(record[col]);
+            rowValues.push(record[col]);
           });
+          valuesList.push(rowValues);
         });
         
-        // Build and execute the query
-        const query = `
-          INSERT INTO ${tableName} (${columns.join(', ')})
-          VALUES ${values}
+        // Create placeholders for prepared statement
+        const placeholderGroups = [];
+        let placeholderCounter = 1;
+        
+        for (let j = 0; j < chunk.length; j++) {
+          const placeholders = [];
+          for (let k = 0; k < columns.length; k++) {
+            placeholders.push(`$${placeholderCounter++}`);
+          }
+          placeholderGroups.push(`(${placeholders.join(', ')})`);
+        }
+        
+        // Flatten valuesList for parameters
+        const flatParams = valuesList.flat();
+        
+        // Build the SQL query
+        const sqlQuery = sql`
+          INSERT INTO ${sql.identifier(tableName)} (${sql.join(columns.map(col => sql.identifier(col)), sql`, `)})
+          VALUES ${sql.raw(placeholderGroups.join(', '))}
           ON CONFLICT DO NOTHING
         `;
         
-        const result = await db.execute(sql.raw(query, placeholders));
+        const result = await db.execute(sqlQuery, flatParams);
         return result;
       },
       { tableName, recordCount: chunk.length }
@@ -211,11 +247,7 @@ export async function getDatabaseStats(): Promise<{
     'getDatabaseStats',
     async () => {
       // Get table statistics
-      const tableStatsQuery = await db.execute<{
-        tableName: string;
-        rowCount: number;
-        sizeBytes: number;
-      }>(sql`
+      const tableStatsQuery = await db.execute(sql`
         SELECT 
           relname as "tableName",
           n_live_tup as "rowCount",
@@ -225,19 +257,48 @@ export async function getDatabaseStats(): Promise<{
       `);
       
       // Get connection count
-      const connectionQuery = await db.execute<{ count: number }>(sql`
+      const connectionQuery = await db.execute(sql`
         SELECT count(*) as count FROM pg_stat_activity
       `);
       
       // Get database uptime
-      const uptimeQuery = await db.execute<{ uptime: number }>(sql`
+      const uptimeQuery = await db.execute(sql`
         SELECT extract(epoch from current_timestamp - pg_postmaster_start_time()) as uptime
       `);
       
+      // Safe access with proper type conversions
+      let connectionCount = 0;
+      let uptime = 0;
+      
+      if (connectionQuery && Array.isArray(connectionQuery) && connectionQuery.length > 0) {
+        connectionCount = Number((connectionQuery[0] as any).count) || 0;
+      }
+      
+      if (uptimeQuery && Array.isArray(uptimeQuery) && uptimeQuery.length > 0) {
+        uptime = Number((uptimeQuery[0] as any).uptime) || 0;
+      }
+      
+      // Convert tableStatsQuery to proper array format
+      const tableStats: Array<{
+        tableName: string;
+        rowCount: number;
+        sizeBytes: number;
+      }> = [];
+      
+      if (tableStatsQuery && Array.isArray(tableStatsQuery)) {
+        tableStatsQuery.forEach(row => {
+          tableStats.push({
+            tableName: String((row as any).tableName || ''),
+            rowCount: Number((row as any).rowCount || 0),
+            sizeBytes: Number((row as any).sizeBytes || 0)
+          });
+        });
+      }
+      
       return {
-        tableStats: tableStatsQuery,
-        connectionCount: connectionQuery[0]?.count || 0,
-        uptime: uptimeQuery[0]?.uptime || 0
+        tableStats,
+        connectionCount,
+        uptime
       };
     },
     {}

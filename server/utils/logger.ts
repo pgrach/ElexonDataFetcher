@@ -136,10 +136,10 @@ class Logger {
   /**
    * Get the current log file name based on date
    */
-  private getLogFileName(): string {
+  private getLogFileName(module?: string): string {
     const date = getDateString();
-    const fileName = options?.module ? 
-      `${options.module}_${date}.log` : 
+    const fileName = module ? 
+      `${module}_${date}.log` : 
       `app_${date}.log`;
     
     return path.join(this.logDir, fileName);
@@ -150,8 +150,8 @@ class Logger {
    */
   private writeToFile(entry: LogEntry): void {
     try {
-      // Determine the current log file
-      const logFile = path.join(this.logDir, `app_${getDateString()}.log`);
+      // Get the log file path based on the module
+      const logFile = this.getLogFileName(entry.module);
       
       // If the log file has changed, close the current stream
       if (this.currentLogFile !== logFile && this.currentLogStream) {

@@ -115,6 +115,7 @@ export class ApiError extends AppError {
     return {
       error: {
         message: this.message,
+        type: this.name,
         statusCode: this.statusCode,
         timestamp: this.timestamp.toISOString()
       }

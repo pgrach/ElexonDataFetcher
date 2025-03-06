@@ -15,7 +15,15 @@ import { logger } from '../utils/logger';
 export function errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
   // Default status code and error structure
   let statusCode = 500;
-  let errorResponse = {
+  let errorResponse: {
+    error: {
+      message: string;
+      type?: string;
+      statusCode?: number;
+      timestamp: string;
+      stack?: string;
+    }
+  } = {
     error: {
       message: err.message || 'Internal server error',
       type: err.name,
@@ -27,7 +35,13 @@ export function errorHandler(err: Error, req: Request, res: Response, next: Next
   if (err instanceof ApiError) {
     // Handle API errors with status code
     statusCode = err.statusCode;
-    errorResponse = err.toResponse();
+    const apiResponse = err.toResponse();
+    errorResponse.error = {
+      ...errorResponse.error,
+      message: apiResponse.error.message,
+      statusCode: apiResponse.error.statusCode,
+      timestamp: apiResponse.error.timestamp
+    };
     
     logger.error(`API Error: ${err.message}`, {
       module: 'api',
@@ -96,10 +110,7 @@ export function errorHandler(err: Error, req: Request, res: Response, next: Next
   
   // In development, include stack trace
   if (process.env.NODE_ENV !== 'production') {
-    errorResponse.error = {
-      ...errorResponse.error,
-      stack: err.stack
-    };
+    errorResponse.error.stack = err.stack || '';
   }
   
   // Send error response

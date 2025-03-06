@@ -173,10 +173,12 @@ export class CheckpointManager<T extends BaseCheckpoint> {
       return;
     }
     
-    this.update(data => ({
+    const updateData: Partial<BaseCheckpoint> = {
       status: success ? 'completed' : 'failed',
-      progress: success ? 100 : data.progress
-    }));
+      progress: success ? 100 : this.checkpointData.progress
+    };
+    
+    this.update(() => updateData as Partial<T>);
     
     // Stop auto-save when completed
     this.stopAutoSave();

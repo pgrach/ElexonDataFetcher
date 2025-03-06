@@ -115,11 +115,16 @@ export class Cache<T> {
    */
   keys(): string[] {
     // Return only non-expired keys
-    return Array.from(this.cache.entries())
-      .filter(([_, entry]) => {
-        return entry.ttl === 0 || Date.now() - entry.timestamp <= entry.ttl;
-      })
-      .map(([key]) => key);
+    const validKeys: string[] = [];
+    const now = Date.now();
+    
+    this.cache.forEach((entry, key) => {
+      if (entry.ttl === 0 || now - entry.timestamp <= entry.ttl) {
+        validKeys.push(key);
+      }
+    });
+    
+    return validKeys;
   }
   
   /**
@@ -169,12 +174,13 @@ export class Cache<T> {
     const now = Date.now();
     let removedCount = 0;
     
-    for (const [key, entry] of this.cache.entries()) {
+    // Use forEach to iterate through cache entries
+    this.cache.forEach((entry, key) => {
       if (entry.ttl > 0 && now - entry.timestamp > entry.ttl) {
         this.cache.delete(key);
         removedCount++;
       }
-    }
+    });
     
     if (removedCount > 0) {
       logger.debug(`Cleaned up ${removedCount} expired items from ${this.name} cache`, {
@@ -208,12 +214,13 @@ export class Cache<T> {
     let oldestKey: string | null = null;
     let oldestTime = Infinity;
     
-    for (const [key, entry] of this.cache.entries()) {
+    // Use forEach to find the oldest item
+    this.cache.forEach((entry, key) => {
       if (entry.timestamp < oldestTime) {
         oldestTime = entry.timestamp;
         oldestKey = key;
       }
-    }
+    });
     
     if (oldestKey) {
       this.cache.delete(oldestKey);

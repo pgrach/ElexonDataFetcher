@@ -16,15 +16,16 @@ export function performanceMonitor(req: Request, res: Response, next: NextFuncti
   // Track request start time
   const startTime = Date.now();
   
-  // Store original end function
-  const originalEnd = res.end;
+  // Track response time and log after completion
+  const startAt = process.hrtime();
   
-  // Override end function to measure response time
-  res.end = function(chunk?: any, encoding?: string, callback?: () => void): Response {
-    const duration = Date.now() - startTime;
-    
-    // Add performance header
-    res.setHeader('X-Response-Time', `${duration}ms`);
+  // Set header before response is sent
+  res.setHeader('X-Response-Time-Tracking', 'enabled');
+  
+  // Track completion
+  res.on('finish', () => {
+    const diff = process.hrtime(startAt);
+    const duration = Math.round(diff[0] * 1e3 + diff[1] * 1e-6); // Convert to ms
     
     // Log slow requests
     if (duration > CRITICAL_THRESHOLD) {
@@ -35,7 +36,8 @@ export function performanceMonitor(req: Request, res: Response, next: NextFuncti
           url: req.originalUrl,
           duration,
           query: req.query,
-          params: req.params
+          params: req.params,
+          statusCode: res.statusCode
         }
       });
     } else if (duration > WARNING_THRESHOLD) {
@@ -44,13 +46,23 @@ export function performanceMonitor(req: Request, res: Response, next: NextFuncti
         context: {
           method: req.method,
           url: req.originalUrl,
-          duration
+          duration,
+          statusCode: res.statusCode
         }
       });
     }
+  });
+  
+  // Let's also set up a timing hook that adds performance header before sending
+  const originalSend = res.send;
+  res.send = function(...args) {
+    // Add performance header - this is done before sending the response
+    const diff = process.hrtime(startAt);
+    const duration = Math.round(diff[0] * 1e3 + diff[1] * 1e-6);
+    res.setHeader('X-Response-Time', `${duration}ms`);
     
-    // Call original end
-    return originalEnd.call(this, chunk, encoding as BufferEncoding, callback);
+    // Call the original send function
+    return originalSend.apply(this, args);
   };
   
   next();
