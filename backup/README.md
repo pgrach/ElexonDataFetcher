@@ -1,0 +1,35 @@
+# Backup Directory
+
+This directory contains files that have been moved from the active codebase as part of a decluttering effort. These files are preserved for historical reference but are no longer actively used in the main application.
+
+## Contents
+
+### Deprecated Services
+
+- **miningPotentialService.ts**: Superseded by the optimized mining service (`server/services/optimizedMiningService.ts`).
+- **miningPotentialRoutes.ts**: Legacy routes that used materialized views, replaced by direct query optimization in `server/routes/optimizedMiningRoutes.ts`.
+
+### One-time Utility Scripts
+
+- **scripts/run_index_optimization.js**: One-time database optimization script.
+- **server_scripts/backfillMonthlySummaries.ts**: One-time script for historical data population.
+- **server_scripts/processSingleDate.ts**: Single-purpose utility superseded by the unified reconciliation system.
+- **server_scripts/reprocessDay.ts**: Functionality integrated into the reconciliation systems.
+- **server_scripts/auditCurtailmentData.ts**: One-time audit script for data verification.
+- **server_scripts/auditDecember2022.ts**: Special audit for a specific month.
+- **server_scripts/auditDifficulty.ts**: One-time validation script for difficulty data.
+- **server_scripts/auditHistoricalData.ts**: Historical data audit script.
+- **server_scripts/test-dynamo.ts**: Test script for DynamoDB functionality.
+
+## Rationale
+
+These files were moved to:
+
+1. Declutter the main codebase and reduce cognitive load
+2. Maintain clear separation between active code and one-time utilities
+3. Preserve historical scripts for reference without affecting active development
+4. Simplify onboarding by focusing on essential active components
+
+## Usage
+
+If any of these scripts need to be used again, they should be manually copied back to their respective directories and tested thoroughly before use, as they may require updates to work with the current system.

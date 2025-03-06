@@ -55,12 +55,12 @@ Commands:
 - `fix-critical` - Fix dates with known issues
 - `report` - Generate detailed reconciliation report
 
-### 4. Reprocess Single Day
+### 4. Unified Reconciliation
 
 For targeted data reprocessing:
 
 ```bash
-npx tsx server/scripts/reprocessDay.ts YYYY-MM-DD
+npx tsx unified_reconciliation.ts date YYYY-MM-DD
 ```
 
 ## Automated Monitoring and Alerts
@@ -86,7 +86,7 @@ If missing data is detected:
    ```
    or for a single day:
    ```bash
-   npx tsx server/scripts/reprocessDay.ts YYYY-MM-DD
+   npx tsx unified_reconciliation.ts date YYYY-MM-DD
    ```
 
 3. **Verify Recovery**: Run verification again to confirm all data is properly reconciled:
@@ -111,7 +111,7 @@ To prevent missing data:
 Common issues and their solutions:
 
 1. **Missing Curtailment Data**: Often caused by API access issues or network interruptions.
-   - Solution: Use `reprocessDay.ts` to re-ingest data from source APIs.
+   - Solution: Use `unified_reconciliation.ts date YYYY-MM-DD` to re-ingest data from source APIs.
 
 2. **Missing Bitcoin Calculations**: May occur when curtailment data exists but calculation failed.
    - Solution: Fix with `verify_date_integrity.ts --auto-fix` which only regenerates the calculations.
