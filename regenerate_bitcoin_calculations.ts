@@ -43,9 +43,9 @@ async function regenerateBitcoinCalculations() {
       WHERE settlement_date = ${TARGET_DATE}
     `);
     
-    console.log(`Found ${curtailmentCheck[0].recordCount} curtailment records across ${curtailmentCheck[0].periodCount} periods`);
-    console.log(`Total volume: ${Number(curtailmentCheck[0].totalVolume).toFixed(2)} MWh`);
-    console.log(`Total payment: £${Number(curtailmentCheck[0].totalPayment).toFixed(2)}`);
+    console.log(`Found ${curtailmentCheck[0].record_count} curtailment records across ${curtailmentCheck[0].period_count} periods`);
+    console.log(`Total volume: ${Number(curtailmentCheck[0].total_volume).toFixed(2)} MWh`);
+    console.log(`Total payment: £${Number(curtailmentCheck[0].total_payment).toFixed(2)}`);
     
     // Process for all miner models
     const minerModels = ['S19J_PRO', 'S9', 'M20S'];
@@ -57,18 +57,18 @@ async function regenerateBitcoinCalculations() {
     }
     
     // Verify Bitcoin calculations
-    const bitcoinCheck = await db
-      .select({
-        recordCount: sql<number>`COUNT(*)`,
-        periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
-        farmCount: sql<number>`COUNT(DISTINCT farm_id)`,
-        modelCount: sql<number>`COUNT(DISTINCT miner_model)`
-      })
-      .from(historicalBitcoinCalculations)
-      .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE));
+    const bitcoinCheck = await db.execute(sql`
+      SELECT 
+        COUNT(*) AS record_count,
+        COUNT(DISTINCT settlement_period) AS period_count,
+        COUNT(DISTINCT farm_id) AS farm_count,
+        COUNT(DISTINCT miner_model) AS model_count
+      FROM historical_bitcoin_calculations 
+      WHERE settlement_date = ${TARGET_DATE}
+    `);
       
-    console.log(`\nBitcoin calculation summary: ${bitcoinCheck[0].recordCount} records`);
-    console.log(`Periods: ${bitcoinCheck[0].periodCount}, Farms: ${bitcoinCheck[0].farmCount}, Models: ${bitcoinCheck[0].modelCount}`);
+    console.log(`\nBitcoin calculation summary: ${bitcoinCheck[0].record_count} records`);
+    console.log(`Periods: ${bitcoinCheck[0].period_count}, Farms: ${bitcoinCheck[0].farm_count}, Models: ${bitcoinCheck[0].model_count}`);
     
     console.log(`\n=== Processing Complete for ${TARGET_DATE} ===`);
   } catch (error) {
