@@ -1,16 +1,16 @@
 #!/usr/bin/env tsx
 /**
- * Deduplicate March 4, 2025 Data
+ * Direct Deduplication Script for March 4, 2025 Data
  * 
- * This script identifies and removes duplicate curtailment records for March 4, 2025,
- * to resolve the data quality issue causing discrepancies with Elexon's reported figures.
+ * This script uses direct PostgreSQL connection to identify and remove duplicate curtailment records
+ * for March 4, 2025, to resolve the data discrepancy with Elexon's reported figures.
  */
 
+import pg from 'pg';
 import { db } from "./db";
 import { historicalBitcoinCalculations, dailySummaries, monthlySummaries, yearlySummaries } from "./db/schema";
 import { eq, sql } from "drizzle-orm";
 import { processSingleDay } from "./server/services/bitcoinService";
-import pg from 'pg';
 
 // Configuration
 const TARGET_DATE = '2025-03-04';
@@ -60,22 +60,15 @@ async function main() {
       WHERE settlement_date = $1
     `, [TARGET_DATE]);
     
-    // Debug output
-    console.log("Raw beforeStats query result:", beforeStatsQuery.rows[0]);
-    
+    // Parse initial stats
     const beforeVolume = parseFloat(beforeStatsQuery.rows[0]?.total_volume || '0');
     const beforePayment = parseFloat(beforeStatsQuery.rows[0]?.total_payment || '0');
     const beforeCount = parseInt(beforeStatsQuery.rows[0]?.record_count || '0');
     const beforePeriods = parseInt(beforeStatsQuery.rows[0]?.period_count || '0');
     
-    console.log("Parsed stats:", {
-      beforeVolume,
-      beforePayment,
-      beforeCount,
-      beforePeriods
-    });
+    log(`Current state: ${beforeCount} records, ${beforeVolume.toFixed(2)} MWh, £${beforePayment.toFixed(2)}`, "info");
     
-    // Check for duplicate records using client
+    // Check for duplicate records
     const duplicateQuery = await client.query(`
       WITH duplicate_groups AS (
         SELECT 
@@ -96,20 +89,11 @@ async function main() {
       FROM duplicate_groups
     `, [TARGET_DATE]);
     
-    console.log("Raw duplicate query result:", duplicateQuery.rows[0]);
-    
+    // Parse duplicate stats
     const duplicateGroupCount = parseInt(duplicateQuery.rows[0]?.duplicate_group_count || '0');
     const duplicateRecordsCount = parseInt(duplicateQuery.rows[0]?.duplicate_records_count || '0');
     const duplicateVolume = parseFloat(duplicateQuery.rows[0]?.duplicate_volume || '0');
     
-    console.log("Parsed duplicate stats:", {
-      duplicateGroupCount,
-      duplicateRecordsCount,
-      duplicateVolume
-    });
-    
-    log("Current state:", "info");
-    log(`Total records: ${beforeCount} records, ${beforeVolume.toFixed(2)} MWh, £${beforePayment.toFixed(2)}`, "info");
     log(`Found ${duplicateGroupCount} duplicate groups with ${duplicateRecordsCount} extra records`, duplicateGroupCount > 0 ? "warning" : "info");
     
     // Estimate the after deduplication stats
@@ -121,7 +105,7 @@ async function main() {
     log(`Estimated payment to reduce: £${(beforePayment - estimatedAfterPayment).toFixed(2)}`, "info");
     log(`After deduplication: ~${estimatedAfterVolume.toFixed(2)} MWh, ~£${estimatedAfterPayment.toFixed(2)}`, "info");
     
-    // Ask for confirmation before proceeding (can be skipped when running from command line with --confirm)
+    // Ask for confirmation before proceeding (can be skipped with --confirm)
     const args = process.argv.slice(2);
     const autoConfirm = args.includes('--confirm');
     
@@ -138,10 +122,8 @@ async function main() {
     } else {
       log("Performing deduplication...", "info");
       
-      log("Starting deduplication with direct SQL...", "info");
-      
-      // First get a count of what will be deleted
-      const toDelete = await db.execute(sql`
+      // Get count of records to be deleted
+      const deleteCountQuery = await client.query(`
         WITH ranked_records AS (
           SELECT 
             id,
@@ -150,19 +132,18 @@ async function main() {
               ORDER BY id
             ) as row_num
           FROM curtailment_records
-          WHERE settlement_date = ${TARGET_DATE}
+          WHERE settlement_date = $1
         )
         SELECT COUNT(*) as records_to_remove
         FROM ranked_records 
         WHERE row_num > 1
-      `);
+      `, [TARGET_DATE]);
       
-      console.log("Records to delete:", JSON.stringify(toDelete, null, 2));
-      const recordsToRemove = parseInt(toDelete[0]?.records_to_remove || '0');
+      const recordsToRemove = parseInt(deleteCountQuery.rows[0]?.records_to_remove || '0');
       log(`About to remove ${recordsToRemove} duplicate records...`, "warning");
       
-      // Now perform the deletion
-      await db.execute(sql`
+      // Perform the deletion
+      const deleteResult = await client.query(`
         WITH ranked_records AS (
           SELECT 
             id,
@@ -171,32 +152,34 @@ async function main() {
               ORDER BY id
             ) as row_num
           FROM curtailment_records
-          WHERE settlement_date = ${TARGET_DATE}
+          WHERE settlement_date = $1
         )
         DELETE FROM curtailment_records
         WHERE id IN (
           SELECT id FROM ranked_records WHERE row_num > 1
         )
-      `);
+        RETURNING id
+      `, [TARGET_DATE]);
       
-      log(`Removed ${recordsToRemove} duplicate records.`, "success");
+      log(`Removed ${deleteResult.rowCount} duplicate records.`, "success");
     }
     
     // Get stats after deduplication
-    const afterStats = await db.execute(sql`
+    const afterStatsQuery = await client.query(`
       SELECT 
         SUM(ABS(volume::numeric)) as total_volume,
         SUM(payment::numeric) as total_payment,
         COUNT(*) as record_count,
         COUNT(DISTINCT settlement_period) as period_count
       FROM curtailment_records
-      WHERE settlement_date = ${TARGET_DATE}
-    `);
+      WHERE settlement_date = $1
+    `, [TARGET_DATE]);
     
-    const afterVolume = parseFloat(afterStats[0]?.total_volume || '0');
-    const afterPayment = parseFloat(afterStats[0]?.total_payment || '0');
-    const afterCount = parseInt(afterStats[0]?.record_count || '0');
-    const afterPeriods = parseInt(afterStats[0]?.period_count || '0');
+    // Parse after stats
+    const afterVolume = parseFloat(afterStatsQuery.rows[0]?.total_volume || '0');
+    const afterPayment = parseFloat(afterStatsQuery.rows[0]?.total_payment || '0');
+    const afterCount = parseInt(afterStatsQuery.rows[0]?.record_count || '0');
+    const afterPeriods = parseInt(afterStatsQuery.rows[0]?.period_count || '0');
     
     // Calculate reductions
     const volumeReduced = beforeVolume - afterVolume;
@@ -209,7 +192,7 @@ async function main() {
     log(`Reduced volume by ${volumeReduced.toFixed(2)} MWh`, "success");
     log(`Reduced payment by £${paymentReduced.toFixed(2)}`, "success");
     
-    // Update summary tables to reflect new totals
+    // Update summary tables
     log("Updating summary tables...", "info");
     
     // Update daily summary
@@ -300,6 +283,16 @@ async function main() {
   } catch (error) {
     log(`Error during processing: ${error}`, "error");
     process.exit(1);
+  } finally {
+    // Always close the database connection
+    if (client) {
+      try {
+        await client.end();
+        log("Database connection closed", "info");
+      } catch (err) {
+        console.error("Error closing database connection:", err);
+      }
+    }
   }
 }
 
