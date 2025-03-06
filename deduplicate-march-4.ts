@@ -10,6 +10,7 @@ import { db } from "./db";
 import { historicalBitcoinCalculations, dailySummaries, monthlySummaries, yearlySummaries } from "./db/schema";
 import { eq, sql } from "drizzle-orm";
 import { processSingleDay } from "./server/services/bitcoinService";
+import pg from 'pg';
 
 // Configuration
 const TARGET_DATE = '2025-03-04';
@@ -41,21 +42,36 @@ async function main() {
   try {
     log(`Starting deduplication process for ${TARGET_DATE}`, "info");
     
-    // Get current stats
-    const beforeStats = await db.execute(sql`
-      SELECT 
-        SUM(ABS(volume::numeric)) as total_volume,
-        SUM(payment::numeric) as total_payment,
-        COUNT(*) as record_count,
-        COUNT(DISTINCT settlement_period) as period_count
-      FROM curtailment_records
-      WHERE settlement_date = ${TARGET_DATE}
-    `);
+    // Get current stats - use a direct connection for more reliable access to fields
+    const client = new pg.Client(process.env.DATABASE_URL);
+    await client.connect();
     
-    const beforeVolume = parseFloat(beforeStats[0]?.total_volume || '0');
-    const beforePayment = parseFloat(beforeStats[0]?.total_payment || '0');
-    const beforeCount = parseInt(beforeStats[0]?.record_count || '0');
-    const beforePeriods = parseInt(beforeStats[0]?.period_count || '0');
+    try {
+      // Get initial stats
+      const beforeStatsQuery = await client.query(`
+        SELECT 
+          SUM(ABS(volume::numeric)) as total_volume,
+          SUM(payment::numeric) as total_payment,
+          COUNT(*) as record_count,
+          COUNT(DISTINCT settlement_period) as period_count
+        FROM curtailment_records
+        WHERE settlement_date = $1
+      `, [TARGET_DATE]);
+      
+      // Debug output
+      console.log("Raw beforeStats query result:", beforeStatsQuery.rows[0]);
+      
+      const beforeVolume = parseFloat(beforeStatsQuery.rows[0]?.total_volume || '0');
+      const beforePayment = parseFloat(beforeStatsQuery.rows[0]?.total_payment || '0');
+      const beforeCount = parseInt(beforeStatsQuery.rows[0]?.record_count || '0');
+      const beforePeriods = parseInt(beforeStatsQuery.rows[0]?.period_count || '0');
+      
+      console.log("Parsed stats:", {
+        beforeVolume,
+        beforePayment,
+        beforeCount,
+        beforePeriods
+      });
     
     // Find duplicate groups
     const duplicateGroups = await db.execute(sql`
@@ -78,9 +94,18 @@ async function main() {
       FROM duplicate_groups
     `);
     
+    // Debug output
+    console.log("Raw duplicateGroups query result:", JSON.stringify(duplicateGroups, null, 2));
+    
     const duplicateGroupCount = parseInt(duplicateGroups[0]?.duplicate_group_count || '0');
     const duplicateRecordsCount = parseInt(duplicateGroups[0]?.duplicate_records_count || '0');
     const duplicateVolume = parseFloat(duplicateGroups[0]?.duplicate_volume || '0');
+    
+    console.log("Parsed duplicate stats:", {
+      duplicateGroupCount,
+      duplicateRecordsCount,
+      duplicateVolume
+    });
     
     log("Current state:", "info");
     log(`Total records: ${beforeCount} records, ${beforeVolume.toFixed(2)} MWh, £${beforePayment.toFixed(2)}`, "info");
@@ -112,8 +137,31 @@ async function main() {
     } else {
       log("Performing deduplication...", "info");
       
-      // Delete duplicates using a WITH clause to keep one record per group
-      const deletedCount = await db.execute(sql`
+      log("Starting deduplication with direct SQL...", "info");
+      
+      // First get a count of what will be deleted
+      const toDelete = await db.execute(sql`
+        WITH ranked_records AS (
+          SELECT 
+            id,
+            ROW_NUMBER() OVER (
+              PARTITION BY settlement_date, settlement_period, farm_id 
+              ORDER BY id
+            ) as row_num
+          FROM curtailment_records
+          WHERE settlement_date = ${TARGET_DATE}
+        )
+        SELECT COUNT(*) as records_to_remove
+        FROM ranked_records 
+        WHERE row_num > 1
+      `);
+      
+      console.log("Records to delete:", JSON.stringify(toDelete, null, 2));
+      const recordsToRemove = parseInt(toDelete[0]?.records_to_remove || '0');
+      log(`About to remove ${recordsToRemove} duplicate records...`, "warning");
+      
+      // Now perform the deletion
+      await db.execute(sql`
         WITH ranked_records AS (
           SELECT 
             id,
@@ -128,11 +176,9 @@ async function main() {
         WHERE id IN (
           SELECT id FROM ranked_records WHERE row_num > 1
         )
-        RETURNING id
       `);
       
-      const recordsRemoved = deletedCount.length;
-      log(`Removed ${recordsRemoved} duplicate records.`, "success");
+      log(`Removed ${recordsToRemove} duplicate records.`, "success");
     }
     
     // Get stats after deduplication
