@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url';
 
 // Constants
 const TARGET_DATE = '2025-03-05';
-const PRIORITY_PERIODS = [14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]; // Next batch of periods to process
+const PRIORITY_PERIODS = [17, 18, 19, 20, 21, 22, 23, 24, 30, 31, 32, 33]; // Next batch of periods to process
 const DELAY_BETWEEN_PERIODS = 50; // 0.05 second delay between API calls
 const BMU_MAPPING_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'server/data/bmuMapping.json');
 
