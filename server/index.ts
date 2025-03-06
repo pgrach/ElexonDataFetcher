@@ -2,11 +2,19 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startDataUpdateService } from "./services/dataUpdater";
+import { requestLogger } from "./middleware/requestLogger";
+import { errorHandler } from "./middleware/errorHandler";
+import { logger } from "./utils/logger";
 
+// Initialize Express app
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Use our standardized request logger middleware
+app.use(requestLogger);
+
+// Legacy middleware for backward compatibility
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
