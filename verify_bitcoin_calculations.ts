@@ -69,22 +69,20 @@ async function verifyBitcoinCalculations() {
       .select({
         minerModel: sql<string>`miner_model`,
         count: sql<string>`COUNT(*)::text`,
-        totalBitcoin: sql<string>`SUM(bitcoin_mined)::text`,
-        totalMWh: sql<string>`SUM(curtailed_mwh)::text`
+        totalBitcoin: sql<string>`SUM(bitcoin_mined)::text`
       })
       .from(sql`historical_bitcoin_calculations`)
       .where(sql`settlement_date = ${TARGET_DATE}`)
       .groupBy(sql`miner_model`);
     
     console.log(`\n=== Calculations by Miner Model ===`);
-    console.log(`Model\tCount\tTotal BTC\tTotal MWh`);
+    console.log(`Model\tCount\tTotal BTC`);
     
     minerStats.forEach(stat => {
       const count = Number(stat.count);
       const bitcoinMined = Number(stat.totalBitcoin);
-      const curtailedMWh = Number(stat.totalMWh);
       
-      console.log(`${stat.minerModel}\t${count}\t${bitcoinMined.toFixed(8)}\t${curtailedMWh.toFixed(2)}`);
+      console.log(`${stat.minerModel}\t${count}\t${bitcoinMined.toFixed(8)}`);
     });
     
     // Generate recommendation
