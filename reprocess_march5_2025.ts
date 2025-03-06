@@ -178,10 +178,10 @@ async function validateResults(): Promise<{
   // Get the database statistics after processing
   const dbStats = await db.select({
     recordCount: sql<number>`count(*)`,
-    totalVolume: sql<number>`sum(volume)`
+    totalVolume: sql<number>`sum(volume::numeric)`
   })
   .from(curtailmentRecords)
-  .where(eq(curtailmentRecords.settlementDate, new Date(TARGET_DATE)));
+  .where(sql`${curtailmentRecords.settlementDate}::text = ${TARGET_DATE}`);
   
   // Fetch all data from API to get the total volume
   let apiRecordCount = 0;
@@ -221,10 +221,10 @@ async function main() {
   // Get initial database stats
   const initialStats = await db.select({
     recordCount: sql<number>`count(*)`,
-    totalVolume: sql<number>`sum(volume)`
+    totalVolume: sql<number>`sum(volume::numeric)`
   })
   .from(curtailmentRecords)
-  .where(eq(curtailmentRecords.settlementDate, new Date(TARGET_DATE)));
+  .where(sql`${curtailmentRecords.settlementDate}::text = ${TARGET_DATE}`);
   
   console.log(`Initial database stats: ${initialStats[0].recordCount} records with total volume ${initialStats[0].totalVolume}`);
   
@@ -236,29 +236,27 @@ async function main() {
     totalErrors: 0
   };
   
-  // Process in batches to limit concurrent API calls
-  for (let startPeriod = 1; startPeriod <= 48; startPeriod += MAX_CONCURRENT_PERIODS) {
-    const endPeriod = Math.min(startPeriod + MAX_CONCURRENT_PERIODS - 1, 48);
-    console.log(`Processing periods ${startPeriod}-${endPeriod}...`);
+  // Process periods sequentially to avoid overloading the API
+  for (let period = 1; period <= 48; period++) {
+    console.log(`Processing period ${period}...`);
     
-    const periodPromises = [];
-    for (let period = startPeriod; period <= endPeriod; period++) {
-      // Stagger requests to avoid overwhelming the API
-      await delay(DELAY_BETWEEN_PERIODS);
-      periodPromises.push(processPeriod(period));
-    }
-    
-    const periodResults = await Promise.all(periodPromises);
-    
-    // Aggregate results
-    for (const result of periodResults) {
+    try {
+      const result = await processPeriod(period);
+      
+      // Aggregate results
       results.totalProcessed += result.processed;
       results.totalAdded += result.added;
       results.totalSkipped += result.skipped;
       results.totalErrors += result.errors;
+      
+      console.log(`Completed period ${period}`);
+      
+      // Add a small delay between periods
+      await delay(DELAY_BETWEEN_PERIODS);
+    } catch (error) {
+      console.error(`Failed to process period ${period}:`, error);
+      results.totalErrors++;
     }
-    
-    console.log(`Completed periods ${startPeriod}-${endPeriod}`);
   }
   
   console.log("\n===== Processing Summary =====");
