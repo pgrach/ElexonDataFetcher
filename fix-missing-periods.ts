@@ -8,8 +8,8 @@
 
 import { fetchBidsOffers } from "./server/services/elexon";
 import { db } from "./db";
-import { curtailmentRecords, dailySummaries, historicalBitcoinCalculations } from "./db/schema";
-import { eq, sql, count, between } from "drizzle-orm";
+import { curtailmentRecords, dailySummaries, historicalBitcoinCalculations, InsertHistoricalBitcoinCalculation } from "./db/schema";
+import { eq, sql, count, between, inArray } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from 'url';
@@ -292,7 +292,9 @@ async function main() {
       // Process each group
       let totalBitcoin = 0;
       const calculatedAt = new Date();
-      const batchInsertValues = [];
+      
+      // Using the schema's insert type
+      const batchInsertValues: InsertHistoricalBitcoinCalculation[] = [];
       
       for (const [key, records] of Object.entries(groupedRecords)) {
         const [periodStr, farmId] = key.split('_');
@@ -319,7 +321,6 @@ async function main() {
           farmId,
           minerModel,
           bitcoinMined: bitcoinCalculation.bitcoinMined.toString(),
-          curtailedMwh: totalCurtailedMwh.toString(),
           difficulty: difficulty.toString(),
           calculatedAt
         });
