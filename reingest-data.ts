@@ -205,9 +205,19 @@ async function main() {
         })
       );
       
-      stats[0].bitcoinS19 = bitcoinStats.find(s => s.model === 'S19J_PRO')?.bitcoin || "0";
-      stats[0].bitcoinS9 = bitcoinStats.find(s => s.model === 'S9')?.bitcoin || "0";
-      stats[0].bitcoinM20S = bitcoinStats.find(s => s.model === 'M20S')?.bitcoin || "0";
+      // Add Bitcoin stats to summary object
+      const statsWithBitcoin = stats[0] as typeof stats[0] & {
+        bitcoinS19: string;
+        bitcoinS9: string;
+        bitcoinM20S: string;
+      };
+      
+      statsWithBitcoin.bitcoinS19 = bitcoinStats.find(s => s.model === 'S19J_PRO')?.bitcoin || "0";
+      statsWithBitcoin.bitcoinS9 = bitcoinStats.find(s => s.model === 'S9')?.bitcoin || "0";
+      statsWithBitcoin.bitcoinM20S = bitcoinStats.find(s => s.model === 'M20S')?.bitcoin || "0";
+      
+      // Replace stats object with extended version
+      stats[0] = statsWithBitcoin;
     }
     
     // Get daily summary

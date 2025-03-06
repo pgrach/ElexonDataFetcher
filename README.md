@@ -10,7 +10,7 @@ An advanced Bitcoin mining analytics platform that provides comprehensive insigh
 - [Reconciliation System](#reconciliation-system)
   - [Data Flow Architecture](#data-flow-architecture)
   - [Available Tools](#available-tools)
-  - [Common Commands](#common-commands)
+  - [Data Reingestion](#data-reingestion)
   - [Current Status](#current-status)
 - [Development Guide](#development-guide)
   - [Core Files](#core-files)
@@ -123,6 +123,71 @@ For specific data management needs:
 - **updateHistoricalCalculations.ts** - Updates Bitcoin calculations with batching
 - **updateBmuMapping.ts** - Updates BMU mapping data from Elexon API
 
+### Data Reingestion
+
+When you need to reingest and update data for a specific date, use the dedicated reingestion tools:
+
+#### 1. Command Line Reingestion Tool
+
+The most flexible way to reingest data for a specific date:
+
+```bash
+npx tsx reingest-data.ts <date> [options]
+```
+
+Arguments:
+- `date` - The date to reingest in YYYY-MM-DD format
+
+Options:
+- `--skip-bitcoin` - Skip Bitcoin calculation updates
+- `--skip-verify` - Skip verification step
+- `--verbose` - Show detailed logs during processing
+- `--help` - Display help information
+
+Examples:
+```bash
+# Basic usage (reingest data for March 4, 2025)
+npx tsx reingest-data.ts 2025-03-04
+
+# With verbose output
+npx tsx reingest-data.ts 2025-03-05 --verbose
+
+# Reingest without updating Bitcoin calculations
+npx tsx reingest-data.ts 2025-03-06 --skip-bitcoin
+```
+
+#### 2. API Endpoint
+
+For programmatic access or when you need to trigger reingestion remotely:
+
+```
+POST /api/ingest/:date
+```
+
+Example using curl:
+```bash
+curl -X POST https://your-application-url/api/ingest/2025-03-04
+```
+
+Response:
+```json
+{
+  "message": "Successfully re-ingested data for 2025-03-04",
+  "stats": {
+    "records": 4651,
+    "periods": 48,
+    "volume": "98765.43",
+    "payment": "-2345678.90"
+  }
+}
+```
+
+The reingestion process follows these steps:
+1. Fetch curtailment data from Elexon API for the specified date
+2. Update all curtailment_records for this date
+3. Recalculate Bitcoin mining potential for all miner models (S19J_PRO, S9, M20S)
+4. Update summary tables and statistics
+
 ### Current Status
 
 Currently, the platform shows a 68.46% reconciliation rate (1,035,073 calculations out of 1,511,934 expected) across three miner models:
@@ -146,8 +211,10 @@ Successfully recovered missing data for March 1-2, 2025:
 
 - `unified_reconciliation.ts` - Main system for all reconciliation operations
 - `daily_reconciliation_check.ts` - Automated daily reconciliation
+- `reingest-data.ts` - Versatile data reingestion tool for specific dates
 - `server/services/historicalReconciliation.ts` - Core service for reconciliation logic
 - `server/services/bitcoinService.ts` - Bitcoin calculation logic
+- `server/services/curtailment.ts` - Curtailment data processing service
 - `server/services/optimizedMiningService.ts` - Optimized mining potential calculations
 - `server/routes/optimizedMiningRoutes.ts` - API endpoints for mining potential data
 
@@ -186,11 +253,20 @@ The app runs with the "Start application" workflow, which executes `npm run dev`
 
 The platform exposes several API endpoints to access curtailment and mining data:
 
+### Data Retrieval Endpoints
+
 - `/api/curtailment/mining-potential` - Get Bitcoin mining potential
 - `/api/curtailment/monthly-mining-potential` - Get monthly mining data
-- `/api/summary/daily` - Get daily curtailment summaries
-- `/api/summary/monthly` - Get monthly curtailment summaries
-- `/api/summary/yearly` - Get yearly curtailment summaries
+- `/api/summary/daily/:date` - Get daily curtailment summaries
+- `/api/summary/monthly/:yearMonth` - Get monthly curtailment summaries
+- `/api/summary/yearly/:year` - Get yearly curtailment summaries
+- `/api/lead-parties/:date` - Get curtailed lead parties for a specific date
+- `/api/curtailment/hourly/:date` - Get hourly curtailment data
+
+### Data Management Endpoints
+
+- `POST /api/ingest/:date` - Reingest and update data for a specific date
+  - Returns stats about updated records, periods, volume, and payment
 
 ## Optimization Strategies
 
