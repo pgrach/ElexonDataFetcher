@@ -35,8 +35,45 @@ export function registerRoutes(app: Express): Server {
     try {
       const { date } = req.params;
       console.log(`Starting re-ingestion for date: ${date}`);
+      
+      // Step 1: Reingest curtailment records
       await processDailyCurtailment(date);
-      res.json({ message: `Successfully re-ingested data for ${date}` });
+      console.log(`Successfully re-ingested curtailment data for ${date}`);
+      
+      // Step 2: Process Bitcoin calculations for all miner models
+      const minerModels = ['S19J_PRO', 'S9', 'M20S'];
+      const { processSingleDay } = await import('./services/bitcoinService');
+      
+      console.log(`Updating Bitcoin calculations for ${date}...`);
+      for (const minerModel of minerModels) {
+        await processSingleDay(date, minerModel);
+        console.log(`- Processed ${minerModel}`);
+      }
+      
+      // Step 3: Verify the update with stats
+      const { db } = await import('../db');
+      const { curtailmentRecords, dailySummaries } = await import('../db/schema');
+      const { eq, sql } = await import('drizzle-orm');
+      
+      const stats = await db
+        .select({
+          recordCount: sql<number>`COUNT(*)`,
+          periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
+          totalVolume: sql<string>`SUM(ABS(volume::numeric))`,
+          totalPayment: sql<string>`SUM(payment::numeric)`
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.settlementDate, date));
+      
+      res.json({ 
+        message: `Successfully re-ingested data for ${date}`,
+        stats: {
+          records: stats[0]?.recordCount || 0,
+          periods: stats[0]?.periodCount || 0,
+          volume: Number(stats[0]?.totalVolume || 0).toFixed(2),
+          payment: Number(stats[0]?.totalPayment || 0).toFixed(2)
+        }
+      });
     } catch (error) {
       console.error('Error during re-ingestion:', error);
       res.status(500).json({ error: 'Failed to re-ingest data' });
