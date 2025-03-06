@@ -26,42 +26,42 @@ Options:
 - `days` - Number of recent days to check (default: 2)
 - `forceProcess` - Force processing even if no issues found (default: false)
 
-### 2. Verify Date Integrity
+### 2. Unified Reconciliation System
 
-A comprehensive tool to verify data integrity for a specified date range:
-
-```bash
-npx tsx verify_date_integrity.ts [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--auto-fix]
-```
-
-Options:
-- `--start` - Start date (default: 7 days ago)
-- `--end` - End date (default: today) 
-- `--auto-fix` - Automatically fix missing data (default: false)
-
-### 3. Comprehensive Reconciliation
-
-For full system-wide reconciliation:
+The primary tool for data integrity management with multiple functions:
 
 ```bash
-npx tsx comprehensive_reconciliation.ts [command]
+npx tsx unified_reconciliation.ts [command] [options]
 ```
 
 Commands:
 - `status` - Show current reconciliation status
-- `reconcile-all` - Reconcile all dates in the database
-- `reconcile-range` - Reconcile a specific date range
-- `reconcile-recent` - Reconcile recent data (default: last 30 days)
-- `fix-critical` - Fix dates with known issues
-- `report` - Generate detailed reconciliation report
+- `analyze` - Analyze missing calculations and detect issues
+- `reconcile [batchSize]` - Process all missing calculations with specified batch size
+- `date YYYY-MM-DD` - Process a specific date
+- `range YYYY-MM-DD YYYY-MM-DD [batchSize]` - Process a date range
+- `critical DATE` - Process a problematic date with extra safeguards
+- `spot-fix DATE PERIOD FARM` - Fix a specific date-period-farm combination
 
-### 4. Unified Reconciliation
+### 3. Specialized Data Processing Scripts
 
-For targeted data reprocessing:
+For specific data management needs, use the organized scripts in the `server/scripts` directory:
 
-```bash
-npx tsx unified_reconciliation.ts date YYYY-MM-DD
-```
+#### Data Processing Scripts
+
+Located in `server/scripts/data/`:
+
+- **ingestMonthlyData.ts** - Processes monthly data ingestion from Elexon
+- **processDifficultyMismatch.ts** - Fixes difficulty inconsistencies
+- **updateHistoricalCalculations.ts** - Updates Bitcoin calculations with batching
+
+#### Maintenance Scripts
+
+Located in `server/scripts/maintenance/`:
+
+- **updateBmuMapping.ts** - Updates BMU mapping data from Elexon API
+
+See the README files in each directory for detailed usage instructions.
 
 ## Automated Monitoring and Alerts
 
@@ -69,29 +69,32 @@ The system includes automated monitoring to catch missing data before it causes 
 
 1. **Automated Daily Check**: The `daily_reconciliation_check.ts` script runs automatically to find and fix issues.
 
-2. **Reconciliation Reports**: The `comprehensive_reconciliation.ts report` command generates detailed reports on data completeness.
+2. **Reconciliation Reports**: The `unified_reconciliation.ts analyze` command generates detailed reports on data completeness.
 
 ## Recovery Procedures
 
 If missing data is detected:
 
-1. **Identify the Gap**: Use `verify_date_integrity.ts` to identify missing data:
+1. **Identify the Gap**: Use the unified reconciliation system to identify missing data:
    ```bash
-   npx tsx verify_date_integrity.ts --start YYYY-MM-DD --end YYYY-MM-DD
+   npx tsx unified_reconciliation.ts status
    ```
 
-2. **Reprocess the Data**: Use the auto-fix feature or manual reprocessing:
+2. **Reprocess the Data**: Use the appropriate command for the situation:
    ```bash
-   npx tsx verify_date_integrity.ts --start YYYY-MM-DD --end YYYY-MM-DD --auto-fix
-   ```
-   or for a single day:
-   ```bash
+   # For a specific date
    npx tsx unified_reconciliation.ts date YYYY-MM-DD
+   
+   # For a date range
+   npx tsx unified_reconciliation.ts range YYYY-MM-DD YYYY-MM-DD
+   
+   # For problematic dates
+   npx tsx unified_reconciliation.ts critical YYYY-MM-DD
    ```
 
 3. **Verify Recovery**: Run verification again to confirm all data is properly reconciled:
    ```bash
-   npx tsx verify_date_integrity.ts --start YYYY-MM-DD --end YYYY-MM-DD
+   npx tsx unified_reconciliation.ts status
    ```
 
 ## Preventative Measures
@@ -114,10 +117,13 @@ Common issues and their solutions:
    - Solution: Use `unified_reconciliation.ts date YYYY-MM-DD` to re-ingest data from source APIs.
 
 2. **Missing Bitcoin Calculations**: May occur when curtailment data exists but calculation failed.
-   - Solution: Fix with `verify_date_integrity.ts --auto-fix` which only regenerates the calculations.
+   - Solution: Fix with `unified_reconciliation.ts reconcile` which only regenerates the calculations.
 
 3. **Data Consistency Issues**: When totals don't match between tables.
-   - Solution: Use `comprehensive_reconciliation.ts fix-critical` to apply consistency fixes.
+   - Solution: Use `unified_reconciliation.ts critical YYYY-MM-DD` to apply consistency fixes.
+
+4. **BMU Mapping Issues**: When new wind farms are added but not reflected in the system.
+   - Solution: Update BMU mapping with `npx tsx server/scripts/maintenance/updateBmuMapping.ts`
 
 ## Recent Recoveries
 
@@ -129,4 +135,4 @@ Successfully recovered missing data for March 1-2, 2025:
 - March 2, 2025: Recovered 2,444 curtailment records (61,575.86 MWh)
 - Bitcoin calculations fully reconciled for all dates
 
-The issue was identified and resolved using the tools documented in this guide.
+The issue was identified and resolved using the unified reconciliation system documented in this guide.
