@@ -6,9 +6,9 @@
  * value extracted from our existing calculations.
  */
 
-import { db } from "@db";
+import { db } from "./db";
 import { sql, and, eq } from "drizzle-orm";
-import { curtailmentRecords, historicalBitcoinCalculations } from "@db/schema";
+import { curtailmentRecords, historicalBitcoinCalculations } from "./db/schema";
 import { minerModels } from "./server/types/bitcoin";
 
 // Configuration
