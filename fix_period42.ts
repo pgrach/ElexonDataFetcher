@@ -158,8 +158,7 @@ async function fixPeriod42() {
         await db.update(dailySummaries)
           .set({
             totalCurtailedEnergy: Math.abs(Number(newTotals[0].totalVolume)).toString(),
-            totalPayment: newTotals[0].totalPayment,
-            updatedAt: new Date()
+            totalPayment: newTotals[0].totalPayment
           })
           .where(sql`${dailySummaries.summaryDate}::text = ${TARGET_DATE}`);
           
