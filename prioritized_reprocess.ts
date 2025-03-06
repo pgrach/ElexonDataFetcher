@@ -17,8 +17,8 @@ import { fileURLToPath } from 'url';
 
 // Constants
 const TARGET_DATE = '2025-03-05';
-const HIGH_PRIORITY_PERIODS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];  // Periods with higher volume
-const DELAY_BETWEEN_PERIODS = 200; // 0.2 second delay between API calls
+const HIGH_PRIORITY_PERIODS = [25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36];  // Periods with higher volume
+const DELAY_BETWEEN_PERIODS = 100; // 0.1 second delay between API calls
 const BMU_MAPPING_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'server/data/bmuMapping.json');
 
 let windFarmBmuIds: Set<string> | null = null;
