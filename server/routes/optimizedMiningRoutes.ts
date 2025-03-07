@@ -295,7 +295,7 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
           farmId: curtailmentRecords.farmId
         })
         .from(curtailmentRecords)
-        .where(sql`lead_party_name = ${leadParty}`)
+        .where(eq(curtailmentRecords.leadPartyName, leadParty))
         .groupBy(curtailmentRecords.farmId);
 
       const farmIds = farms.map(f => f.farmId);
@@ -447,7 +447,7 @@ router.get('/farm/:farmId', async (req: Request, res: Response) => {
             farmId: curtailmentRecords.farmId
           })
           .from(curtailmentRecords)
-          .where(sql`lead_party_name = ${leadPartyName}`)
+          .where(eq(curtailmentRecords.leadPartyName, leadPartyName))
           .groupBy(curtailmentRecords.farmId);
           
         const farmIds = allFarms.map(f => f.farmId);
@@ -507,7 +507,7 @@ router.get('/farm/:farmId', async (req: Request, res: Response) => {
           .where(
             and(
               curtailmentDateCondition,
-              sql`lead_party_name = ${leadPartyName}`
+              eq(curtailmentRecords.leadPartyName, leadPartyName)
             )
           );
         
