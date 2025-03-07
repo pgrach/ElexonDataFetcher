@@ -6,7 +6,7 @@
 import { processDate } from "../server/services/historicalReconciliation";
 
 // Change this to the date you want to process
-const DATE_TO_PROCESS = "2025-03-04";
+const DATE_TO_PROCESS = "2025-03-06";
 
 async function process() {
   console.log(`Processing date: ${DATE_TO_PROCESS}`);
