@@ -16,7 +16,7 @@ import {
   yearlySummaries,
   bitcoinMonthlySummaries
 } from "../../db/schema";
-import { sql, eq, and, or, desc, asc } from "drizzle-orm";
+import { sql, eq, and, or, desc, asc, inArray } from "drizzle-orm";
 import { format } from "date-fns";
 
 /**
@@ -135,10 +135,73 @@ export async function getMonthlyMiningPotential(yearMonth: string, minerModel: s
 /**
  * Get yearly mining potential data directly from core tables with optimized queries
  */
-export async function getYearlyMiningPotential(year: string, minerModel: string, farmId?: string): Promise<any> {
-  console.log(`Calculating yearly mining potential for ${year}, model: ${minerModel}, farm: ${farmId || 'all'}`);
+export async function getYearlyMiningPotential(year: string, minerModel: string, farmId?: string, leadParty?: string): Promise<any> {
+  console.log(`Calculating yearly mining potential for ${year}, model: ${minerModel}, farm: ${farmId || 'all'}, leadParty: ${leadParty || 'none'}`);
   
   try {
+    // If we have a lead party parameter, we need to get all farms for this lead party
+    if (leadParty) {
+      // Get all farms for this lead party
+      const farms = await db
+        .select({
+          farmId: curtailmentRecords.farmId
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.leadPartyName, leadParty))
+        .groupBy(curtailmentRecords.farmId);
+      
+      if (farms.length === 0) {
+        return {
+          year,
+          bitcoinMined: 0,
+          curtailedEnergy: 0,
+          totalPayment: 0,
+          averageDifficulty: 0
+        };
+      }
+      
+      const farmIds = farms.map(f => f.farmId);
+      console.log(`Found ${farmIds.length} farms for lead party ${leadParty}: ${farmIds.join(', ')}`);
+      
+      // Query for Bitcoin calculations for all farms in this lead party
+      const bitcoinResults = await db
+        .select({
+          totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`,
+          avgDifficulty: sql<number>`AVG(difficulty)` // Average difficulty for the year
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
+            eq(historicalBitcoinCalculations.minerModel, minerModel),
+            inArray(historicalBitcoinCalculations.farmId, farmIds)
+          )
+        );
+      
+      // Query for curtailment data for all farms
+      const curtailmentResults = await db
+        .select({
+          totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`,
+          totalPayment: sql<number>`SUM(payment)`
+        })
+        .from(curtailmentRecords)
+        .where(
+          and(
+            sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
+            inArray(curtailmentRecords.farmId, farmIds)
+          )
+        );
+      
+      // Return consolidated results for the lead party
+      return {
+        year,
+        bitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
+        curtailedEnergy: Number(curtailmentResults[0]?.totalCurtailedEnergy || 0),
+        totalPayment: Number(curtailmentResults[0]?.totalPayment || 0),
+        averageDifficulty: Number(bitcoinResults[0]?.avgDifficulty || 0)
+      };
+    }
+    
     // If requesting for a specific farm, we still need to use the detailed calculation approach
     if (farmId) {
       // Query for Bitcoin calculations with year filter by farm
@@ -178,7 +241,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
       return {
         year,
         totalCurtailedEnergy: Number(curtailmentResults[0]?.totalCurtailedEnergy || 0),
-        totalBitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
+        bitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
         totalPayment: Number(curtailmentResults[0]?.totalPayment || 0),
         averageDifficulty: Number(bitcoinResults[0]?.avgDifficulty || 0)
       };

@@ -315,86 +315,32 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
       currentPrice = null;
     }
     
-    // If we have a leadParty but couldn't find a farmId, we need to use direct queries
+    // If we have a leadParty and no farmId, use our updated function
     if (leadParty && !farmId) {
-      // Import the necessary dependencies for direct queries
-      const { db } = await import("../../db");
-      const { historicalBitcoinCalculations, curtailmentRecords } = await import("../../db/schema");
-      const { and, eq, sql } = await import("drizzle-orm");
-      
-      // First get all farmIds that match the leadParty
-      const farms = await db
-        .select({
-          farmId: curtailmentRecords.farmId
-        })
-        .from(curtailmentRecords)
-        .where(eq(curtailmentRecords.leadPartyName, leadParty))
-        .groupBy(curtailmentRecords.farmId);
-      
-      if (farms.length === 0) {
-        return res.json({
-          year,
-          bitcoinMined: 0,
-          valueAtCurrentPrice: 0,
-          curtailedEnergy: 0,
-          totalPayment: 0,
-          averageDifficulty: 0,
-          currentPrice
-        });
-      }
-      
-      const farmIds = farms.map(f => f.farmId);
-      
-      // Query Bitcoin calculations for the specified farms
-      const bitcoinData = await db
-        .select({
-          totalBitcoinMined: sql<string>`SUM(bitcoin_mined)`,
-          avgDifficulty: sql<string>`AVG(difficulty)`
-        })
-        .from(historicalBitcoinCalculations)
-        .where(
-          and(
-            sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
-            eq(historicalBitcoinCalculations.minerModel, minerModel),
-            inArray(historicalBitcoinCalculations.farmId, farmIds)
-          )
-        );
-      
-      // Query curtailment data for the specified farms
-      const curtailmentData = await db
-        .select({
-          totalCurtailedEnergy: sql<string>`SUM(ABS(volume))`,
-          totalPayment: sql<string>`SUM(payment)`
-        })
-        .from(curtailmentRecords)
-        .where(
-          and(
-            sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
-            eq(curtailmentRecords.leadPartyName, leadParty)
-          )
-        );
+      // Use the updated function with leadParty parameter
+      const potentialData = await getYearlyMiningPotential(year, minerModel, undefined, leadParty);
       
       return res.json({
         year,
-        bitcoinMined: Number(bitcoinData[0]?.totalBitcoinMined || 0),
-        valueAtCurrentPrice: Number(bitcoinData[0]?.totalBitcoinMined || 0) * (currentPrice || 0),
-        curtailedEnergy: Number(curtailmentData[0]?.totalCurtailedEnergy || 0),
-        totalPayment: Number(curtailmentData[0]?.totalPayment || 0),
-        averageDifficulty: Number(bitcoinData[0]?.avgDifficulty || 0),
+        bitcoinMined: Number(potentialData.bitcoinMined || 0),
+        valueAtCurrentPrice: Number(potentialData.bitcoinMined || 0) * (currentPrice || 0),
+        curtailedEnergy: Number(potentialData.curtailedEnergy || 0),
+        totalPayment: Number(potentialData.totalPayment || 0),
+        averageDifficulty: Number(potentialData.averageDifficulty || 0),
         currentPrice
       });
     }
     
-    // Get yearly mining potential data
+    // Get yearly mining potential data for a single farm or all farms
     const potentialData = await getYearlyMiningPotential(year, minerModel, farmId);
     
     res.json({
       year,
-      bitcoinMined: Number(potentialData.totalBitcoinMined),
-      valueAtCurrentPrice: Number(potentialData.totalBitcoinMined) * (currentPrice || 0),
-      curtailedEnergy: Number(potentialData.totalCurtailedEnergy),
-      totalPayment: potentialData.totalPayment,
-      averageDifficulty: potentialData.averageDifficulty,
+      bitcoinMined: Number(potentialData.bitcoinMined || potentialData.totalBitcoinMined),
+      valueAtCurrentPrice: Number(potentialData.bitcoinMined || potentialData.totalBitcoinMined) * (currentPrice || 0),
+      curtailedEnergy: Number(potentialData.curtailedEnergy || potentialData.totalCurtailedEnergy),
+      totalPayment: Number(potentialData.totalPayment),
+      averageDifficulty: Number(potentialData.averageDifficulty),
       currentPrice
     });
   } catch (error) {
@@ -412,6 +358,7 @@ router.get('/farm/:farmId', async (req: Request, res: Response) => {
     const { farmId } = req.params;
     const period = (req.query.period as 'day' | 'month' | 'year') || 'month';
     const value = req.query.value as string || format(new Date(), period === 'day' ? 'yyyy-MM-dd' : period === 'month' ? 'yyyy-MM' : 'yyyy');
+    const useLeadParty = req.query.useLeadParty === 'true';
     
     // Validate period type
     if (!['day', 'month', 'year'].includes(period)) {
@@ -434,7 +381,127 @@ router.get('/farm/:farmId', async (req: Request, res: Response) => {
       });
     }
     
-    // Get farm statistics
+    // If we want to use all farms under the same lead party
+    if (useLeadParty) {
+      try {
+        // First, get the lead party for this farm
+        const { db } = await import("../../db");
+        const { curtailmentRecords, historicalBitcoinCalculations } = await import("../../db/schema");
+        const { eq, inArray, and, sql } = await import("drizzle-orm");
+        
+        const farmResult = await db
+          .select({
+            leadPartyName: curtailmentRecords.leadPartyName
+          })
+          .from(curtailmentRecords)
+          .where(eq(curtailmentRecords.farmId, farmId))
+          .limit(1);
+          
+        if (farmResult.length === 0) {
+          return res.status(404).json({
+            error: 'Farm not found',
+            message: `No records found for farm: ${farmId}`
+          });
+        }
+          
+        const leadPartyName = farmResult[0].leadPartyName;
+        console.log(`Using lead party "${leadPartyName}" for farm ${farmId}`);
+        
+        // Then get all farms for this lead party
+        const allFarms = await db
+          .select({
+            farmId: curtailmentRecords.farmId
+          })
+          .from(curtailmentRecords)
+          .where(eq(curtailmentRecords.leadPartyName, leadPartyName))
+          .groupBy(curtailmentRecords.farmId);
+          
+        const farmIds = allFarms.map(f => f.farmId);
+        console.log(`Found ${farmIds.length} farms for lead party "${leadPartyName}": ${farmIds.join(', ')}`);
+          
+        // Process statistics for the farm group
+        let bitcoinDateCondition;
+        let curtailmentDateCondition;
+        
+        if (period === 'day') {
+          // For a specific day
+          bitcoinDateCondition = eq(historicalBitcoinCalculations.settlementDate, value);
+          curtailmentDateCondition = eq(curtailmentRecords.settlementDate, value);
+        } else if (period === 'month') {
+          // For a specific month (YYYY-MM)
+          const [year, month] = value.split('-').map(n => parseInt(n, 10));
+          const startDate = new Date(year, month - 1, 1);
+          const endDate = new Date(year, month, 0); // Last day of month
+          const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+          const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+          
+          bitcoinDateCondition = sql`${historicalBitcoinCalculations.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
+          curtailmentDateCondition = sql`${curtailmentRecords.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
+        } else if (period === 'year') {
+          // For a specific year
+          bitcoinDateCondition = sql`EXTRACT(YEAR FROM ${historicalBitcoinCalculations.settlementDate}) = ${parseInt(value, 10)}`;
+          curtailmentDateCondition = sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}) = ${parseInt(value, 10)}`;
+        } else {
+          throw new Error(`Invalid period type: ${period}`);
+        }
+        
+        // Get statistics by miner model for all farms in the group
+        const results = await db
+          .select({
+            minerModel: historicalBitcoinCalculations.minerModel,
+            totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`,
+            periodCount: sql<number>`COUNT(DISTINCT settlement_date)`,
+            averageDifficulty: sql<number>`AVG(difficulty)`
+          })
+          .from(historicalBitcoinCalculations)
+          .where(
+            and(
+              bitcoinDateCondition,
+              inArray(historicalBitcoinCalculations.farmId, farmIds)
+            )
+          )
+          .groupBy(historicalBitcoinCalculations.minerModel);
+        
+        // Get curtailment data for the lead party
+        const curtailmentData = await db
+          .select({
+            totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`,
+            periodCount: sql<number>`COUNT(DISTINCT settlement_date)`,
+            totalPayment: sql<number>`SUM(payment)`
+          })
+          .from(curtailmentRecords)
+          .where(
+            and(
+              curtailmentDateCondition,
+              eq(curtailmentRecords.leadPartyName, leadPartyName)
+            )
+          );
+        
+        // Return statistics for the farm group
+        const stats = {
+          leadParty: leadPartyName,
+          farmCount: farmIds.length,
+          farms: farmIds,
+          period,
+          value,
+          totalCurtailedEnergy: Number(curtailmentData[0]?.totalCurtailedEnergy || 0),
+          totalPayment: Number(curtailmentData[0]?.totalPayment || 0),
+          totalPeriods: Number(curtailmentData[0]?.periodCount || 0),
+          minerModels: results.map(r => ({
+            model: r.minerModel,
+            bitcoinMined: Number(r.totalBitcoinMined || 0),
+            averageDifficulty: Number(r.averageDifficulty || 0)
+          }))
+        };
+        
+        return res.json(stats);
+      } catch (error) {
+        console.error(`Error getting lead party statistics: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        // Fall back to single farm if there's an error
+      }
+    }
+    
+    // Get statistics for a single farm
     const stats = await getFarmStatistics(farmId, period, value);
     
     res.json(stats);
