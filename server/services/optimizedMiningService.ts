@@ -141,6 +141,8 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
   try {
     // If we have a lead party parameter, we need to get all farms for this lead party
     if (leadParty) {
+      console.log(`Processing lead party calculation for ${leadParty}`);
+      
       // Get all farms for this lead party
       const farms = await db
         .select({
@@ -151,6 +153,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
         .groupBy(curtailmentRecords.farmId);
       
       if (farms.length === 0) {
+        console.log(`No farms found for lead party ${leadParty}`);
         return {
           year,
           bitcoinMined: 0,
@@ -178,6 +181,8 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
           )
         );
       
+      console.log(`Lead party Bitcoin calculation results: ${JSON.stringify(bitcoinResults)}`);
+      
       // Query for curtailment data for all farms
       const curtailmentResults = await db
         .select({
@@ -191,6 +196,8 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
             inArray(curtailmentRecords.farmId, farmIds)
           )
         );
+      
+      console.log(`Lead party curtailment results: ${JSON.stringify(curtailmentResults)}`);
       
       // Return consolidated results for the lead party
       return {

@@ -274,10 +274,10 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
       });
     }
     
-    // Handle leadParty parameter (for compatibility with the frontend)
-    if (leadParty && !farmId) {
-      // If leadParty is provided but farmId is not, try to find the corresponding farmId
-      // First, get all farms for this lead party
+    // No need to get farmId for leadParty here, since our updated
+    // getYearlyMiningPotential function will handle the leadParty directly
+    if (leadParty) {
+      // If leadParty is provided, log the info
       const { db } = await import("../../db");
       const { curtailmentRecords } = await import("../../db/schema");
       const { eq } = await import("drizzle-orm");
@@ -290,12 +290,7 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
         .where(eq(curtailmentRecords.leadPartyName, leadParty))
         .groupBy(curtailmentRecords.farmId);
 
-      console.log(`Found ${farms.length} farms for lead party ${leadParty}`);
-      
-      if (farms.length > 0) {
-        // Use the farmIds for filtering
-        farmId = farms[0].farmId; // Just use the first farm for simplicity
-      }
+      console.log(`Found ${farms.length} farms for lead party ${leadParty}: ${farms.map(f => f.farmId).join(', ')}`);
     }
     
     console.log('Yearly mining potential request:', {
@@ -316,8 +311,9 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
     }
     
     // If we have a leadParty and no farmId, use our updated function
-    if (leadParty && !farmId) {
-      // Use the updated function with leadParty parameter
+    if (leadParty) {
+      // Pass the leadParty parameter directly to our function
+      console.log(`Passing leadParty: ${leadParty} to yearly mining potential calculation`);
       const potentialData = await getYearlyMiningPotential(year, minerModel, undefined, leadParty);
       
       return res.json({
