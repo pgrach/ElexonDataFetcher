@@ -213,7 +213,7 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
       const farmIds = farms.map(f => f.farmId);
 
       // Query Bitcoin calculations for specified farms in the date range
-      const bitcoinData = await db
+      let bitcoinQuery = db
         .select({
           bitcoinMined: sql<string>`SUM(bitcoin_mined)`,
           avgDifficulty: sql<string>`AVG(difficulty)`
@@ -222,10 +222,18 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
         .where(
           and(
             sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
-            eq(historicalBitcoinCalculations.minerModel, minerModel),
-            farmIds.length > 0 ? sql`farm_id IN (${farmIds.join(',')})` : undefined
+            eq(historicalBitcoinCalculations.minerModel, minerModel)
           )
         );
+      
+      // Add farm filter if we have farms
+      if (farmIds.length === 1) {
+        bitcoinQuery = bitcoinQuery.where(eq(historicalBitcoinCalculations.farmId, farmIds[0]));
+      } else if (farmIds.length > 1) {
+        bitcoinQuery = bitcoinQuery.where(sql`farm_id IN (${farmIds.join(',')})`);
+      }
+      
+      const bitcoinData = await bitcoinQuery;
 
       if (!bitcoinData[0] || !bitcoinData[0].bitcoinMined) {
         return res.json({
