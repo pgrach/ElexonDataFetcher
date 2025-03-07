@@ -197,7 +197,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
           bitcoinMined: 0,
           valueAtCurrentPrice: 0,
           curtailedEnergy: 0,
-          averageDifficulty: 0,
+          difficulty: 0, // Changed from averageDifficulty
           currentPrice
         });
       }
@@ -237,7 +237,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
         bitcoinMined: Number(bitcoinData[0]?.totalBitcoinMined || 0),
         valueAtCurrentPrice: Number(bitcoinData[0]?.totalBitcoinMined || 0) * (currentPrice || 0),
         curtailedEnergy: Number(curtailmentData[0]?.totalCurtailedEnergy || 0),
-        averageDifficulty: Number(bitcoinData[0]?.avgDifficulty || 0),
+        difficulty: Number(bitcoinData[0]?.avgDifficulty || 0), // Changed from averageDifficulty
         currentPrice
       });
     }
@@ -250,7 +250,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
       bitcoinMined: Number(potentialData.totalBitcoinMined),
       valueAtCurrentPrice: Number(potentialData.totalBitcoinMined) * (currentPrice || 0),
       curtailedEnergy: Number(potentialData.totalCurtailedEnergy),
-      averageDifficulty: potentialData.averageDifficulty,
+      difficulty: potentialData.difficulty, // Changed from averageDifficulty
       currentPrice
     });
   } catch (error) {

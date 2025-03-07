@@ -255,10 +255,10 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
     }
     
     // For all farms (no farmId filter), use the yearly summaries table for better performance
+    // Get the bitcoin yearly summary (note: the schema has already been updated to remove averageDifficulty)
     const yearlySummary = await db
       .select({
-        bitcoinMined: bitcoinYearlySummaries.bitcoinMined,
-        averageDifficulty: bitcoinYearlySummaries.averageDifficulty
+        bitcoinMined: bitcoinYearlySummaries.bitcoinMined
       })
       .from(bitcoinYearlySummaries)
       .where(
@@ -422,7 +422,7 @@ export async function getFarmStatistics(farmId: string, period: 'day' | 'month' 
       minerModels: results.map(r => ({
         model: r.minerModel,
         bitcoinMined: Number(r.totalBitcoinMined || 0),
-        averageDifficulty: Number(r.averageDifficulty || 0)
+        difficulty: Number(r.averageDifficulty || 0) // Changed from averageDifficulty to difficulty
       }))
     };
   } catch (error) {
