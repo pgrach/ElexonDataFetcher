@@ -356,7 +356,7 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
           and(
             sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
             eq(historicalBitcoinCalculations.minerModel, minerModel),
-            sql`farm_id IN (${sql.join(farmIds.map(id => sql.placeholder(id)))})`
+            inArray(historicalBitcoinCalculations.farmId, farmIds)
           )
         );
       
