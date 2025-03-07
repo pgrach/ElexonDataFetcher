@@ -111,7 +111,8 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
   try {
     const { yearMonth } = req.params;
     const minerModel = req.query.minerModel as string || 'S19J_PRO';
-    const farmId = req.query.farmId as string;
+    const leadParty = req.query.leadParty as string;
+    let farmId = req.query.farmId as string;
     
     // Validate yearMonth format (YYYY-MM)
     if (!yearMonth.match(/^\d{4}-\d{2}$/)) {
@@ -121,9 +122,34 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
       });
     }
     
+    // Handle leadParty parameter (for compatibility with the frontend)
+    if (leadParty && !farmId) {
+      // If leadParty is provided but farmId is not, try to find the corresponding farmId
+      // First, get all farms for this lead party
+      const { db } = await import("../../db");
+      const { curtailmentRecords } = await import("../../db/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      const farms = await db
+        .select({
+          farmId: curtailmentRecords.farmId
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.leadPartyName, leadParty))
+        .groupBy(curtailmentRecords.farmId);
+
+      console.log(`Found ${farms.length} farms for lead party ${leadParty}`);
+      
+      if (farms.length > 0) {
+        // Use the farmIds for filtering
+        farmId = farms[0].farmId; // Just use the first farm for simplicity
+      }
+    }
+    
     console.log('Monthly mining potential request:', {
       yearMonth,
       minerModel,
+      leadParty,
       farmId
     });
     
@@ -135,6 +161,80 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
     } catch (error) {
       console.error('Failed to fetch current price:', error);
       currentPrice = null;
+    }
+    
+    // If we have a leadParty but couldn't find a farmId, we need to use direct queries
+    if (leadParty && !farmId) {
+      // Import the necessary dependencies for direct queries
+      const { db } = await import("../../db");
+      const { historicalBitcoinCalculations, curtailmentRecords } = await import("../../db/schema");
+      const { and, eq, sql } = await import("drizzle-orm");
+      
+      // Get date range for the month
+      const [year, month] = yearMonth.split('-').map(n => parseInt(n, 10));
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0); // Last day of month
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+      
+      // First get all farmIds that match the leadParty
+      const farms = await db
+        .select({
+          farmId: curtailmentRecords.farmId
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.leadPartyName, leadParty))
+        .groupBy(curtailmentRecords.farmId);
+      
+      if (farms.length === 0) {
+        return res.json({
+          month: yearMonth,
+          bitcoinMined: 0,
+          valueAtCurrentPrice: 0,
+          curtailedEnergy: 0,
+          averageDifficulty: 0,
+          currentPrice
+        });
+      }
+      
+      const farmIds = farms.map(f => f.farmId);
+      
+      // Query Bitcoin calculations for the specified farms
+      const bitcoinData = await db
+        .select({
+          totalBitcoinMined: sql<string>`SUM(bitcoin_mined)`,
+          avgDifficulty: sql<string>`AVG(difficulty)`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
+            eq(historicalBitcoinCalculations.minerModel, minerModel),
+            sql`farm_id IN (${farmIds.join(',')})`
+          )
+        );
+      
+      // Query curtailment data for the specified lead party
+      const curtailmentData = await db
+        .select({
+          totalCurtailedEnergy: sql<string>`SUM(ABS(volume))`
+        })
+        .from(curtailmentRecords)
+        .where(
+          and(
+            sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
+            eq(curtailmentRecords.leadPartyName, leadParty)
+          )
+        );
+      
+      return res.json({
+        month: yearMonth,
+        bitcoinMined: Number(bitcoinData[0]?.totalBitcoinMined || 0),
+        valueAtCurrentPrice: Number(bitcoinData[0]?.totalBitcoinMined || 0) * (currentPrice || 0),
+        curtailedEnergy: Number(curtailmentData[0]?.totalCurtailedEnergy || 0),
+        averageDifficulty: Number(bitcoinData[0]?.avgDifficulty || 0),
+        currentPrice
+      });
     }
     
     // Get monthly mining potential data
@@ -162,7 +262,8 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
   try {
     const { year } = req.params;
     const minerModel = req.query.minerModel as string || 'S19J_PRO';
-    const farmId = req.query.farmId as string;
+    const leadParty = req.query.leadParty as string;
+    let farmId = req.query.farmId as string;
     
     // Validate year format
     if (!year.match(/^\d{4}$/)) {
@@ -172,9 +273,34 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
       });
     }
     
+    // Handle leadParty parameter (for compatibility with the frontend)
+    if (leadParty && !farmId) {
+      // If leadParty is provided but farmId is not, try to find the corresponding farmId
+      // First, get all farms for this lead party
+      const { db } = await import("../../db");
+      const { curtailmentRecords } = await import("../../db/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      const farms = await db
+        .select({
+          farmId: curtailmentRecords.farmId
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.leadPartyName, leadParty))
+        .groupBy(curtailmentRecords.farmId);
+
+      console.log(`Found ${farms.length} farms for lead party ${leadParty}`);
+      
+      if (farms.length > 0) {
+        // Use the farmIds for filtering
+        farmId = farms[0].farmId; // Just use the first farm for simplicity
+      }
+    }
+    
     console.log('Yearly mining potential request:', {
       year,
       minerModel,
+      leadParty,
       farmId
     });
     
@@ -186,6 +312,76 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
     } catch (error) {
       console.error('Failed to fetch current price:', error);
       currentPrice = null;
+    }
+    
+    // If we have a leadParty but couldn't find a farmId, we need to use direct queries
+    if (leadParty && !farmId) {
+      // Import the necessary dependencies for direct queries
+      const { db } = await import("../../db");
+      const { historicalBitcoinCalculations, curtailmentRecords } = await import("../../db/schema");
+      const { and, eq, sql } = await import("drizzle-orm");
+      
+      // First get all farmIds that match the leadParty
+      const farms = await db
+        .select({
+          farmId: curtailmentRecords.farmId
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.leadPartyName, leadParty))
+        .groupBy(curtailmentRecords.farmId);
+      
+      if (farms.length === 0) {
+        return res.json({
+          year,
+          bitcoinMined: 0,
+          valueAtCurrentPrice: 0,
+          curtailedEnergy: 0,
+          totalPayment: 0,
+          averageDifficulty: 0,
+          currentPrice
+        });
+      }
+      
+      const farmIds = farms.map(f => f.farmId);
+      
+      // Query Bitcoin calculations for the specified farms
+      const bitcoinData = await db
+        .select({
+          totalBitcoinMined: sql<string>`SUM(bitcoin_mined)`,
+          avgDifficulty: sql<string>`AVG(difficulty)`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
+            eq(historicalBitcoinCalculations.minerModel, minerModel),
+            sql`farm_id IN (${farmIds.join(',')})`
+          )
+        );
+      
+      // Query curtailment data for the specified farms
+      const curtailmentData = await db
+        .select({
+          totalCurtailedEnergy: sql<string>`SUM(ABS(volume))`,
+          totalPayment: sql<string>`SUM(payment)`
+        })
+        .from(curtailmentRecords)
+        .where(
+          and(
+            sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
+            eq(curtailmentRecords.leadPartyName, leadParty)
+          )
+        );
+      
+      return res.json({
+        year,
+        bitcoinMined: Number(bitcoinData[0]?.totalBitcoinMined || 0),
+        valueAtCurrentPrice: Number(bitcoinData[0]?.totalBitcoinMined || 0) * (currentPrice || 0),
+        curtailedEnergy: Number(curtailmentData[0]?.totalCurtailedEnergy || 0),
+        totalPayment: Number(curtailmentData[0]?.totalPayment || 0),
+        averageDifficulty: Number(bitcoinData[0]?.avgDifficulty || 0),
+        currentPrice
+      });
     }
     
     // Get yearly mining potential data
