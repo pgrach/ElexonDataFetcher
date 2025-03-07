@@ -8,6 +8,7 @@
 import express, { Request, Response } from "express";
 import { format, parseISO, isValid } from "date-fns";
 import axios from "axios";
+import { inArray } from "drizzle-orm";
 import { 
   getDailyMiningPotential,
   getMonthlyMiningPotential,
@@ -210,7 +211,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
           and(
             sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
             eq(historicalBitcoinCalculations.minerModel, minerModel),
-            sql`farm_id IN (${sql.join(farmIds.map(id => sql.placeholder(id)))})`
+            inArray(historicalBitcoinCalculations.farmId, farmIds)
           )
         );
       
