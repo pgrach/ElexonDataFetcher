@@ -32,7 +32,7 @@ interface YearlyBitcoinCalculation {
   valueAtCurrentPrice: number;
   curtailedEnergy: number;
   totalPayment: number;
-  averageDifficulty: number;
+  difficulty: number; // Changed from averageDifficulty
   currentPrice: number;
   year: string;
 }
