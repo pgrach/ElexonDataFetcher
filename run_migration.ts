@@ -22,9 +22,21 @@ async function runMigration() {
   console.log('Starting database migration...');
   
   try {
-    const migrationFile = path.join(__dirname, 'migrations', 'add_materialized_views.sql');
-    const sql = fs.readFileSync(migrationFile, 'utf8');
+    // Specify which migration file to run
+    const migrationFile = process.argv[2] || 'remove_average_difficulty.sql';
+    const fullPath = path.join(__dirname, 'db', 'migrations', migrationFile);
     
+    // Check if the file exists
+    if (!fs.existsSync(fullPath)) {
+      console.error(`Migration file not found: ${fullPath}`);
+      console.log('Available migrations:');
+      const migrationsDir = path.join(__dirname, 'db', 'migrations');
+      const files = fs.readdirSync(migrationsDir);
+      files.forEach(file => console.log(` - ${file}`));
+      process.exit(1);
+    }
+    
+    const sql = fs.readFileSync(fullPath, 'utf8');
     console.log(`Executing migration script: ${migrationFile}`);
     
     const client = await pool.connect();
@@ -33,7 +45,6 @@ async function runMigration() {
       
       // Execute the migration script
       const result = await client.query(sql);
-      console.log('Migration completed successfully');
       
       // Check if result contains notices/messages
       if (result) {
@@ -41,6 +52,7 @@ async function runMigration() {
       }
       
       await client.query('COMMIT');
+      console.log('Migration committed successfully');
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('Migration failed:', error);
@@ -48,8 +60,6 @@ async function runMigration() {
     } finally {
       client.release();
     }
-    
-    console.log('Migration completed successfully');
   } catch (error) {
     console.error('Error executing migration:', error);
     process.exit(1);

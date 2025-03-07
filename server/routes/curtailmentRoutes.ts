@@ -288,10 +288,28 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
       );
 
     if (monthlySummary[0]) {
+      // Get current network difficulty
+      let currentDifficulty;
+      try {
+        const { difficulty } = await fetchFromMinerstat();
+        currentDifficulty = difficulty;
+      } catch (error) {
+        // Fallback to latest database difficulty
+        const latestDiff = await db
+          .select({
+            difficulty: historicalBitcoinCalculations.difficulty
+          })
+          .from(historicalBitcoinCalculations)
+          .orderBy(sql`calculated_at DESC`)
+          .limit(1);
+          
+        currentDifficulty = latestDiff[0]?.difficulty || 108105433845147; // Default fallback difficulty
+      }
+      
       return res.json({
         bitcoinMined: Number(monthlySummary[0].bitcoinMined),
         valueAtCurrentPrice: Number(monthlySummary[0].bitcoinMined) * (currentPrice || 0),
-        difficulty: difficulty, // Use the current difficulty instead of average
+        difficulty: currentDifficulty,
         currentPrice
       });
     }
@@ -319,10 +337,28 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
       });
     }
 
+    // Get current network difficulty for response
+    let currentDifficulty;
+    try {
+      const { difficulty } = await fetchFromMinerstat();
+      currentDifficulty = difficulty;
+    } catch (error) {
+      // Fallback to latest database difficulty
+      const latestDiff = await db
+        .select({
+          difficulty: historicalBitcoinCalculations.difficulty
+        })
+        .from(historicalBitcoinCalculations)
+        .orderBy(sql`calculated_at DESC`)
+        .limit(1);
+        
+      currentDifficulty = latestDiff[0]?.difficulty || 108105433845147; // Default fallback difficulty
+    }
+    
     res.json({
       bitcoinMined: Number(newSummary[0].bitcoinMined),
       valueAtCurrentPrice: Number(newSummary[0].bitcoinMined) * (currentPrice || 0),
-      difficulty: difficulty, // Use the current difficulty instead of average
+      difficulty: currentDifficulty,
       currentPrice
     });
 
