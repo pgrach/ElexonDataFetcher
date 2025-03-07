@@ -306,8 +306,7 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
   try {
     const monthlyData = await db
       .select({
-        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)`,
-        avgDifficulty: sql<string>`AVG(difficulty::numeric)`
+        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)`
       })
       .from(historicalBitcoinCalculations)
       .where(
@@ -327,7 +326,6 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
     }
 
     const totalBitcoin = Number(monthlyData[0].totalBitcoin);
-    const avgDifficulty = Number(monthlyData[0].avgDifficulty);
 
     await db.transaction(async (tx) => {
       // Delete existing summary if any
@@ -348,7 +346,6 @@ async function calculateMonthlyBitcoinSummary(yearMonth: string, minerModel: str
           minerModel,
           bitcoinMined: totalBitcoin.toString(),
           valueAtMining: "0", // Set to 0 as this will be calculated with current price when queried
-          averageDifficulty: avgDifficulty.toString(),
           createdAt: new Date(),
           updatedAt: new Date()
         });
@@ -464,8 +461,7 @@ async function calculateYearlyBitcoinSummary(year: string, minerModel: string): 
     const monthlySummaries = await db
       .select({
         yearMonth: bitcoinMonthlySummaries.yearMonth,
-        bitcoinMined: bitcoinMonthlySummaries.bitcoinMined,
-        averageDifficulty: bitcoinMonthlySummaries.averageDifficulty
+        bitcoinMined: bitcoinMonthlySummaries.bitcoinMined
       })
       .from(bitcoinMonthlySummaries)
       .where(
@@ -483,16 +479,12 @@ async function calculateYearlyBitcoinSummary(year: string, minerModel: string): 
     
     console.log(`Found ${monthlySummaries.length} monthly summaries for ${year}`);
     
-    // Calculate totals and averages
+    // Calculate total Bitcoin
     let totalBitcoin = 0;
-    let totalDifficulty = 0;
     
     for (const summary of monthlySummaries) {
       totalBitcoin += Number(summary.bitcoinMined);
-      totalDifficulty += Number(summary.averageDifficulty);
     }
-    
-    const avgDifficulty = totalDifficulty / monthlySummaries.length;
     
     // Check if yearly summary already exists
     const existingSummary = await db
@@ -512,7 +504,6 @@ async function calculateYearlyBitcoinSummary(year: string, minerModel: string): 
         .set({
           bitcoinMined: totalBitcoin.toString(),
           valueAtMining: "0", // Set to 0 as this will be calculated with current price when queried
-          averageDifficulty: avgDifficulty.toString(),
           updatedAt: new Date()
         })
         .where(
@@ -529,7 +520,6 @@ async function calculateYearlyBitcoinSummary(year: string, minerModel: string): 
           minerModel,
           bitcoinMined: totalBitcoin.toString(),
           valueAtMining: "0", // Set to 0 as this will be calculated with current price when queried
-          averageDifficulty: avgDifficulty.toString(),
           createdAt: new Date(),
           updatedAt: new Date()
         });

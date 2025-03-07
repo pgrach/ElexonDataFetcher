@@ -291,7 +291,7 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
       return res.json({
         bitcoinMined: Number(monthlySummary[0].bitcoinMined),
         valueAtCurrentPrice: Number(monthlySummary[0].bitcoinMined) * (currentPrice || 0),
-        difficulty: Number(monthlySummary[0].averageDifficulty),
+        difficulty: difficulty, // Use the current difficulty instead of average
         currentPrice
       });
     }
@@ -322,7 +322,7 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
     res.json({
       bitcoinMined: Number(newSummary[0].bitcoinMined),
       valueAtCurrentPrice: Number(newSummary[0].bitcoinMined) * (currentPrice || 0),
-      difficulty: Number(newSummary[0].averageDifficulty),
+      difficulty: difficulty, // Use the current difficulty instead of average
       currentPrice
     });
 
