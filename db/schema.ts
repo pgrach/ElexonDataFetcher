@@ -33,7 +33,6 @@ export const bitcoinMonthlySummaries = pgTable("bitcoin_monthly_summaries", {
   minerModel: text("miner_model").notNull(),
   bitcoinMined: numeric("bitcoin_mined").notNull(),
   valueAtMining: numeric("value_at_mining").notNull(),
-  averageDifficulty: numeric("average_difficulty").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -44,7 +43,6 @@ export const bitcoinYearlySummaries = pgTable("bitcoin_yearly_summaries", {
   minerModel: text("miner_model").notNull(),
   bitcoinMined: numeric("bitcoin_mined").notNull(),
   valueAtMining: numeric("value_at_mining").notNull(),
-  averageDifficulty: numeric("average_difficulty").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
