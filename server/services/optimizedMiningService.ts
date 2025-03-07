@@ -124,7 +124,7 @@ export async function getMonthlyMiningPotential(yearMonth: string, minerModel: s
       month: yearMonth,
       totalCurtailedEnergy: Number(curtailmentResults[0]?.totalCurtailedEnergy || 0),
       totalBitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
-      averageDifficulty: Number(bitcoinResults[0]?.difficulty || 0)
+      difficulty: Number(bitcoinResults[0]?.difficulty || 0) // Renamed to just 'difficulty'
     };
   } catch (error) {
     console.error(`Error calculating monthly mining potential for ${yearMonth}:`, error);
@@ -159,7 +159,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
           bitcoinMined: 0,
           curtailedEnergy: 0,
           totalPayment: 0,
-          averageDifficulty: 0
+          difficulty: 0 // Changed from averageDifficulty
         };
       }
       
@@ -205,7 +205,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
         bitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
         curtailedEnergy: Number(curtailmentResults[0]?.totalCurtailedEnergy || 0),
         totalPayment: Number(curtailmentResults[0]?.totalPayment || 0),
-        averageDifficulty: Number(bitcoinResults[0]?.avgDifficulty || 0)
+        difficulty: Number(bitcoinResults[0]?.avgDifficulty || 0) // Changed to 'difficulty' from 'averageDifficulty'
       };
     }
     
@@ -250,7 +250,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
         totalCurtailedEnergy: Number(curtailmentResults[0]?.totalCurtailedEnergy || 0),
         bitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
         totalPayment: Number(curtailmentResults[0]?.totalPayment || 0),
-        averageDifficulty: Number(bitcoinResults[0]?.avgDifficulty || 0)
+        difficulty: Number(bitcoinResults[0]?.avgDifficulty || 0) // Changed from averageDifficulty
       };
     }
     
@@ -303,7 +303,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
         totalCurtailedEnergy: Number(yearlySummaryData[0]?.totalCurtailedEnergy || 0),
         totalBitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
         totalPayment: Number(yearlySummaryData[0]?.totalPayment || 0),
-        averageDifficulty: Number(bitcoinResults[0]?.avgDifficulty || 0)
+        difficulty: Number(bitcoinResults[0]?.avgDifficulty || 0) // Changed from averageDifficulty
       };
     }
     
@@ -317,12 +317,29 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
       .where(eq(yearlySummaries.year, year));
     
     // Return consolidated results from the summaries tables
+    // Get current difficulty from latest Bitcoin calculation
+    let currentDifficulty;
+    try {
+      const difficultyQuery = await db
+        .select({
+          difficulty: historicalBitcoinCalculations.difficulty
+        })
+        .from(historicalBitcoinCalculations)
+        .orderBy(sql`calculated_at DESC`)
+        .limit(1);
+        
+      currentDifficulty = Number(difficultyQuery[0]?.difficulty || 0);
+    } catch (error) {
+      console.error('Error fetching current difficulty:', error);
+      currentDifficulty = 0;
+    }
+    
     return {
       year,
       totalCurtailedEnergy: Number(generalYearlySummary[0]?.totalCurtailedEnergy || 0),
       totalBitcoinMined: Number(yearlySummary[0]?.bitcoinMined || 0),
       totalPayment: Number(generalYearlySummary[0]?.totalPayment || 0),
-      averageDifficulty: Number(yearlySummary[0]?.averageDifficulty || 0)
+      difficulty: currentDifficulty // Use current difficulty instead of average
     };
   } catch (error) {
     console.error(`Error calculating yearly mining potential for ${year}:`, error);
