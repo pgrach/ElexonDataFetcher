@@ -220,11 +220,18 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
       const farmIds = farms.map(f => f.farmId);
 
       // Create a SQL condition for the farm IDs if needed
-      const farmCondition = farmIds.length === 1
-        ? eq(historicalBitcoinCalculations.farmId, farmIds[0])
-        : farmIds.length > 1
-          ? sql`farm_id IN (${farmIds.join(',')})`
-          : undefined;
+      // Create a properly parameterized IN condition for multiple farm IDs
+      let farmCondition;
+      if (farmIds.length === 1) {
+        // Single farm - use simple equality
+        farmCondition = eq(historicalBitcoinCalculations.farmId, farmIds[0]);
+      } else if (farmIds.length > 1) {
+        // Multiple farms - use properly parameterized IN clause
+        // This creates a SQL query like: farm_id IN ($1, $2, $3) with proper parameter binding
+        farmCondition = sql`farm_id IN (${sql.join(farmIds.map(id => sql.placeholder(id)))})`;
+      } else {
+        farmCondition = undefined;
+      }
       
       // Query Bitcoin calculations for specified farms in the date range
       const bitcoinData = await db
