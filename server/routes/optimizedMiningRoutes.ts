@@ -308,7 +308,7 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
           valueAtCurrentPrice: 0,
           curtailedEnergy: 0,
           totalPayment: 0,
-          averageDifficulty: 0,
+          difficulty: 0, // Changed from averageDifficulty
           currentPrice
         });
       }
@@ -351,7 +351,7 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
         valueAtCurrentPrice: Number(bitcoinResults[0]?.totalBitcoinMined || 0) * (currentPrice || 0),
         curtailedEnergy: Number(curtailmentResults[0]?.totalCurtailedEnergy || 0),
         totalPayment: Number(curtailmentResults[0]?.totalPayment || 0),
-        averageDifficulty: Number(bitcoinResults[0]?.avgDifficulty || 0),
+        difficulty: Number(bitcoinResults[0]?.avgDifficulty || 0), // Changed from averageDifficulty
         currentPrice
       });
     }
@@ -374,7 +374,7 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
       valueAtCurrentPrice: Number(potentialData.bitcoinMined || potentialData.totalBitcoinMined) * (currentPrice || 0),
       curtailedEnergy: Number(potentialData.curtailedEnergy || potentialData.totalCurtailedEnergy),
       totalPayment: Number(potentialData.totalPayment),
-      averageDifficulty: Number(potentialData.averageDifficulty),
+      difficulty: Number(potentialData.difficulty), // Changed from averageDifficulty
       currentPrice
     });
   } catch (error) {
@@ -524,7 +524,7 @@ router.get('/farm/:farmId', async (req: Request, res: Response) => {
           minerModels: results.map(r => ({
             model: r.minerModel,
             bitcoinMined: Number(r.totalBitcoinMined || 0),
-            averageDifficulty: Number(r.averageDifficulty || 0)
+            difficulty: Number(r.averageDifficulty || 0) // Changed from averageDifficulty
           }))
         };
         
