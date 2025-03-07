@@ -4,7 +4,7 @@ import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
-import { and, eq, sql, between } from "drizzle-orm";
+import { and, eq, sql, between, inArray } from "drizzle-orm";
 import { getDifficultyData } from '../services/dynamodbService';
 import axios from 'axios';
 
@@ -226,9 +226,8 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
         // Single farm - use simple equality
         farmCondition = eq(historicalBitcoinCalculations.farmId, farmIds[0]);
       } else if (farmIds.length > 1) {
-        // Multiple farms - use properly parameterized IN clause
-        // This creates a SQL query like: farm_id IN ($1, $2, $3) with proper parameter binding
-        farmCondition = sql`farm_id IN (${sql.join(farmIds.map(id => sql.placeholder(id)))})`;
+        // Multiple farms - use in() operator which creates a proper parameterized IN clause
+        farmCondition = inArray(historicalBitcoinCalculations.farmId, farmIds);
       } else {
         farmCondition = undefined;
       }
