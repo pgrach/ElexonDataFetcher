@@ -54,34 +54,13 @@ function log(message: string, type: "info" | "success" | "warning" | "error" | "
  * Check curtailment data for a date
  */
 async function checkCurtailmentData(pool: any, date: string) {
-  // First, let's ensure we're using the correct column names
-  const schemaQuery = await pool.query(
-    `SELECT column_name 
-     FROM information_schema.columns 
-     WHERE table_name = 'curtailment_records'
-     ORDER BY column_name`
-  );
-  
-  // Determine if volume is called volume_mwh or curtailed_volume
-  let volumeColumn = 'curtailed_volume';
-  let paymentColumn = 'payment';
-  
-  for (const row of schemaQuery.rows) {
-    if (row.column_name === 'volume_mwh') {
-      volumeColumn = 'volume_mwh';
-    }
-    if (row.column_name === 'payment_gbp') {
-      paymentColumn = 'payment_gbp';
-    }
-  }
-  
-  // Now query with the correct column names
+  // Use the correct column names based on the actual schema
   const result = await pool.query(
     `SELECT 
        COUNT(*) as record_count, 
        COUNT(DISTINCT settlement_period) as period_count,
-       ROUND(SUM(${volumeColumn})::numeric, 2) as total_volume,
-       ROUND(SUM(${paymentColumn})::numeric, 2) as total_payment
+       ROUND(SUM(volume)::numeric, 2) as total_volume,
+       ROUND(SUM(payment)::numeric, 2) as total_payment
      FROM curtailment_records 
      WHERE settlement_date = $1`,
     [date]

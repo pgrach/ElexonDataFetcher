@@ -170,11 +170,11 @@ async function main() {
     // Use the direct audit and fix function which is more efficient
     const result = await auditAndFixBitcoinCalculations(options.date);
     
-    if (result.fixed === 0 && result.preExistingCount === result.expectedCount) {
-      log(`All Bitcoin calculations for ${options.date} are complete (${result.preExistingCount} records)`, "success");
+    if (!result.fixed) {
+      log(`All Bitcoin calculations for ${options.date} are complete`, "success");
     } else {
-      log(`Fixed ${result.fixed} Bitcoin calculations for ${options.date}`, "success");
-      log(`Total: ${result.totalCount}/${result.expectedCount} records across ${result.periodCount} periods`, "info");
+      log(`Fixed Bitcoin calculations for ${options.date}`, "success");
+      log(`${result.message}`, "info");
     }
     
     // Calculate and display duration
