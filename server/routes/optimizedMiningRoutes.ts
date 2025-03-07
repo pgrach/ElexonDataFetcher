@@ -96,14 +96,7 @@ router.get('/daily', async (req: Request, res: Response) => {
     });
     
     // Get current price from Minerstat
-    let currentPrice;
-    try {
-      const { price } = await fetchFromMinerstat();
-      currentPrice = price;
-    } catch (error) {
-      console.error('Failed to fetch current price:', error);
-      currentPrice = null;
-    }
+    const currentPrice = await fetchCurrentPrice();
     
     // Get daily mining potential data using optimized service
     const potentialData = await getDailyMiningPotential(formattedDate, minerModel, farmId);
@@ -179,15 +172,8 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
       currentPrice = price;
     } catch (error) {
       console.error('Failed to fetch current price:', error);
-      currentPrice = null;
-    }
-    
-    // If we have a leadParty but couldn't find a farmId, we need to use direct queries
-    if (leadParty && !farmId) {
-      // Import the necessary dependencies for direct queries
-      const { db } = await import("../../db");
-      const { historicalBitcoinCalculations, curtailmentRecords } = await import("../../db/schema");
-      const { and, eq, sql } = await import("drizzle-orm");
+    // Get current price from Minerstat
+    const currentPrice = await fetchCurrentPrice();
       
       // Get date range for the month
       const [year, month] = yearMonth.split('-').map(n => parseInt(n, 10));
