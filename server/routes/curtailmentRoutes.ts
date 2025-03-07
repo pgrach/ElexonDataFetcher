@@ -192,6 +192,11 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
       const formattedStartDate = format(startDate, 'yyyy-MM-dd');
       const formattedEndDate = format(endDate, 'yyyy-MM-dd');
 
+      console.log(`Monthly mining potential for ${yearMonth} with leadParty=${leadParty}`, {
+        dateRange: `${formattedStartDate} to ${formattedEndDate}`,
+        minerModel
+      });
+
       // First get all farms that match the leadParty
       const farms = await db
         .select({
@@ -200,6 +205,8 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
         .from(curtailmentRecords)
         .where(eq(curtailmentRecords.leadPartyName, leadParty))
         .groupBy(curtailmentRecords.farmId);
+        
+      console.log(`Found ${farms.length} farms for lead party ${leadParty}:`, farms.map(f => f.farmId));
 
       if (!farms.length) {
         return res.json({
@@ -212,8 +219,15 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
 
       const farmIds = farms.map(f => f.farmId);
 
+      // Create a SQL condition for the farm IDs if needed
+      const farmCondition = farmIds.length === 1
+        ? eq(historicalBitcoinCalculations.farmId, farmIds[0])
+        : farmIds.length > 1
+          ? sql`farm_id IN (${farmIds.join(',')})`
+          : undefined;
+      
       // Query Bitcoin calculations for specified farms in the date range
-      let bitcoinQuery = db
+      const bitcoinData = await db
         .select({
           bitcoinMined: sql<string>`SUM(bitcoin_mined)`,
           avgDifficulty: sql<string>`AVG(difficulty)`
@@ -222,18 +236,19 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
         .where(
           and(
             sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
-            eq(historicalBitcoinCalculations.minerModel, minerModel)
+            eq(historicalBitcoinCalculations.minerModel, minerModel),
+            farmCondition
           )
         );
-      
-      // Add farm filter if we have farms
-      if (farmIds.length === 1) {
-        bitcoinQuery = bitcoinQuery.where(eq(historicalBitcoinCalculations.farmId, farmIds[0]));
-      } else if (farmIds.length > 1) {
-        bitcoinQuery = bitcoinQuery.where(sql`farm_id IN (${farmIds.join(',')})`);
-      }
-      
-      const bitcoinData = await bitcoinQuery;
+        
+      console.log(`Farm-specific monthly bitcoin query results:`, {
+        formattedStartDate,
+        formattedEndDate,
+        farmIds,
+        resultCount: bitcoinData.length,
+        bitcoinMined: bitcoinData[0]?.bitcoinMined,
+        difficulty: bitcoinData[0]?.avgDifficulty
+      });
 
       if (!bitcoinData[0] || !bitcoinData[0].bitcoinMined) {
         return res.json({
