@@ -1,4 +1,5 @@
-import { Button } from "@/components/ui/button"
+import { Button } from "../components/ui/button"
+import { Calendar, ClipboardList, BarChart } from "lucide-react"
 
 interface TimeframeSelectorProps {
   selected: "today" | "month" | "year"
@@ -7,30 +8,35 @@ interface TimeframeSelectorProps {
 
 export function TimeframeSelector({ selected, onChange }: TimeframeSelectorProps) {
   return (
-    <div className="flex space-x-1 rounded-lg border p-1">
+    <div className="flex space-x-1">
       <Button
-        variant={selected === "today" ? "default" : "ghost"}
+        variant={selected === "today" ? "default" : "outline"}
         size="sm"
         onClick={() => onChange("today")}
-        className="text-xs px-3"
+        className="flex items-center gap-1"
       >
-        Today
+        <Calendar className="h-4 w-4" />
+        <span>Daily</span>
       </Button>
+      
       <Button
-        variant={selected === "month" ? "default" : "ghost"}
+        variant={selected === "month" ? "default" : "outline"}
         size="sm"
         onClick={() => onChange("month")}
-        className="text-xs px-3"
+        className="flex items-center gap-1"
       >
-        Month
+        <ClipboardList className="h-4 w-4" />
+        <span>Monthly</span>
       </Button>
+      
       <Button
-        variant={selected === "year" ? "default" : "ghost"}
+        variant={selected === "year" ? "default" : "outline"}
         size="sm"
         onClick={() => onChange("year")}
-        className="text-xs px-3"
+        className="flex items-center gap-1"
       >
-        Year
+        <BarChart className="h-4 w-4" />
+        <span>Yearly</span>
       </Button>
     </div>
   )

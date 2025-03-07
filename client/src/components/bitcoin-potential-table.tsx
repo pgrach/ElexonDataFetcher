@@ -5,7 +5,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "../components/ui/table"
+import { Skeleton } from "../components/ui/skeleton"
+import { formatNumber, formatCurrency, formatBitcoin } from "../lib/utils"
 
 interface BitcoinPotentialItem {
   period: string;
@@ -26,18 +28,16 @@ export function BitcoinPotentialTable({
 }: BitcoinPotentialTableProps) {
   if (isLoading) {
     return (
-      <div className="w-full flex items-center justify-center py-12">
-        <p className="text-muted-foreground animate-pulse">Loading data...</p>
+      <div className="w-full">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
       </div>
-    )
-  }
-
-  if (!data || data.length === 0) {
-    return (
-      <div className="w-full flex items-center justify-center py-12">
-        <p className="text-muted-foreground">No data available for selected period</p>
-      </div>
-    )
+    );
   }
 
   return (
@@ -45,27 +45,21 @@ export function BitcoinPotentialTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Period</TableHead>
-            <TableHead className="text-right">Energy (MWh)</TableHead>
-            <TableHead className="text-right">Payment (£)</TableHead>
-            <TableHead className="text-right">Bitcoin (BTC)</TableHead>
-            <TableHead className="text-right">Value (£)</TableHead>
+            <TableHead>Settlement Period</TableHead>
+            <TableHead>Energy (MWh)</TableHead>
+            <TableHead>Payment (£)</TableHead>
+            <TableHead>Bitcoin (BTC)</TableHead>
+            <TableHead>Value (£)</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((item) => (
-            <TableRow key={item.period}>
+          {data.map((item, index) => (
+            <TableRow key={index}>
               <TableCell className="font-medium">{item.period}</TableCell>
-              <TableCell className="text-right">{item.energy.toLocaleString()}</TableCell>
-              <TableCell className="text-right text-red-500">
-                £{Math.abs(item.payment).toLocaleString()}
-              </TableCell>
-              <TableCell className="text-right text-[#F7931A]">
-                {item.bitcoin.toFixed(8)}
-              </TableCell>
-              <TableCell className="text-right text-[#F7931A]">
-                £{item.value.toLocaleString()}
-              </TableCell>
+              <TableCell>{formatNumber(item.energy)}</TableCell>
+              <TableCell className="text-red-500">{formatCurrency(item.payment)}</TableCell>
+              <TableCell>{formatBitcoin(item.bitcoin)}</TableCell>
+              <TableCell>{formatCurrency(item.value)}</TableCell>
             </TableRow>
           ))}
         </TableBody>

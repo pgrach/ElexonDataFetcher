@@ -1,23 +1,28 @@
+import { Skeleton } from "../components/ui/skeleton"
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
+  BarChart,
+  Bar,
   XAxis,
-  YAxis
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Line,
+  ComposedChart
 } from "recharts"
+import { formatNumber, formatBitcoin } from "../lib/utils"
 
 interface HourlyData {
-  hour: string;
-  curtailedEnergy: number;
-  bitcoinMined?: number;
+  hour: string
+  curtailedEnergy: number
+  bitcoinMined?: number
 }
 
 interface CurtailmentChartProps {
-  data: HourlyData[];
-  showBitcoin?: boolean;
-  isLoading?: boolean;
+  data: HourlyData[]
+  showBitcoin?: boolean
+  isLoading?: boolean
 }
 
 export function CurtailmentChart({
@@ -25,104 +30,77 @@ export function CurtailmentChart({
   showBitcoin = true,
   isLoading = false
 }: CurtailmentChartProps) {
-  if (isLoading) {
-    return (
-      <div className="h-[400px] w-full flex items-center justify-center bg-muted/20 rounded-lg">
-        <p className="text-muted-foreground animate-pulse">Loading chart data...</p>
-      </div>
-    )
-  }
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="rounded-lg border bg-background p-2 shadow-sm text-xs">
+          <p className="font-semibold">{label}</p>
+          <p className="text-muted-foreground">
+            Curtailed: {formatNumber(payload[0].value)} MWh
+          </p>
+          {showBitcoin && payload[1] && (
+            <p className="text-muted-foreground">
+              Bitcoin: {formatBitcoin(payload[1].value)} BTC
+            </p>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
 
-  if (!data || data.length === 0) {
-    return (
-      <div className="h-[400px] w-full flex items-center justify-center bg-muted/20 rounded-lg">
-        <p className="text-muted-foreground">No data available for selected period</p>
-      </div>
-    )
+  if (isLoading) {
+    return <Skeleton className="h-[300px] w-full" />;
   }
 
   return (
-    <div className="h-[400px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="curtailedEnergy" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-            </linearGradient>
-            {showBitcoin && (
-              <linearGradient id="bitcoinMined" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#F7931A" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#F7931A" stopOpacity={0} />
-              </linearGradient>
-            )}
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
-          <XAxis 
-            dataKey="hour" 
-            tick={{ fontSize: 12 }}
-            tickMargin={8}
-            axisLine={{ stroke: 'hsl(var(--border))' }}
-            tickLine={false}
-          />
-          <YAxis 
-            yAxisId="left"
-            tick={{ fontSize: 12 }}
-            tickMargin={8}
-            axisLine={{ stroke: 'hsl(var(--border))' }}
-            tickLine={false}
-            domain={[0, 'auto']}
-            allowDecimals={false}
-            label={{ 
-              value: 'MWh', 
-              angle: -90, 
-              position: 'insideLeft',
-              style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' },
-              offset: -5,
-            }}
-          />
-          {showBitcoin && (
-            <YAxis 
-              yAxisId="right"
-              orientation="right"
-              tick={{ fontSize: 12 }}
-              tickMargin={8}
-              axisLine={{ stroke: 'hsl(var(--border))' }}
-              tickLine={false}
-              domain={[0, 'auto']}
-              allowDecimals={false}
-              label={{ 
-                value: 'BTC', 
-                angle: 90, 
-                position: 'insideRight',
-                style: { textAnchor: 'middle', fill: 'hsl(var(--muted-foreground))' }, 
-                offset: -5
-              }}
-            />
-          )}
-          <Tooltip />
-          <Area 
-            type="monotone" 
-            dataKey="curtailedEnergy" 
-            stroke="hsl(var(--primary))" 
-            fillOpacity={1}
-            fill="url(#curtailedEnergy)" 
+    <ResponsiveContainer width="100%" height={350}>
+      {showBitcoin ? (
+        <ComposedChart
+          data={data}
+          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+          <XAxis dataKey="hour" />
+          <YAxis yAxisId="left" />
+          <YAxis yAxisId="right" orientation="right" />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend />
+          <Bar
             yAxisId="left"
             name="Curtailed Energy (MWh)"
+            dataKey="curtailedEnergy"
+            fill="#2563eb"
+            barSize={20}
           />
-          {showBitcoin && (
-            <Area 
-              type="monotone" 
-              dataKey="bitcoinMined" 
-              stroke="#F7931A" 
-              fillOpacity={1}
-              fill="url(#bitcoinMined)" 
-              yAxisId="right"
-              name="Bitcoin Potential (BTC)"
-            />
-          )}
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
+          <Line
+            yAxisId="right"
+            name="Bitcoin Mined (BTC)"
+            type="monotone"
+            dataKey="bitcoinMined"
+            stroke="#f59e0b"
+            strokeWidth={2}
+            dot={{ r: 3 }}
+          />
+        </ComposedChart>
+      ) : (
+        <BarChart
+          data={data}
+          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+          <XAxis dataKey="hour" />
+          <YAxis />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend />
+          <Bar
+            name="Curtailed Energy (MWh)"
+            dataKey="curtailedEnergy"
+            fill="#2563eb"
+            barSize={20}
+          />
+        </BarChart>
+      )}
+    </ResponsiveContainer>
   )
 }
