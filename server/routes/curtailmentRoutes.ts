@@ -3,7 +3,7 @@ import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay, calculateMonthlyBitcoinSummary } from '../services/bitcoinService';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
-import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries } from "@db/schema";
+import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
 import { and, eq, sql, between } from "drizzle-orm";
 import { getDifficultyData } from '../services/dynamodbService';
 import axios from 'axios';
@@ -184,7 +184,70 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
       currentPrice = null;
     }
 
-    // First check if we have a pre-calculated monthly summary
+    // If a farm (leadParty) is selected, we need to calculate from base records
+    if (leadParty) {
+      const [year, month] = yearMonth.split('-').map(n => parseInt(n, 10));
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0); // Last day of month
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+
+      // First get all farms that match the leadParty
+      const farms = await db
+        .select({
+          farmId: curtailmentRecords.farmId
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.leadPartyName, leadParty))
+        .groupBy(curtailmentRecords.farmId);
+
+      if (!farms.length) {
+        return res.json({
+          bitcoinMined: 0,
+          valueAtCurrentPrice: 0,
+          difficulty: 0,
+          currentPrice
+        });
+      }
+
+      const farmIds = farms.map(f => f.farmId);
+
+      // Query Bitcoin calculations for specified farms in the date range
+      const bitcoinData = await db
+        .select({
+          bitcoinMined: sql<string>`SUM(bitcoin_mined)`,
+          avgDifficulty: sql<string>`AVG(difficulty)`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
+            eq(historicalBitcoinCalculations.minerModel, minerModel),
+            farmIds.length > 0 ? sql`farm_id IN (${farmIds.join(',')})` : undefined
+          )
+        );
+
+      if (!bitcoinData[0] || !bitcoinData[0].bitcoinMined) {
+        return res.json({
+          bitcoinMined: 0,
+          valueAtCurrentPrice: 0,
+          difficulty: 0,
+          currentPrice
+        });
+      }
+
+      const bitcoinMined = Number(bitcoinData[0].bitcoinMined);
+      const difficulty = Number(bitcoinData[0].avgDifficulty);
+
+      return res.json({
+        bitcoinMined,
+        valueAtCurrentPrice: bitcoinMined * (currentPrice || 0),
+        difficulty,
+        currentPrice
+      });
+    }
+
+    // If no farm is selected, use pre-calculated summary
     const monthlySummary = await db
       .select()
       .from(bitcoinMonthlySummaries)
