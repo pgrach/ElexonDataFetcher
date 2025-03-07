@@ -29,7 +29,8 @@
 import { processDate, auditAndFixBitcoinCalculations } from "./server/services/historicalReconciliation";
 import { processDailyCurtailment } from "./server/services/curtailment";
 import { isValidDateString } from "./server/utils/dates";
-import { Pool } from "pg";
+import pkg from 'pg';
+const { Pool } = pkg;
 import { logger } from "./server/utils/logger";
 
 // Create a database pool
@@ -170,11 +171,15 @@ async function main() {
     // Use the direct audit and fix function which is more efficient
     const result = await auditAndFixBitcoinCalculations(options.date);
     
-    if (!result.fixed) {
-      log(`All Bitcoin calculations for ${options.date} are complete`, "success");
+    if (result.success) {
+      if (!result.fixed) {
+        log(`All Bitcoin calculations for ${options.date} are complete`, "success");
+      } else {
+        log(`Fixed Bitcoin calculations for ${options.date}`, "success");
+        log(`${result.message}`, "info");
+      }
     } else {
-      log(`Fixed Bitcoin calculations for ${options.date}`, "success");
-      log(`${result.message}`, "info");
+      log(`Failed to fix Bitcoin calculations: ${result.message}`, "error");
     }
     
     // Calculate and display duration
