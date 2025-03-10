@@ -18,7 +18,7 @@ interface BitcoinPotentialTableProps {
   timeframe: string;
   date: Date;
   minerModel: string;
-  farmId: string; // Keeping farmId in prop interface for backward compatibility
+  farmId: string; // Keeping farmId in prop interface for backward compatibility with existing code
 }
 
 export default function BitcoinPotentialTable({
