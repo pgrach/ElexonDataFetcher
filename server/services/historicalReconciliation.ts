@@ -399,7 +399,7 @@ export async function findMissingDates(startDate: string, endDate: string) {
         settlement_date,
         array_agg(DISTINCT settlement_period) as curtailment_periods,
         COUNT(DISTINCT settlement_period) as period_count,
-        COUNT(DISTINCT farm_id) as farm_count,
+        COUNT(DISTINCT bmu_id) as farm_count,
         SUM(ABS(volume::numeric)) as total_volume
       FROM curtailment_records
       WHERE ABS(volume::numeric) > 0
@@ -412,7 +412,7 @@ export async function findMissingDates(startDate: string, endDate: string) {
         array_agg(DISTINCT miner_model) as processed_models,
         miner_model,
         COUNT(DISTINCT settlement_period) as period_count,
-        COUNT(DISTINCT farm_id) as farm_count,
+        COUNT(DISTINCT bmu_id) as farm_count,
         SUM(bitcoin_mined::numeric) as total_bitcoin
       FROM historical_bitcoin_calculations
       WHERE settlement_date BETWEEN $1 AND $2
@@ -558,7 +558,7 @@ export async function getReconciliationStatus(): Promise<{
       WITH curtailment_summary AS (
         SELECT 
           settlement_date,
-          COUNT(DISTINCT farm_id) * COUNT(DISTINCT settlement_period) as expected_calculations,
+          COUNT(DISTINCT bmu_id) * COUNT(DISTINCT settlement_period) as expected_calculations,
           COUNT(*) as curtailment_records
         FROM curtailment_records
         WHERE ABS(volume::numeric) > 0
