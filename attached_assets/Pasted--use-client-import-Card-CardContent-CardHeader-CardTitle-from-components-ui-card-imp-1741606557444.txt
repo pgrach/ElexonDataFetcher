@@ -1,0 +1,63 @@
+"use client"
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Bitcoin, Wind, PoundSterling } from "lucide-react"
+
+interface SummaryCardsProps {
+  timeframe: string
+  date: Date
+  minerModel: string
+  farmId: string
+}
+
+export default function SummaryCards({ timeframe, date, minerModel, farmId }: SummaryCardsProps) {
+  // In a real implementation, this would fetch data from your API
+  // using React Query or similar
+  const summaryData = {
+    totalCurtailment: 1245.8, // MWh
+    potentialBitcoin: 0.0842, // BTC
+    bitcoinValue: 3245.67, // £
+    curtailmentPayments: 4567.89, // £
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-3">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Energy Curtailed</CardTitle>
+          <Wind className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{summaryData.totalCurtailment.toLocaleString()} MWh</div>
+          <p className="text-xs text-muted-foreground">Wasted energy that could be utilized</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Subsidies Paid</CardTitle>
+          <PoundSterling className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-red-600">£{summaryData.curtailmentPayments.toLocaleString()}</div>
+          <p className="text-xs text-muted-foreground">Consumer cost for idle wind farms</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Potential Bitcoin</CardTitle>
+          <Bitcoin className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{summaryData.potentialBitcoin.toFixed(4)} BTC</div>
+          <div className="text-sm font-medium text-muted-foreground">
+            ≈ £{summaryData.bitcoinValue.toLocaleString()}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Using {minerModel.replace("_", " ")} miners</p>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
