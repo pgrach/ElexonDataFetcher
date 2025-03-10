@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PoundSterling } from "lucide-react";
 
 interface FarmComparisonChartProps {
   timeframe: string;
@@ -13,41 +13,100 @@ interface FarmComparisonChartProps {
   minerModel: string;
 }
 
+interface TopFarmData {
+  name: string;
+  farmId: string;
+  curtailedEnergy: number;
+  curtailmentPayment: number;
+  bitcoinMined: number;
+  bitcoinValue: number;
+}
+
 export default function FarmComparisonChart({ timeframe, date, minerModel }: FarmComparisonChartProps) {
   const formattedDate = format(date, "yyyy-MM-dd");
   const yearMonth = format(date, "yyyy-MM");
   const year = format(date, "yyyy");
   
-  // Use a placeholder query that would fetch top farms data
-  // In a real implementation, this would call a specific API endpoint for farm comparison
-  const { data: farmsData = [], isLoading } = useQuery({
-    queryKey: [`/api/lead-parties/${formattedDate}`],
+  // Determine period and value based on timeframe
+  const period = 
+    timeframe === "yearly" ? "year" : 
+    timeframe === "monthly" ? "month" : "day";
+  
+  const value = 
+    timeframe === "yearly" ? year : 
+    timeframe === "monthly" ? yearMonth : formattedDate;
+  
+  // Fetch data from our new top-farms endpoint
+  const { data: farmsData = [], isLoading } = useQuery<TopFarmData[]>({
+    queryKey: ['/api/mining-potential/top-farms', period, value, minerModel],
     queryFn: async () => {
-      // Fetch the list of lead parties (farms)
-      const url = new URL(`/api/lead-parties/${formattedDate}`, window.location.origin);
+      const url = new URL('/api/mining-potential/top-farms', window.location.origin);
+      url.searchParams.append('period', period);
+      url.searchParams.append('value', value);
+      url.searchParams.append('minerModel', minerModel);
+      url.searchParams.append('limit', '5');
+      
       const response = await fetch(url);
       
       if (!response.ok) {
-        throw new Error("Failed to fetch lead parties");
+        throw new Error("Failed to fetch top farms data");
       }
       
-      const leadParties = await response.json();
-      
-      // For demonstration, we're only showing the first 5 farms with sample data
-      // In a real implementation, you would fetch actual farm comparison data
-      return leadParties.slice(0, 5).map((party: string, index: number) => ({
-        name: party,
-        curtailedEnergy: Math.random() * 1000 + 100, // This would be actual farm data
-        bitcoinPotential: Math.random() * 2 + 0.1,  // This would be actual bitcoin potential data
-      }));
+      return response.json();
     }
   });
   
+  // Transform the data for the chart
+  const chartData = farmsData.map(farm => ({
+    name: farm.name || farm.farmId,
+    curtailmentPayment: Math.round(farm.curtailmentPayment),
+    bitcoinValue: Math.round(farm.bitcoinValue)
+  }));
+  
   // Get chart title based on timeframe
   const chartTitle = 
-    timeframe === "yearly" ? `Top Farms Comparison (${year})` :
-    timeframe === "monthly" ? `Top Farms Comparison (${format(date, "MMMM yyyy")})` :
-    `Top Farms Comparison (${format(date, "PP")})`;
+    timeframe === "yearly" ? `Top Curtailed Farms (${year})` :
+    timeframe === "monthly" ? `Top Curtailed Farms (${format(date, "MMMM yyyy")})` :
+    `Top Curtailed Farms (${format(date, "PP")})`;
+  
+  // Colors for the bars
+  const curtailmentColor = "#000000"; // Black for curtailment
+  const bitcoinColor = "#F7931A"; // Bitcoin orange
+  
+  // Format GBP values for tooltips
+  const formatGBP = (value: number) => {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP'
+    }).format(value);
+  };
+  
+  // Custom tooltip to show the Bitcoin icon
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-md shadow-md">
+          <p className="font-semibold">{label}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={`item-${index}`} style={{ color: entry.color || entry.fill }}>
+              {entry.name === "Bitcoin Value" ? (
+                <span className="flex items-center">
+                  <span className="text-[#F7931A] mr-1">₿</span>
+                  {formatGBP(entry.value)}
+                </span>
+              ) : (
+                <span className="flex items-center">
+                  <Pound size={14} className="mr-1" />
+                  {formatGBP(entry.value)}
+                </span>
+              )}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
   
   return (
     <Card>
@@ -57,53 +116,46 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-[300px] w-full" />
-        ) : farmsData.length === 0 ? (
+        ) : chartData.length === 0 ? (
           <div className="flex items-center justify-center h-[300px] text-muted-foreground">
             No farm comparison data available for this {timeframe} period
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart
-              data={farmsData}
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              data={chartData}
+              margin={{ top: 5, right: 30, left: 30, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
               <YAxis 
-                yAxisId="left" 
-                orientation="left" 
-                stroke="#8884d8" 
                 tick={{ fontSize: 12 }}
-                label={{ value: 'Curtailed Energy (MWh)', angle: -90, position: 'insideLeft' }}
+                tickFormatter={(value) => `£${value.toLocaleString()}`}
+                label={{ value: 'British Pounds (£)', angle: -90, position: 'insideLeft' }}
               />
-              <YAxis 
-                yAxisId="right" 
-                orientation="right" 
-                stroke="#82ca9d" 
-                tick={{ fontSize: 12 }}
-                label={{ value: 'Bitcoin Potential (₿)', angle: 90, position: 'insideRight' }}
-              />
-              <Tooltip />
+              <Tooltip content={<CustomTooltip />} />
               <Legend />
               <Bar 
-                yAxisId="left" 
-                dataKey="curtailedEnergy" 
-                name="Curtailed Energy (MWh)" 
-                fill="#8884d8" 
-              />
+                dataKey="curtailmentPayment" 
+                name="Curtailment Payment" 
+                stackId="a"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={curtailmentColor} />
+                ))}
+              </Bar>
               <Bar 
-                yAxisId="right" 
-                dataKey="bitcoinPotential" 
-                name="Bitcoin Potential (₿)" 
-                fill="#82ca9d" 
-              />
+                dataKey="bitcoinValue" 
+                name="Bitcoin Value" 
+                stackId="b"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={bitcoinColor} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         )}
-        <div className="text-xs text-muted-foreground mt-2 text-center">
-          Note: This is a placeholder demonstration of the farm comparison chart.
-          In a production environment, this would display actual farm comparison data.
-        </div>
       </CardContent>
     </Card>
   );

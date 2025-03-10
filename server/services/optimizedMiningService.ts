@@ -348,6 +348,123 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
 }
 
 /**
+ * Get top curtailed farms for a specified date or period
+ */
+export async function getTopCurtailedFarms(
+  period: 'day' | 'month' | 'year',
+  value: string,
+  minerModel: string = 'S19J_PRO',
+  limit: number = 5
+): Promise<any[]> {
+  console.log(`Getting top ${limit} curtailed farms for ${period}: ${value}, model: ${minerModel}`);
+  
+  try {
+    let dateCondition;
+    
+    if (period === 'day') {
+      // For a specific day
+      dateCondition = eq(curtailmentRecords.settlementDate, value);
+    } else if (period === 'month') {
+      // For a specific month (YYYY-MM)
+      const [year, month] = value.split('-').map(n => parseInt(n, 10));
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0); // Last day of month
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+      
+      dateCondition = sql`${curtailmentRecords.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
+    } else if (period === 'year') {
+      // For a specific year
+      dateCondition = sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}) = ${parseInt(value, 10)}`;
+    } else {
+      throw new Error(`Invalid period type: ${period}`);
+    }
+    
+    // First get the top farms by curtailment volume
+    const topFarms = await db
+      .select({
+        farmId: curtailmentRecords.farmId,
+        leadPartyName: curtailmentRecords.leadPartyName,
+        totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`,
+        totalPayment: sql<number>`SUM(payment)`
+      })
+      .from(curtailmentRecords)
+      .where(dateCondition)
+      .groupBy(curtailmentRecords.farmId, curtailmentRecords.leadPartyName)
+      .orderBy(desc(sql<number>`SUM(ABS(volume))`))
+      .limit(limit);
+    
+    console.log(`Found ${topFarms.length} top farms for ${period}: ${value}`);
+    
+    // Now get Bitcoin data for each farm
+    const result = await Promise.all(topFarms.map(async (farm) => {
+      // Get Bitcoin data for this farm
+      let bitcoinDateCondition;
+      
+      if (period === 'day') {
+        bitcoinDateCondition = eq(historicalBitcoinCalculations.settlementDate, value);
+      } else if (period === 'month') {
+        const [year, month] = value.split('-').map(n => parseInt(n, 10));
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0);
+        const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+        const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+        
+        bitcoinDateCondition = sql`${historicalBitcoinCalculations.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
+      } else if (period === 'year') {
+        bitcoinDateCondition = sql`EXTRACT(YEAR FROM ${historicalBitcoinCalculations.settlementDate}) = ${parseInt(value, 10)}`;
+      }
+      
+      const bitcoinData = await db
+        .select({
+          totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            bitcoinDateCondition,
+            eq(historicalBitcoinCalculations.farmId, farm.farmId),
+            eq(historicalBitcoinCalculations.minerModel, minerModel)
+          )
+        );
+      
+      // Get current Bitcoin price for calculating value in GBP
+      let currentPrice = 0;
+      try {
+        const priceResponse = await fetch('https://api.minerstat.com/v2/coins?list=BTC');
+        const priceData = await priceResponse.json();
+        if (priceData && priceData[0] && priceData[0].price) {
+          // Convert USD to GBP (using a fixed rate - for simplicity)
+          const usdToGbpRate = 0.79;
+          currentPrice = priceData[0].price * usdToGbpRate;
+        }
+      } catch (error) {
+        console.error('Error fetching Bitcoin price:', error);
+        // Use a fallback price if needed
+        currentPrice = 60000; // Example GBP price
+      }
+      
+      const bitcoinMined = Number(bitcoinData[0]?.totalBitcoinMined || 0);
+      const bitcoinValue = bitcoinMined * currentPrice;
+      
+      return {
+        name: farm.leadPartyName,
+        farmId: farm.farmId,
+        curtailedEnergy: Number(farm.totalCurtailedEnergy),
+        curtailmentPayment: Math.abs(Number(farm.totalPayment)), // Make positive for display
+        bitcoinMined: bitcoinMined,
+        bitcoinValue: bitcoinValue
+      };
+    }));
+    
+    return result;
+  } catch (error) {
+    console.error(`Error getting top curtailed farms for ${period}: ${value}:`, error);
+    throw error;
+  }
+}
+
+/**
  * Get farm-specific statistics across time periods
  */
 export async function getFarmStatistics(farmId: string, period: 'day' | 'month' | 'year', value: string): Promise<any> {

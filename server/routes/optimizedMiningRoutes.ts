@@ -13,7 +13,8 @@ import {
   getDailyMiningPotential,
   getMonthlyMiningPotential,
   getYearlyMiningPotential,
-  getFarmStatistics
+  getFarmStatistics,
+  getTopCurtailedFarms
 } from "../services/optimizedMiningService";
 
 // Minerstat API helper function
@@ -543,6 +544,63 @@ router.get('/farm/:farmId', async (req: Request, res: Response) => {
     console.error('Error in farm statistics endpoint:', error);
     res.status(500).json({
       error: 'Failed to retrieve farm statistics',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Top curtailed farms endpoint
+router.get('/top-farms', async (req: Request, res: Response) => {
+  try {
+    // Get query parameters
+    const period = (req.query.period as 'day' | 'month' | 'year') || 'day';
+    let value = req.query.value as string;
+    const minerModel = req.query.minerModel as string || 'S19J_PRO';
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 5;
+    
+    // If no value is provided, use current date/month/year based on period
+    if (!value) {
+      const now = new Date();
+      value = format(
+        now, 
+        period === 'day' ? 'yyyy-MM-dd' : 
+        period === 'month' ? 'yyyy-MM' : 'yyyy'
+      );
+    }
+    
+    // Validate period type
+    if (!['day', 'month', 'year'].includes(period)) {
+      return res.status(400).json({
+        error: 'Invalid period type',
+        message: 'Period must be one of: day, month, year'
+      });
+    }
+    
+    // Validate value format based on period
+    const formatValid = 
+      (period === 'day' && value.match(/^\d{4}-\d{2}-\d{2}$/)) ||
+      (period === 'month' && value.match(/^\d{4}-\d{2}$/)) ||
+      (period === 'year' && value.match(/^\d{4}$/));
+      
+    if (!formatValid) {
+      return res.status(400).json({
+        error: 'Invalid value format',
+        message: `For period type '${period}', value must be in format: ${
+          period === 'day' ? 'YYYY-MM-DD' : 
+          period === 'month' ? 'YYYY-MM' : 'YYYY'
+        }`
+      });
+    }
+    
+    // Get top farms data
+    const topFarms = await getTopCurtailedFarms(period, value, minerModel, limit);
+    
+    // Return response
+    res.json(topFarms);
+  } catch (error) {
+    console.error('Error in top farms endpoint:', error);
+    res.status(500).json({
+      error: 'Failed to fetch top curtailed farms',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
