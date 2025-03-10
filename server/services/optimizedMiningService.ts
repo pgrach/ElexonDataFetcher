@@ -22,8 +22,8 @@ import { format } from "date-fns";
 /**
  * Get daily mining potential data directly from core tables with optimized queries
  */
-export async function getDailyMiningPotential(date: string, minerModel: string, farmId?: string): Promise<any> {
-  console.log(`Calculating daily mining potential for ${date}, model: ${minerModel}, farm: ${farmId || 'all'}`);
+export async function getDailyMiningPotential(date: string, minerModel: string, bmuId?: string): Promise<any> {
+  console.log(`Calculating daily mining potential for ${date}, model: ${minerModel}, farm: ${bmuId || 'all'}`);
   
   try {
     // Query for Bitcoin calculations first
@@ -38,7 +38,7 @@ export async function getDailyMiningPotential(date: string, minerModel: string, 
         and(
           eq(historicalBitcoinCalculations.settlementDate, date),
           eq(historicalBitcoinCalculations.minerModel, minerModel),
-          farmId ? eq(historicalBitcoinCalculations.farmId, farmId) : undefined
+          bmuId ? eq(historicalBitcoinCalculations.bmuId, bmuId) : undefined
         )
       );
       
@@ -53,7 +53,7 @@ export async function getDailyMiningPotential(date: string, minerModel: string, 
       .where(
         and(
           eq(curtailmentRecords.settlementDate, date),
-          farmId ? eq(curtailmentRecords.farmId, farmId) : undefined
+          bmuId ? eq(curtailmentRecords.bmuId, bmuId) : undefined
         )
       );
       
@@ -75,8 +75,8 @@ export async function getDailyMiningPotential(date: string, minerModel: string, 
 /**
  * Get monthly mining potential data directly from core tables with optimized queries
  */
-export async function getMonthlyMiningPotential(yearMonth: string, minerModel: string, farmId?: string): Promise<any> {
-  console.log(`Calculating monthly mining potential for ${yearMonth}, model: ${minerModel}, farm: ${farmId || 'all'}`);
+export async function getMonthlyMiningPotential(yearMonth: string, minerModel: string, bmuId?: string): Promise<any> {
+  console.log(`Calculating monthly mining potential for ${yearMonth}, model: ${minerModel}, farm: ${bmuId || 'all'}`);
   
   try {
     // Convert yearMonth to date range (e.g., "2025-03" to "2025-03-01" and "2025-03-31")
@@ -98,7 +98,7 @@ export async function getMonthlyMiningPotential(yearMonth: string, minerModel: s
         and(
           sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
           eq(historicalBitcoinCalculations.minerModel, minerModel),
-          farmId ? eq(historicalBitcoinCalculations.farmId, farmId) : undefined
+          bmuId ? eq(historicalBitcoinCalculations.bmuId, bmuId) : undefined
         )
       );
       
@@ -113,7 +113,7 @@ export async function getMonthlyMiningPotential(yearMonth: string, minerModel: s
       .where(
         and(
           sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
-          farmId ? eq(curtailmentRecords.farmId, farmId) : undefined
+          bmuId ? eq(curtailmentRecords.bmuId, bmuId) : undefined
         )
       );
       

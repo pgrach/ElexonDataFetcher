@@ -8,9 +8,14 @@
  *   npx tsx run_rename_migration.ts
  */
 
-import { Pool } from 'pg';
+import pg from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const { Pool } = pg;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function runMigration() {
   // Create a connection to the database
