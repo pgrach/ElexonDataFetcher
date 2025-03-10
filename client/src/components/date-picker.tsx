@@ -1,3 +1,6 @@
+"use client";
+
+import * as React from "react";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface DatePickerProps {
   date: Date;
@@ -14,31 +18,39 @@ interface DatePickerProps {
 }
 
 export function DatePicker({ date, onDateChange }: DatePickerProps) {
+  const startDate = new Date("2022-01-01");
+  const today = new Date();
+  
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className="w-[180px] justify-start text-left font-normal"
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {format(date, "MMMM d, yyyy")}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={date}
-          onSelect={onDateChange}
-          disabled={(date) => {
-            const startDate = new Date("2022-01-01");
-            startDate.setHours(0, 0, 0, 0);
-            const currentDate = new Date();
-            return date < startDate || date > currentDate;
-          }}
-          initialFocus
-        />
-      </PopoverContent>
-    </Popover>
+    <div className="flex items-center space-x-2">
+      <CalendarIcon className="h-5 w-5 text-muted-foreground" />
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn(
+              "w-[180px] justify-start text-left font-normal",
+              !date && "text-muted-foreground"
+            )}
+          >
+            {date ? (
+              format(date, "PPP")
+            ) : (
+              <span>Pick a date</span>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={date}
+            onSelect={onDateChange}
+            fromDate={startDate}
+            toDate={today}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
