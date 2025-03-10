@@ -1,8 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useQuery } from "@tanstack/react-query";
 import {
   Select,
   SelectContent,
@@ -25,35 +24,28 @@ interface FarmData {
 }
 
 export default function FarmSelector({ value, onValueChange }: FarmSelectorProps) {
-  const [farms, setFarms] = useState<FarmData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchFarms = async () => {
-      try {
-        setLoading(true);
-        const response = await axios.get('/api/mining-potential/farms');
-        setFarms(response.data);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching farms:', err);
-        setError('Failed to load farms. Please try again later.');
-      } finally {
-        setLoading(false);
+  // Use React Query for data fetching instead of local state & useEffect
+  const { data: farms = [], isLoading, error } = useQuery<FarmData[]>({
+    queryKey: ['/api/mining-potential/farms'],
+    queryFn: async () => {
+      const response = await fetch('/api/mining-potential/farms');
+      if (!response.ok) {
+        throw new Error('Failed to fetch farms');
       }
-    };
+      return response.json();
+    }
+  });
 
-    fetchFarms();
-  }, []);
+  // Determine if we need to show an error message
+  const errorMessage = error instanceof Error ? error.message : null;
 
   return (
     <div>
-      <Select value={value} onValueChange={onValueChange} disabled={loading}>
+      <Select value={value} onValueChange={onValueChange} disabled={isLoading}>
         <SelectTrigger className="w-[200px]">
-          <div className="flex items-center gap-2">
-            <SelectValue placeholder={loading ? 'Loading farms...' : 'Select a farm'} />
-            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          <div className="flex items-center justify-between w-full">
+            <SelectValue placeholder={isLoading ? 'Loading farms...' : 'Select a farm'} />
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
           </div>
         </SelectTrigger>
         <SelectContent>
@@ -71,7 +63,7 @@ export default function FarmSelector({ value, onValueChange }: FarmSelectorProps
           ))}
         </SelectContent>
       </Select>
-      {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
+      {errorMessage && <p className="text-sm text-red-500 mt-1">{errorMessage}</p>}
     </div>
   );
 }
