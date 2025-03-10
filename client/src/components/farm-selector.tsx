@@ -21,6 +21,7 @@ interface FarmSelectorProps {
 interface FarmData {
   name: string;
   farmIds: string[];
+  curtailedEnergy: number;
 }
 
 export default function FarmSelector({ value, onValueChange }: FarmSelectorProps) {
@@ -36,10 +37,9 @@ export default function FarmSelector({ value, onValueChange }: FarmSelectorProps
     }
   });
   
-  // Sort farms by number of farms in descending order (largest at top)
-  const farms = React.useMemo(() => {
-    return [...farmData].sort((a, b) => b.farmIds.length - a.farmIds.length);
-  }, [farmData]);
+  // The farms are already sorted by curtailment volume on the server side
+  // No need to sort them again here
+  const farms = farmData;
 
   // Determine if we need to show an error message
   const errorMessage = error instanceof Error ? error.message : null;

@@ -530,11 +530,23 @@ export async function getAvailableFarms(): Promise<any[]> {
       ])
     );
     
-    const result = Object.entries(farmsByParty).map(([name, farmIds]) => ({
+    const unsortedResult = Object.entries(farmsByParty).map(([name, farmIds]) => ({
       name,
       farmIds,
       curtailedEnergy: leadPartyMap.get(name) || 0
-    })).sort((a, b) => b.curtailedEnergy - a.curtailedEnergy);
+    }));
+    
+    // Sort by actual curtailment volume (highest first)
+    const result = unsortedResult.sort((a, b) => b.curtailedEnergy - a.curtailedEnergy);
+    
+    // Log sorting results for debugging
+    console.log('Farm sorting results:');
+    result.slice(0, 10).forEach(farm => {
+      // Ensure curtailedEnergy is a number before using toFixed
+      const energyValue = typeof farm.curtailedEnergy === 'number' ? 
+        farm.curtailedEnergy.toFixed(2) : String(farm.curtailedEnergy);
+      console.log(`- ${farm.name}: ${energyValue} MWh (${farm.farmIds.length} farms)`);
+    });
     
     return result;
   } catch (error) {
