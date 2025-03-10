@@ -16,6 +16,8 @@ import { Loader2 } from 'lucide-react';
 interface FarmSelectorProps {
   value: string;
   onValueChange: (value: string) => void;
+  timeframe: string;
+  date: Date;
 }
 
 interface FarmData {
@@ -24,17 +26,28 @@ interface FarmData {
   curtailedEnergy: number;
 }
 
-export default function FarmSelector({ value, onValueChange }: FarmSelectorProps) {
-  // Get the current date to match the chart data's date
-  const today = new Date();
-  const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+export default function FarmSelector({ value, onValueChange, timeframe, date }: FarmSelectorProps) {
+  // Format date parameters based on the selected timeframe
+  let dateParam = '';
+  
+  if (timeframe === 'daily') {
+    // For daily view, use a specific date - YYYY-MM-DD
+    dateParam = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  } else if (timeframe === 'monthly') {
+    // For monthly view, use year-month - YYYY-MM
+    dateParam = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  } else {
+    // For yearly view, use just the year - YYYY
+    dateParam = `${date.getFullYear()}`;
+  }
   
   // Use React Query for data fetching instead of local state & useEffect
   const { data: farmData = [], isLoading, error } = useQuery<FarmData[]>({
-    queryKey: ['/api/mining-potential/farms', formattedDate],
+    queryKey: ['/api/mining-potential/farms', timeframe, dateParam],
     queryFn: async () => {
-      // Pass the current date as a query parameter to get farms sorted by today's curtailment
-      const response = await fetch(`/api/mining-potential/farms?date=${formattedDate}`);
+      // Pass the appropriate date parameter based on timeframe to get farms sorted by the right period
+      // This will ensure sorting matches the chart for the selected timeframe
+      const response = await fetch(`/api/mining-potential/farms?date=${dateParam}&timeframe=${timeframe}`);
       if (!response.ok) {
         throw new Error('Failed to fetch farms');
       }

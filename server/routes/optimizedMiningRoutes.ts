@@ -79,8 +79,12 @@ router.get('/farms', async (req: Request, res: Response) => {
   try {
     // Extract date parameter if provided (e.g., ?date=2025-03-10)
     const date = req.query.date as string | undefined;
+    // Extract timeframe parameter (e.g., ?timeframe=daily)
+    const timeframe = req.query.timeframe as 'daily' | 'monthly' | 'yearly' | undefined || 'daily';
     
-    const farms = await getAvailableFarms(date);
+    console.log(`Farms request with timeframe: ${timeframe}, date: ${date || 'not specified'}`);
+    
+    const farms = await getAvailableFarms(date, timeframe);
     res.json(farms);
   } catch (error) {
     console.error('Error getting available farms:', error);

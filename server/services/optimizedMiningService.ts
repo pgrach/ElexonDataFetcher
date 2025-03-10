@@ -485,12 +485,13 @@ export async function getTopCurtailedFarms(
  */
 /**
  * Get a list of all available farms grouped by lead party name
- * Sorted by total curtailment volume (highest first)
+ * Sorted by total curtailment volume (highest first) based on the selected timeframe
  * 
- * @param date Optional date parameter to filter by a specific date
+ * @param date Date parameter in format YYYY-MM-DD, YYYY-MM, or YYYY depending on timeframe
+ * @param timeframe Optional timeframe parameter ('daily', 'monthly', 'yearly') - defaults to daily
  */
-export async function getAvailableFarms(date?: string): Promise<any[]> {
-  console.log(`Getting list of available farms${date ? ` for date ${date}` : ''}`);
+export async function getAvailableFarms(date?: string, timeframe: 'daily' | 'monthly' | 'yearly' = 'daily'): Promise<any[]> {
+  console.log(`Getting list of available farms for ${timeframe} data${date ? ` (${date})` : ''}`);
   
   try {
     // First, get curtailment volumes by lead party
@@ -501,11 +502,31 @@ export async function getAvailableFarms(date?: string): Promise<any[]> {
       })
       .from(curtailmentRecords);
     
-    // Filter by date if provided
+    // Apply filtering based on the timeframe and date
     if (date) {
-      leadPartyCurtailmentQuery = leadPartyCurtailmentQuery.where(
-        eq(curtailmentRecords.settlementDate, date)
-      );
+      if (timeframe === 'daily') {
+        // For daily, use exact date match (YYYY-MM-DD)
+        leadPartyCurtailmentQuery = leadPartyCurtailmentQuery.where(
+          eq(curtailmentRecords.settlementDate, date)
+        );
+      } else if (timeframe === 'monthly') {
+        // For monthly, extract year and month from date (YYYY-MM)
+        const [year, month] = date.split('-').map(n => parseInt(n, 10));
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0); // Last day of month
+        const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+        const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+        
+        leadPartyCurtailmentQuery = leadPartyCurtailmentQuery.where(
+          sql`${curtailmentRecords.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`
+        );
+      } else if (timeframe === 'yearly') {
+        // For yearly, extract just the year from date (YYYY)
+        const year = parseInt(date, 10);
+        leadPartyCurtailmentQuery = leadPartyCurtailmentQuery.where(
+          sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}) = ${year}`
+        );
+      }
     }
     
     const leadPartyCurtailment = await leadPartyCurtailmentQuery
@@ -520,11 +541,28 @@ export async function getAvailableFarms(date?: string): Promise<any[]> {
       })
       .from(curtailmentRecords);
     
-    // Filter by date if provided
+    // Apply the same filtering as above for consistency
     if (date) {
-      farmsQuery = farmsQuery.where(
-        eq(curtailmentRecords.settlementDate, date)
-      );
+      if (timeframe === 'daily') {
+        farmsQuery = farmsQuery.where(
+          eq(curtailmentRecords.settlementDate, date)
+        );
+      } else if (timeframe === 'monthly') {
+        const [year, month] = date.split('-').map(n => parseInt(n, 10));
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0); 
+        const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+        const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+        
+        farmsQuery = farmsQuery.where(
+          sql`${curtailmentRecords.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`
+        );
+      } else if (timeframe === 'yearly') {
+        const year = parseInt(date, 10);
+        farmsQuery = farmsQuery.where(
+          sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}) = ${year}`
+        );
+      }
     }
     
     const farms = await farmsQuery

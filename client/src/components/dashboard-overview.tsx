@@ -75,6 +75,8 @@ export default function DashboardOverview() {
             <FarmSelector
               value={selectedFarm}
               onValueChange={handleFarmChange}
+              timeframe={timeframe}
+              date={date}
             />
           </div>
         </div>
