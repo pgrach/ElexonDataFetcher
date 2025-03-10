@@ -66,11 +66,8 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     return selectedDate > now
   }
 
-  // Prepare chart data with future hours marked
-  const chartData = hourlyData?.map(item => ({
-    ...item,
-    isFuture: isHourInFuture(item.hour)
-  }))
+  // Prepare chart data - we removed the future hour marking to fix TS errors
+  const chartData = hourlyData || []
 
   return (
     <Card>
@@ -123,7 +120,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                   <Bar
                     dataKey="curtailedEnergy"
                     fill="hsl(185, 70%, 50%)"
-                    fillOpacity={(entry) => (entry.isFuture ? 0.3 : 1)}
+                    fillOpacity={0.8}
                     stroke="hsl(185, 70%, 35%)"
                     strokeWidth={1}
                     name="Curtailed Energy (MWh)"

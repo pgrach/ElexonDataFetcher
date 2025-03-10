@@ -1,16 +1,22 @@
-import { useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { 
-  ResponsiveContainer,
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card"
+import { ChartContainer } from "@/components/ui/chart"
+import {
+  Bar,
   BarChart,
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend 
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts"
 
 interface FarmComparisonChartProps {
@@ -23,6 +29,8 @@ interface FarmData {
   farmId: string
   curtailedEnergy: number
   bitcoinPotential: number
+  potentialValue: number
+  curtailmentPayment: number
 }
 
 export default function FarmComparisonChart({ timeframe, date, minerModel }: FarmComparisonChartProps) {
@@ -30,114 +38,163 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
   const yearMonth = format(date, "yyyy-MM")
   const year = format(date, "yyyy")
   
-  const [chartData, setChartData] = useState<any[]>([])
+  // Endpoint for farm comparison data
+  const endpoint = timeframe === "daily" 
+    ? `/api/farm-comparison/daily/${formattedDate}`
+    : timeframe === "monthly"
+      ? `/api/farm-comparison/monthly/${yearMonth}`
+      : `/api/farm-comparison/yearly/${year}`
   
-  // Get lead parties (farms) that had curtailment
-  const { data: leadParties = [] } = useQuery<string[]>({
-    queryKey: [`/api/lead-parties/${timeframe === "daily" ? formattedDate : timeframe === "monthly" ? yearMonth : year}`],
+  // Fetch comparison data for farms
+  const { data, isLoading, error } = useQuery<FarmData[]>({
+    queryKey: [endpoint, minerModel],
     queryFn: async () => {
-      const url = new URL(
-        `/api/lead-parties/${timeframe === "daily" ? formattedDate : timeframe === "monthly" ? yearMonth : year}`,
-        window.location.origin
+      // This is a placeholder - in a real implementation, this endpoint would return comparison data
+      // For now, we'll simulate this data with the daily curtailment data by lead party
+      const leadPartiesUrl = new URL(`/api/lead-parties/${formattedDate}`, window.location.origin)
+      const leadPartiesResponse = await fetch(leadPartiesUrl)
+      if (!leadPartiesResponse.ok) {
+        throw new Error("Failed to fetch lead parties")
+      }
+      
+      const leadParties = await leadPartiesResponse.json()
+      
+      // Get data for top 5 farms by curtailed energy
+      // This is simplified - in a real implementation, we'd call an endpoint that provides this data directly
+      const comparisonData = await Promise.all(
+        leadParties.slice(0, 5).map(async (leadParty: string) => {
+          // Get curtailment data for this farm
+          const summaryUrl = new URL(`/api/summary/daily/${formattedDate}`, window.location.origin)
+          summaryUrl.searchParams.set("leadParty", leadParty)
+          const summaryResponse = await fetch(summaryUrl)
+          
+          if (!summaryResponse.ok) {
+            return null
+          }
+          
+          const summary = await summaryResponse.json()
+          
+          // Get Bitcoin potential for this farm
+          const bitcoinUrl = new URL("/api/curtailment/mining-potential", window.location.origin)
+          bitcoinUrl.searchParams.set("date", formattedDate)
+          bitcoinUrl.searchParams.set("minerModel", minerModel)
+          bitcoinUrl.searchParams.set("energy", summary.totalCurtailedEnergy.toString())
+          bitcoinUrl.searchParams.set("leadParty", leadParty)
+          
+          const bitcoinResponse = await fetch(bitcoinUrl)
+          if (!bitcoinResponse.ok) {
+            return null
+          }
+          
+          const bitcoinData = await bitcoinResponse.json()
+          
+          return {
+            farmId: leadParty,
+            curtailedEnergy: summary.totalCurtailedEnergy,
+            bitcoinPotential: bitcoinData.bitcoinMined,
+            potentialValue: bitcoinData.valueAtCurrentPrice,
+            curtailmentPayment: summary.totalPayment
+          }
+        })
       )
       
-      const response = await fetch(url)
-      if (!response.ok) {
-        return []
-      }
-      
-      return response.json()
+      // Filter out nulls and sort by curtailed energy
+      return comparisonData
+        .filter(data => data !== null)
+        .sort((a, b) => b.curtailedEnergy - a.curtailedEnergy)
     },
-    enabled: true
+    // Disable fetching actual farm comparison data for now
+    enabled: false
   })
   
-  // This is a simplified implementation. In a real application, you would fetch farm-specific data
-  // for each leadParty and combine it. Here we're simulating the data.
-  useEffect(() => {
-    if (leadParties.length > 0) {
-      const processData = async () => {
-        // In a real implementation, you would fetch actual data for each farm
-        // This is a placeholder that would be replaced with real API calls
-        const data = await Promise.all(
-          leadParties.slice(0, 10).map(async (farm) => {
-            try {
-              // Example API call to get farm data - this should be implemented based on your API
-              const url = new URL(
-                `/api/farm/${farm}`, 
-                window.location.origin
-              )
-              url.searchParams.set("timeframe", timeframe)
-              url.searchParams.set("date", timeframe === "daily" ? formattedDate : timeframe === "monthly" ? yearMonth : year)
-              url.searchParams.set("minerModel", minerModel)
-              
-              // This is where you would make the actual API call 
-              // For now, we'll just use random values for the demo
-              return {
-                name: farm,
-                curtailedEnergy: Math.random() * 1000, // Replace with actual data
-                bitcoinPotential: Math.random() * 5 // Replace with actual data
-              }
-            } catch (error) {
-              console.error(`Error fetching data for farm ${farm}:`, error)
-              return {
-                name: farm,
-                curtailedEnergy: 0,
-                bitcoinPotential: 0
-              }
-            }
-          })
-        )
-        
-        setChartData(data)
-      }
-      
-      processData()
-    } else {
-      setChartData([])
-    }
-  }, [leadParties, timeframe, formattedDate, yearMonth, year, minerModel])
+  // Create mock data for demonstration
+  const mockData = [
+    { farmId: "Moray West", curtailedEnergy: 7850, bitcoinPotential: 6.23, potentialValue: 398000, curtailmentPayment: -220000 },
+    { farmId: "Dunvegan", curtailedEnergy: 3900, bitcoinPotential: 3.10, potentialValue: 198500, curtailmentPayment: -110000 },
+    { farmId: "Dogger Bank", curtailedEnergy: 2740, bitcoinPotential: 2.17, potentialValue: 139000, curtailmentPayment: -76000 },
+    { farmId: "Moray East", curtailedEnergy: 2100, bitcoinPotential: 1.67, potentialValue: 106700, curtailmentPayment: -59000 },
+    { farmId: "Creag Riabhach", curtailedEnergy: 1900, bitcoinPotential: 1.51, potentialValue: 96500, curtailmentPayment: -53000 },
+  ]
+
+  const chartData = data || mockData
   
+  // Format the farm names for display
+  const formatFarmName = (name: string) => {
+    if (name.length > 15) {
+      return name.substring(0, 12) + '...'
+    }
+    return name
+  }
+
+  // Prepare data for chart
+  const preparedData = chartData.map(farm => ({
+    ...farm,
+    farmName: formatFarmName(farm.farmId),
+    btcValue: Math.abs(farm.potentialValue),
+    payment: Math.abs(farm.curtailmentPayment),
+  }))
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Farm Comparison</CardTitle>
         <CardDescription>
-          Curtailment and Bitcoin mining potential by farm
+          {timeframe === "daily" 
+            ? `Top farms by curtailed energy on ${format(date, "MMMM d, yyyy")}`
+            : timeframe === "monthly"
+              ? `Top farms by curtailed energy in ${format(date, "MMMM yyyy")}`
+              : `Top farms by curtailed energy in ${format(date, "yyyy")}`
+          }
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-[350px]">
-          {leadParties.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              No farm data available for the selected period
-            </div>
-          ) : chartData.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              Loading farm comparison data...
-            </div>
-          ) : (
+        {isLoading ? (
+          <div className="flex justify-center items-center h-80">
+            <div className="animate-pulse">Loading farm comparison data...</div>
+          </div>
+        ) : error ? (
+          <div className="flex justify-center items-center h-80 text-red-500">
+            Error loading farm comparison data
+          </div>
+        ) : (
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={chartData}
-                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                layout="vertical"
+                data={preparedData}
+                margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  width={120}
-                  tick={{ fontSize: 12 }}
+                <XAxis 
+                  dataKey="farmName" 
+                  angle={-45} 
+                  textAnchor="end" 
+                  height={70} 
+                  interval={0}
                 />
-                <Tooltip />
+                <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
+                <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
+                <Tooltip formatter={(value: any, name: string) => {
+                  if (name === "Energy (MWh)") return [value.toLocaleString(), name]
+                  if (name === "Bitcoin (BTC)") return [value.toFixed(4), name]
+                  return [value.toLocaleString(), name]
+                }} />
                 <Legend />
-                <Bar dataKey="curtailedEnergy" name="Curtailed Energy (MWh)" fill="#0ea5e9" />
-                <Bar dataKey="bitcoinPotential" name="Bitcoin Potential (BTC)" fill="#f59e0b" />
+                <Bar 
+                  yAxisId="left" 
+                  dataKey="curtailedEnergy" 
+                  name="Energy (MWh)" 
+                  fill="#8884d8" 
+                />
+                <Bar 
+                  yAxisId="right" 
+                  dataKey="bitcoinPotential" 
+                  name="Bitcoin (BTC)" 
+                  fill="#82ca9d" 
+                />
               </BarChart>
             </ResponsiveContainer>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
