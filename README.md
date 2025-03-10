@@ -53,9 +53,23 @@ This automatic update chain ensures that all summary levels (daily, monthly, and
 For targeted operations, the following scripts are available:
 
 - `batch_process_periods.ts`: Process specific ranges of settlement periods
-- `process_bitcoin_calculations.ts`: Calculate Bitcoin for all periods with specific models
-- `process_missing_bitcoin.ts`: Find and process only missing Bitcoin calculations
-- `direct_bitcoin_calc.ts`: Direct Bitcoin calculation without DynamoDB dependency
+- `complete_reingestion_process.ts`: Full reingestion of data for an entire date
+- `reingest_single_batch.ts`: Focus on smaller batches of periods
+- `optimized_critical_date_processor.ts`: Handle problematic dates with improved handling of multiple records per farm
+
+### Critical Date Processing
+
+For dates with problematic data, especially those with multiple records per farm within the same period, use the optimized processor:
+
+```bash
+# Process all periods for a specific date
+npx tsx optimized_critical_date_processor.ts 2025-03-09
+
+# Process specific periods for a date
+npx tsx optimized_critical_date_processor.ts 2025-03-09 44 48
+```
+
+This script includes improved handling of duplicate farm records and bulk processing functionality.
 
 ## Technical Details
 

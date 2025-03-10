@@ -19,7 +19,7 @@
  */
 
 import { db } from './db';
-import { and, between, eq, inArray } from 'drizzle-orm';
+import { and, between, eq } from 'drizzle-orm';
 import { curtailmentRecords } from './db/schema';
 import axios from 'axios';
 import fs from 'fs/promises';
@@ -139,22 +139,20 @@ async function processPeriod(
     // Get the unique farm IDs for this period
     const uniqueFarmIds = [...new Set(validRecords.map((record: any) => record.id))];
     
-    // First clear all existing records for these farms in this period
-    if (uniqueFarmIds.length > 0) {
-      try {
-        const deleteResult = await db.delete(curtailmentRecords)
-          .where(
-            and(
-              eq(curtailmentRecords.settlementDate, date),
-              eq(curtailmentRecords.settlementPeriod, period),
-              inArray(curtailmentRecords.farmId, uniqueFarmIds)
-            )
-          );
-        
-        log(`Period ${period}: Cleared existing records for ${uniqueFarmIds.length} farms before insertion`, "info");
-      } catch (error) {
-        log(`Period ${period}: Error clearing existing records: ${error}`, "error");
-      }
+    // Clear all existing records for this period - simpler approach that guarantees no duplicates
+    try {
+      // Just clear all records for this period to avoid any duplicates
+      const deleteResult = await db.delete(curtailmentRecords)
+        .where(
+          and(
+            eq(curtailmentRecords.settlementDate, date),
+            eq(curtailmentRecords.settlementPeriod, period)
+          )
+        );
+      
+      log(`Period ${period}: Cleared existing records before insertion`, "info");
+    } catch (error) {
+      log(`Period ${period}: Error clearing existing records: ${error}`, "error");
     }
     
     // Prepare all records for bulk insertion
