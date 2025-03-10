@@ -37,6 +37,7 @@ export default function DashboardOverview() {
 
   // Handle farm selection
   const handleFarmChange = (value: string) => {
+    console.log("Farm selected:", value);
     setSelectedFarm(value);
     // If a specific farm is selected, clear the lead party filter
     if (value !== 'all') {

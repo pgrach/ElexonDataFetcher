@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
   Select,
@@ -50,8 +51,10 @@ export default function FarmSelector({ value, onValueChange }: FarmSelectorProps
     <div>
       <Select value={value} onValueChange={onValueChange} disabled={loading}>
         <SelectTrigger className="w-[200px]">
-          <SelectValue placeholder={loading ? 'Loading farms...' : 'Select a farm'} />
-          {loading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+          <div className="flex items-center gap-2">
+            <SelectValue placeholder={loading ? 'Loading farms...' : 'Select a farm'} />
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          </div>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Farms</SelectItem>
