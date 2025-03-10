@@ -81,7 +81,7 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
     }).format(value);
   };
   
-  // Custom tooltip to show the Bitcoin icon
+  // Custom tooltip for the chart
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -95,8 +95,7 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
                   {formatGBP(entry.value)}
                 </span>
               ) : (
-                <span className="flex items-center">
-                  <Pound size={14} className="mr-1" />
+                <span>
                   {formatGBP(entry.value)}
                 </span>
               )}
