@@ -94,7 +94,7 @@ async function updateLatestData(retryAttempt = 0) {
       .select({
         recordCount: sql<number>`COUNT(*)`,
         periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
-        farmCount: sql<number>`COUNT(DISTINCT farm_id)`,
+        farmCount: sql<number>`COUNT(DISTINCT bmu_id)`,
         totalVolume: sql<string>`SUM(ABS(volume::numeric))`,
         totalPayment: sql<string>`SUM(payment::numeric)`
       })

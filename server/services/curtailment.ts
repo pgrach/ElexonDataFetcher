@@ -87,7 +87,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
                 await db.insert(curtailmentRecords).values({
                   settlementDate: date,
                   settlementPeriod: period,
-                  farmId: record.id,
+                  bmuId: record.id, // Using bmuId instead of farmId
                   leadPartyName: bmuLeadPartyMap?.get(record.id) || 'Unknown',
                   volume: record.volume.toString(), // Keep the original negative value
                   payment: payment.toString(),
