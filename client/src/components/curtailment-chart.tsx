@@ -94,16 +94,25 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
             url.searchParams.set("farmId", farmId);
           }
           
+          console.log(`Fetching monthly data for ${yearMonth}...`);
           const response = await fetch(url);
+          
           if (response.ok) {
             const data = await response.json();
+            console.log(`Data received for ${yearMonth}:`, data);
+            
+            // For real months, use actual data
             monthlyDataArray.push({
               month: yearMonth,
-              curtailedEnergy: Number(data.totalCurtailedEnergy) || 0,
-              bitcoinMined: Number(data.totalBitcoinMined) || 0
+              curtailedEnergy: Number(data.curtailedEnergy) || 0,
+              bitcoinMined: Number(data.bitcoinMined) || 0
             });
+            
+            console.log(`Processed ${yearMonth}: Energy=${Number(data.curtailedEnergy) || 0}, Bitcoin=${Number(data.bitcoinMined) || 0}`);
           } else {
-            // If month doesn't have data yet, add empty data
+            console.log(`No data for ${yearMonth} (Status: ${response.status})`);
+            
+            // For months without data (future months or not yet processed), add empty data
             monthlyDataArray.push({
               month: yearMonth,
               curtailedEnergy: 0,
@@ -112,6 +121,13 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
           }
         } catch (error) {
           console.error(`Error fetching data for ${yearMonth}:`, error);
+          
+          // Add empty data for error cases
+          monthlyDataArray.push({
+            month: yearMonth,
+            curtailedEnergy: 0,
+            bitcoinMined: 0
+          });
         }
       }
       
