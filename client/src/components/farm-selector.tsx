@@ -25,7 +25,7 @@ interface FarmData {
 
 export default function FarmSelector({ value, onValueChange }: FarmSelectorProps) {
   // Use React Query for data fetching instead of local state & useEffect
-  const { data: farms = [], isLoading, error } = useQuery<FarmData[]>({
+  const { data: farmData = [], isLoading, error } = useQuery<FarmData[]>({
     queryKey: ['/api/mining-potential/farms'],
     queryFn: async () => {
       const response = await fetch('/api/mining-potential/farms');
@@ -35,6 +35,11 @@ export default function FarmSelector({ value, onValueChange }: FarmSelectorProps
       return response.json();
     }
   });
+  
+  // Sort farms by number of farms in descending order (largest at top)
+  const farms = React.useMemo(() => {
+    return [...farmData].sort((a, b) => b.farmIds.length - a.farmIds.length);
+  }, [farmData]);
 
   // Determine if we need to show an error message
   const errorMessage = error instanceof Error ? error.message : null;
@@ -53,7 +58,7 @@ export default function FarmSelector({ value, onValueChange }: FarmSelectorProps
           
           {farms.map((farmGroup) => (
             <SelectItem key={farmGroup.name} value={farmGroup.name}>
-              {farmGroup.name} ({farmGroup.farmIds.length} {farmGroup.farmIds.length === 1 ? 'farm' : 'farms'})
+              {farmGroup.name}
             </SelectItem>
           ))}
         </SelectContent>
