@@ -380,25 +380,41 @@ export async function getTopCurtailedFarms(
       throw new Error(`Invalid period type: ${period}`);
     }
     
-    // First get the top farms by curtailment volume
-    const topFarms = await db
+    // Group by lead party name instead of individual farm IDs
+    // This combines all farms under the same lead party
+    const topLeadParties = await db
       .select({
-        farmId: curtailmentRecords.farmId,
         leadPartyName: curtailmentRecords.leadPartyName,
         totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`,
         totalPayment: sql<number>`SUM(payment)`
       })
       .from(curtailmentRecords)
       .where(dateCondition)
-      .groupBy(curtailmentRecords.farmId, curtailmentRecords.leadPartyName)
+      .groupBy(curtailmentRecords.leadPartyName)
       .orderBy(desc(sql<number>`SUM(ABS(volume))`))
       .limit(limit);
     
-    console.log(`Found ${topFarms.length} top farms for ${period}: ${value}`);
+    console.log(`Found ${topLeadParties.length} top lead parties for ${period}: ${value}`);
     
-    // Now get Bitcoin data for each farm
-    const result = await Promise.all(topFarms.map(async (farm) => {
-      // Get Bitcoin data for this farm
+    // Now get Bitcoin data for each lead party
+    const result = await Promise.all(topLeadParties.map(async (party) => {
+      // First get all farmIds for this lead party
+      const farms = await db
+        .select({
+          farmId: curtailmentRecords.farmId
+        })
+        .from(curtailmentRecords)
+        .where(
+          and(
+            dateCondition,
+            eq(curtailmentRecords.leadPartyName, party.leadPartyName)
+          )
+        )
+        .groupBy(curtailmentRecords.farmId);
+      
+      const farmIds = farms.map(f => f.farmId);
+      
+      // Get Bitcoin data for all farms under this lead party
       let bitcoinDateCondition;
       
       if (period === 'day') {
@@ -423,7 +439,7 @@ export async function getTopCurtailedFarms(
         .where(
           and(
             bitcoinDateCondition,
-            eq(historicalBitcoinCalculations.farmId, farm.farmId),
+            inArray(historicalBitcoinCalculations.farmId, farmIds),
             eq(historicalBitcoinCalculations.minerModel, minerModel)
           )
         );
@@ -448,10 +464,10 @@ export async function getTopCurtailedFarms(
       const bitcoinValue = bitcoinMined * currentPrice;
       
       return {
-        name: farm.leadPartyName,
-        farmId: farm.farmId,
-        curtailedEnergy: Number(farm.totalCurtailedEnergy),
-        curtailmentPayment: Math.abs(Number(farm.totalPayment)), // Make positive for display
+        name: party.leadPartyName,
+        farmIds: farmIds,
+        curtailedEnergy: Number(party.totalCurtailedEnergy),
+        curtailmentPayment: Math.abs(Number(party.totalPayment)), // Make positive for display
         bitcoinMined: bitcoinMined,
         bitcoinValue: bitcoinValue
       };
