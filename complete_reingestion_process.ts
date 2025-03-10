@@ -203,25 +203,25 @@ async function processCurtailmentData(date: string): Promise<{
     // Run the external reingestion script to fetch from Elexon API
     log(`Starting curtailment data reingestion for ${date}...`, "info");
     
+    // Clear existing records first
+    await clearCurtailmentRecords(date);
+    
     const { stdout, stderr } = await execAsync(`
       # Check for missing periods first
       log_file="reingestion_${date.replace(/-/g, '')}.log"
       echo "Starting reingestion for ${date}" > $log_file
       
-      # Clear existing data to prevent duplicates
-      echo "Clearing existing curtailment records..." >> $log_file
-      
       # Process data in batches to avoid timeouts
       echo "Processing data in batches..." >> $log_file
       
       # Process periods 1-16 (batch 1)
-      npx tsx batch_process_periods.ts ${date} 1 16 >> $log_file
+      npx tsx ./batch_process_periods.ts ${date} 1 16 >> $log_file
       
       # Process periods 17-32 (batch 2)
-      npx tsx batch_process_periods.ts ${date} 17 32 >> $log_file
+      npx tsx ./batch_process_periods.ts ${date} 17 32 >> $log_file
       
       # Process periods 33-48 (batch 3)
-      npx tsx batch_process_periods.ts ${date} 33 48 >> $log_file
+      npx tsx ./batch_process_periods.ts ${date} 33 48 >> $log_file
       
       echo "Reingestion complete!" >> $log_file
     `);
@@ -600,7 +600,13 @@ async function completeReingestion(date: string): Promise<void> {
       log(`Processing Bitcoin calculations for ${minerModel}...`, "info");
       
       const modelResult = await processBitcoinCalculations(date, minerModel, DEFAULT_DIFFICULTY);
-      bitcoinResults[minerModel] = modelResult;
+      
+      // Transform the result to match the expected format
+      bitcoinResults[minerModel] = {
+        success: modelResult.success,
+        records: modelResult.recordsProcessed,
+        periods: modelResult.periodsProcessed
+      };
       
       log(`Completed ${minerModel} calculations: ${modelResult.recordsProcessed} records across ${modelResult.periodsProcessed} periods`, 
         modelResult.success ? "success" : "warning");
