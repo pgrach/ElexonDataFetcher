@@ -14,7 +14,8 @@ import {
   getMonthlyMiningPotential,
   getYearlyMiningPotential,
   getFarmStatistics,
-  getTopCurtailedFarms
+  getTopCurtailedFarms,
+  getAvailableFarms
 } from "../services/optimizedMiningService";
 
 // Minerstat API helper function
@@ -72,6 +73,17 @@ async function fetchCurrentPrice(): Promise<number | null> {
 }
 
 const router = express.Router();
+
+// Get all available farms endpoint
+router.get('/farms', async (req: Request, res: Response) => {
+  try {
+    const farms = await getAvailableFarms();
+    res.json(farms);
+  } catch (error) {
+    console.error('Error getting available farms:', error);
+    res.status(500).json({ error: 'Failed to get available farms' });
+  }
+});
 
 // Daily mining potential endpoint
 router.get('/daily', async (req: Request, res: Response) => {

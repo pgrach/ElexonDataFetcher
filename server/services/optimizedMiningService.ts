@@ -483,6 +483,46 @@ export async function getTopCurtailedFarms(
 /**
  * Get farm-specific statistics across time periods
  */
+/**
+ * Get a list of all available farms grouped by lead party name
+ */
+export async function getAvailableFarms(): Promise<any[]> {
+  console.log('Getting list of available farms');
+  
+  try {
+    // Get all unique farms with their lead party names
+    const farms = await db
+      .select({
+        farmId: curtailmentRecords.farmId,
+        leadPartyName: curtailmentRecords.leadPartyName
+      })
+      .from(curtailmentRecords)
+      .groupBy(curtailmentRecords.farmId, curtailmentRecords.leadPartyName)
+      .orderBy(curtailmentRecords.leadPartyName, curtailmentRecords.farmId);
+    
+    // Group farms by lead party name
+    const farmsByParty: { [key: string]: string[] } = {};
+    farms.forEach(farm => {
+      const partyName = farm.leadPartyName || 'Unknown Party';
+      if (!farmsByParty[partyName]) {
+        farmsByParty[partyName] = [];
+      }
+      farmsByParty[partyName].push(farm.farmId);
+    });
+    
+    // Convert to array format for the API response
+    const result = Object.entries(farmsByParty).map(([name, farmIds]) => ({
+      name,
+      farmIds
+    }));
+    
+    return result;
+  } catch (error) {
+    console.error('Error getting available farms:', error);
+    throw error;
+  }
+}
+
 export async function getFarmStatistics(farmId: string, period: 'day' | 'month' | 'year', value: string): Promise<any> {
   console.log(`Getting farm statistics for ${farmId}, period: ${period}, value: ${value}`);
   
