@@ -485,11 +485,22 @@ export async function getTopCurtailedFarms(
  */
 /**
  * Get a list of all available farms grouped by lead party name
+ * Sorted by total curtailment volume (highest first)
  */
 export async function getAvailableFarms(): Promise<any[]> {
   console.log('Getting list of available farms');
   
   try {
+    // First, get curtailment volumes by lead party
+    const leadPartyCurtailment = await db
+      .select({
+        leadPartyName: curtailmentRecords.leadPartyName,
+        totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`
+      })
+      .from(curtailmentRecords)
+      .groupBy(curtailmentRecords.leadPartyName)
+      .orderBy(desc(sql<number>`SUM(ABS(volume))`));
+    
     // Get all unique farms with their lead party names
     const farms = await db
       .select({
@@ -510,11 +521,20 @@ export async function getAvailableFarms(): Promise<any[]> {
       farmsByParty[partyName].push(farm.farmId);
     });
     
-    // Convert to array format for the API response
+    // Convert to array format for the API response and keep the ordering 
+    // based on curtailment volume
+    const leadPartyMap = new Map(
+      leadPartyCurtailment.map(party => [
+        party.leadPartyName, 
+        party.totalCurtailedEnergy
+      ])
+    );
+    
     const result = Object.entries(farmsByParty).map(([name, farmIds]) => ({
       name,
-      farmIds
-    }));
+      farmIds,
+      curtailedEnergy: leadPartyMap.get(name) || 0
+    })).sort((a, b) => b.curtailedEnergy - a.curtailedEnergy);
     
     return result;
   } catch (error) {
