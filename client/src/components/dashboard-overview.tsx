@@ -11,6 +11,7 @@ import BitcoinPotentialTable from "@/components/bitcoin-potential-table";
 import MinerModelSelector from "@/components/miner-model-selector";
 import { DatePicker } from "@/components/date-picker";
 import SummaryCards from "@/components/summary-cards";
+import FarmSelector from "@/components/farm-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function DashboardOverview() {
@@ -22,6 +23,7 @@ export default function DashboardOverview() {
   });
   const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
   const [selectedMinerModel, setSelectedMinerModel] = useState("S19J_PRO");
+  const [selectedFarm, setSelectedFarm] = useState("all"); // 'all' represents all farms
   const [timeframe, setTimeframe] = useState("daily");
 
   // Derived values
@@ -32,6 +34,18 @@ export default function DashboardOverview() {
     queryKey: [`/api/lead-parties/${formattedDate}`],
     enabled: !!formattedDate && isValid(date),
   });
+
+  // Handle farm selection
+  const handleFarmChange = (value: string) => {
+    setSelectedFarm(value);
+    // If a specific farm is selected, clear the lead party filter
+    if (value !== 'all') {
+      setSelectedLeadParty(null);
+    }
+  };
+
+  // Determine the farmId to use based on whether we're viewing all farms or a specific one
+  const farmIdToUse = selectedFarm !== 'all' ? selectedFarm : (selectedLeadParty || "");
 
   return (
     <div className="min-h-screen">
@@ -51,6 +65,10 @@ export default function DashboardOverview() {
               value={selectedMinerModel} 
               onValueChange={setSelectedMinerModel} 
             />
+            <FarmSelector
+              value={selectedFarm}
+              onValueChange={handleFarmChange}
+            />
           </div>
         </div>
       </div>
@@ -63,7 +81,7 @@ export default function DashboardOverview() {
           timeframe={timeframe}
           date={date}
           minerModel={selectedMinerModel}
-          farmId={selectedLeadParty || ""}
+          farmId={farmIdToUse}
         />
         
         {/* Tabs for different analyses */}
@@ -79,7 +97,7 @@ export default function DashboardOverview() {
               timeframe={timeframe}
               date={date}
               minerModel={selectedMinerModel}
-              farmId={selectedLeadParty || ""}
+              farmId={farmIdToUse}
             />
             
             {/* Farm Comparison Chart */}
@@ -96,7 +114,7 @@ export default function DashboardOverview() {
               timeframe={timeframe}
               date={date}
               minerModel={selectedMinerModel}
-              farmId={selectedLeadParty || ""}
+              farmId={farmIdToUse}
             />
           </TabsContent>
         </Tabs>

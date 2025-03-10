@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ReloadIcon } from '@radix-ui/react-icons';
+import { Loader2 } from 'lucide-react';
 
 interface FarmSelectorProps {
   value: string;
@@ -51,7 +51,7 @@ export default function FarmSelector({ value, onValueChange }: FarmSelectorProps
       <Select value={value} onValueChange={onValueChange} disabled={loading}>
         <SelectTrigger className="w-[200px]">
           <SelectValue placeholder={loading ? 'Loading farms...' : 'Select a farm'} />
-          {loading && <ReloadIcon className="ml-2 h-4 w-4 animate-spin" />}
+          {loading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Farms</SelectItem>
