@@ -96,19 +96,19 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                 strokeWidth={2}
                 name="Curtailed Energy (MWh)"
                 dot={(props: any) => {
-                  const { cx, cy, payload } = props;
+                  const { cx, cy, payload, index } = props;
                   const inFuture = isHourInFuture(payload.hour);
                   
                   if (inFuture) {
                     return (
-                      <svg x={cx - 5} y={cy - 5} width={10} height={10}>
+                      <svg key={`dot-${index}`} x={cx - 5} y={cy - 5} width={10} height={10}>
                         <circle cx="5" cy="5" r="5" fill="#f5f5f5" stroke="#8884d8" strokeWidth={1} />
                       </svg>
                     );
                   }
                   
                   return (
-                    <svg x={cx - 5} y={cy - 5} width={10} height={10}>
+                    <svg key={`dot-${index}`} x={cx - 5} y={cy - 5} width={10} height={10}>
                       <circle cx="5" cy="5" r="5" fill="#8884d8" />
                     </svg>
                   );
