@@ -30,12 +30,12 @@ const BitcoinIcon = ({ x, y, value }: { x: number, y: number, value: number }) =
         fill="white" 
       />
       
-      {/* Value text below the icon */}
+      {/* Value text below the icon with more spacing */}
       <text 
         x="10" 
-        y="25" 
+        y="35" 
         textAnchor="middle" 
-        fontSize="10" 
+        fontSize="11" 
         fontWeight="bold" 
         fill="#F7931A"
         style={{ textShadow: '0px 0px 2px white' }}
