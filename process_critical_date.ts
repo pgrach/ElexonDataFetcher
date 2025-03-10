@@ -149,43 +149,65 @@ async function processPeriodWithRetries(
     let totalVolume = 0;
     let totalPayment = 0;
     
-    // Process each record
-    for (const record of validRecords) {
-      const volume = Math.abs(record.volume);
-      const payment = volume * record.originalPrice;
-      
+    // Get the unique farm IDs for this period
+    const uniqueFarmIds = [...new Set(validRecords.map(record => record.id))];
+    
+    // First clear all existing records for these farms in this period
+    if (uniqueFarmIds.length > 0) {
       try {
-        // Clear any existing records first to avoid conflicts
-        await db.delete(curtailmentRecords)
+        const deleteResult = await db.delete(curtailmentRecords)
           .where(
             and(
               eq(curtailmentRecords.settlementDate, date),
               eq(curtailmentRecords.settlementPeriod, period),
-              eq(curtailmentRecords.farmId, record.id)
+              inArray(curtailmentRecords.farmId, uniqueFarmIds)
             )
           );
         
-        // Insert the record
-        await db.insert(curtailmentRecords).values({
-          settlementDate: date,
-          settlementPeriod: period,
-          farmId: record.id,
-          leadPartyName: bmuLeadPartyMap.get(record.id) || 'Unknown',
-          volume: record.volume.toString(), // Keep negative value
-          payment: payment.toString(),
-          originalPrice: record.originalPrice.toString(),
-          finalPrice: record.finalPrice.toString(),
-          soFlag: record.soFlag,
-          cadlFlag: record.cadlFlag
-        });
-        
-        recordsAdded++;
-        totalVolume += volume;
-        totalPayment += payment;
-        
-        log(`Period ${period}: Added ${record.id} (${volume.toFixed(2)} MWh, £${payment.toFixed(2)})`, "success");
+        log(`Period ${period}: Cleared existing records for ${uniqueFarmIds.length} farms before insertion`, "info");
       } catch (error) {
-        log(`Period ${period}: Error inserting record for ${record.id}: ${error}`, "error");
+        log(`Period ${period}: Error clearing existing records: ${error}`, "error");
+      }
+    }
+    
+    // Prepare all records for bulk insertion
+    const recordsToInsert = validRecords.map(record => {
+      const volume = Math.abs(record.volume);
+      const payment = volume * record.originalPrice;
+      
+      // Track totals for return value
+      totalVolume += volume;
+      totalPayment += payment;
+      
+      return {
+        settlementDate: date,
+        settlementPeriod: period,
+        farmId: record.id,
+        leadPartyName: bmuLeadPartyMap.get(record.id) || 'Unknown',
+        volume: record.volume.toString(), // Keep negative value
+        payment: payment.toString(),
+        originalPrice: record.originalPrice.toString(),
+        finalPrice: record.finalPrice.toString(),
+        soFlag: record.soFlag,
+        cadlFlag: record.cadlFlag
+      };
+    });
+    
+    // Insert all records in a single transaction if there are any
+    if (recordsToInsert.length > 0) {
+      try {
+        await db.insert(curtailmentRecords).values(recordsToInsert);
+        recordsAdded = recordsToInsert.length;
+        
+        // Log individual records for visibility
+        for (const record of validRecords) {
+          const volume = Math.abs(record.volume);
+          const payment = volume * record.originalPrice;
+          log(`Period ${period}: Added ${record.id} (${volume.toFixed(2)} MWh, £${payment.toFixed(2)})`, "success");
+        }
+        
+      } catch (error) {
+        log(`Period ${period}: Error bulk inserting records: ${error}`, "error");
       }
     }
     
