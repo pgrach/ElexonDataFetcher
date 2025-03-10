@@ -35,18 +35,24 @@ export default function DashboardOverview() {
     enabled: !!formattedDate && isValid(date),
   });
 
-  // Handle farm selection
+  // Handle farm/lead party selection
   const handleFarmChange = (value: string) => {
-    console.log("Farm selected:", value);
+    console.log("Farm/Lead Party selected:", value);
     setSelectedFarm(value);
-    // If a specific farm is selected, clear the lead party filter
-    if (value !== 'all') {
+    
+    // If all farms are selected, clear the lead party filter
+    if (value === 'all') {
       setSelectedLeadParty(null);
+    } 
+    // Otherwise use the selected value as a lead party name
+    else {
+      setSelectedLeadParty(value);
     }
   };
 
-  // Determine the farmId to use based on whether we're viewing all farms or a specific one
-  const farmIdToUse = selectedFarm !== 'all' ? selectedFarm : (selectedLeadParty || "");
+  // Determine the parameter to use for API calls
+  // We now use selectedLeadParty for all non-"all" cases
+  const farmIdToUse = selectedLeadParty || "";
 
   return (
     <div className="min-h-screen">

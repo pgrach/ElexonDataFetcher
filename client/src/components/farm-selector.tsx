@@ -52,14 +52,9 @@ export default function FarmSelector({ value, onValueChange }: FarmSelectorProps
           <SelectItem value="all">All Farms</SelectItem>
           
           {farms.map((farmGroup) => (
-            <SelectGroup key={farmGroup.name}>
-              <SelectLabel>{farmGroup.name}</SelectLabel>
-              {farmGroup.farmIds.map((farmId) => (
-                <SelectItem key={farmId} value={farmId}>
-                  {farmId}
-                </SelectItem>
-              ))}
-            </SelectGroup>
+            <SelectItem key={farmGroup.name} value={farmGroup.name}>
+              {farmGroup.name} ({farmGroup.farmIds.length} {farmGroup.farmIds.length === 1 ? 'farm' : 'farms'})
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
