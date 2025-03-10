@@ -25,11 +25,16 @@ interface FarmData {
 }
 
 export default function FarmSelector({ value, onValueChange }: FarmSelectorProps) {
+  // Get the current date to match the chart data's date
+  const today = new Date();
+  const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  
   // Use React Query for data fetching instead of local state & useEffect
   const { data: farmData = [], isLoading, error } = useQuery<FarmData[]>({
-    queryKey: ['/api/mining-potential/farms'],
+    queryKey: ['/api/mining-potential/farms', formattedDate],
     queryFn: async () => {
-      const response = await fetch('/api/mining-potential/farms');
+      // Pass the current date as a query parameter to get farms sorted by today's curtailment
+      const response = await fetch(`/api/mining-potential/farms?date=${formattedDate}`);
       if (!response.ok) {
         throw new Error('Failed to fetch farms');
       }

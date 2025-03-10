@@ -77,7 +77,10 @@ const router = express.Router();
 // Get all available farms endpoint
 router.get('/farms', async (req: Request, res: Response) => {
   try {
-    const farms = await getAvailableFarms();
+    // Extract date parameter if provided (e.g., ?date=2025-03-10)
+    const date = req.query.date as string | undefined;
+    
+    const farms = await getAvailableFarms(date);
     res.json(farms);
   } catch (error) {
     console.error('Error getting available farms:', error);

@@ -486,28 +486,48 @@ export async function getTopCurtailedFarms(
 /**
  * Get a list of all available farms grouped by lead party name
  * Sorted by total curtailment volume (highest first)
+ * 
+ * @param date Optional date parameter to filter by a specific date
  */
-export async function getAvailableFarms(): Promise<any[]> {
-  console.log('Getting list of available farms');
+export async function getAvailableFarms(date?: string): Promise<any[]> {
+  console.log(`Getting list of available farms${date ? ` for date ${date}` : ''}`);
   
   try {
     // First, get curtailment volumes by lead party
-    const leadPartyCurtailment = await db
+    let leadPartyCurtailmentQuery = db
       .select({
         leadPartyName: curtailmentRecords.leadPartyName,
         totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`
       })
-      .from(curtailmentRecords)
+      .from(curtailmentRecords);
+    
+    // Filter by date if provided
+    if (date) {
+      leadPartyCurtailmentQuery = leadPartyCurtailmentQuery.where(
+        eq(curtailmentRecords.settlementDate, date)
+      );
+    }
+    
+    const leadPartyCurtailment = await leadPartyCurtailmentQuery
       .groupBy(curtailmentRecords.leadPartyName)
       .orderBy(desc(sql<number>`SUM(ABS(volume))`));
     
     // Get all unique farms with their lead party names
-    const farms = await db
+    let farmsQuery = db
       .select({
         farmId: curtailmentRecords.farmId,
         leadPartyName: curtailmentRecords.leadPartyName
       })
-      .from(curtailmentRecords)
+      .from(curtailmentRecords);
+    
+    // Filter by date if provided
+    if (date) {
+      farmsQuery = farmsQuery.where(
+        eq(curtailmentRecords.settlementDate, date)
+      );
+    }
+    
+    const farms = await farmsQuery
       .groupBy(curtailmentRecords.farmId, curtailmentRecords.leadPartyName)
       .orderBy(curtailmentRecords.leadPartyName, curtailmentRecords.farmId);
     
