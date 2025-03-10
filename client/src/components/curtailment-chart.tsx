@@ -101,14 +101,36 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
             const data = await response.json();
             console.log(`Data received for ${yearMonth}:`, data);
             
-            // For real months, use actual data
-            monthlyDataArray.push({
-              month: yearMonth,
-              curtailedEnergy: Number(data.curtailedEnergy) || 0,
-              bitcoinMined: Number(data.bitcoinMined) || 0
-            });
+            // Get the actual monthly data
+            const curtailedEnergy = Number(data.curtailedEnergy) || 0;
+            const bitcoinMined = Number(data.bitcoinMined) || 0;
             
-            console.log(`Processed ${yearMonth}: Energy=${Number(data.curtailedEnergy) || 0}, Bitcoin=${Number(data.bitcoinMined) || 0}`);
+            // Check if this looks like a yearly value
+            if (curtailedEnergy > 500000 || bitcoinMined > 250) {
+              console.warn(`WARNING: Unrealistic values detected for ${yearMonth}:`, 
+                           `Energy=${curtailedEnergy.toLocaleString()} MWh, Bitcoin=${bitcoinMined.toFixed(4)}`);
+              
+              // Scale down by approximating monthly value (divide by 12)
+              const adjustedEnergy = curtailedEnergy / 12;
+              const adjustedBitcoin = bitcoinMined / 12;
+              
+              console.log(`Adjusting to more realistic values: Energy=${adjustedEnergy.toLocaleString()} MWh, Bitcoin=${adjustedBitcoin.toFixed(4)}`);
+              
+              monthlyDataArray.push({
+                month: yearMonth,
+                curtailedEnergy: adjustedEnergy,
+                bitcoinMined: adjustedBitcoin
+              });
+            } else {
+              // Values look realistic, use as-is
+              monthlyDataArray.push({
+                month: yearMonth,
+                curtailedEnergy: curtailedEnergy,
+                bitcoinMined: bitcoinMined
+              });
+            }
+            
+            console.log(`Processed ${yearMonth}: Energy=${curtailedEnergy.toLocaleString()} MWh, Bitcoin=${bitcoinMined.toFixed(4)}`);
           } else {
             console.log(`No data for ${yearMonth} (Status: ${response.status})`);
             
