@@ -140,7 +140,7 @@ async function processSingleDay(
         const curtailmentData = await tx
           .select({
             periods: sql<number[]>`array_agg(DISTINCT settlement_period)`,
-            farmIds: sql<string[]>`array_agg(DISTINCT farm_id)`
+            farmIds: sql<string[]>`array_agg(DISTINCT bmu_id)`
           })
           .from(curtailmentRecords)
           .where(
@@ -195,15 +195,15 @@ async function processSingleDay(
           const absVolume = Math.abs(Number(record.volume));
           group.totalVolume += absVolume;
           group.farms.set(
-            record.farmId,
-            (group.farms.get(record.farmId) || 0) + absVolume
+            record.bmuId,
+            (group.farms.get(record.bmuId) || 0) + absVolume
           );
         }
 
         const bulkInsertData: Array<{
           settlementDate: string;
           settlementPeriod: number;
-          farmId: string;
+          bmuId: string;
           minerModel: string;
           bitcoinMined: string;
           difficulty: string;
@@ -217,12 +217,12 @@ async function processSingleDay(
             parseFloat(difficulty)
           );
 
-          for (const [farmId, farmVolume] of data.farms) {
+          for (const [bmuId, farmVolume] of data.farms) {
             const bitcoinShare = (periodBitcoin * farmVolume) / data.totalVolume;
             bulkInsertData.push({
               settlementDate: date,
               settlementPeriod: period,
-              farmId,
+              bmuId,
               minerModel,
               bitcoinMined: bitcoinShare.toFixed(8),
               difficulty,
