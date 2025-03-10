@@ -123,14 +123,22 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
           <ResponsiveContainer width="100%" height={300}>
             <BarChart
               data={chartData}
-              margin={{ top: 5, right: 30, left: 30, bottom: 5 }}
+              margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
               <YAxis 
                 tick={{ fontSize: 12 }}
                 tickFormatter={(value) => `£${value.toLocaleString()}`}
-                label={{ value: 'British Pounds (£)', angle: -90, position: 'insideLeft' }}
+                label={{ 
+                  value: 'British Pounds (£)', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  offset: 5,
+                  style: { textAnchor: 'middle' },
+                  dx: -30 
+                }}
+                width={80}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
