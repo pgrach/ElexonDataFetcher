@@ -65,9 +65,9 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
   
   // Get chart title based on timeframe
   const chartTitle = 
-    timeframe === "yearly" ? `Top Curtailed Farms (${year})` :
-    timeframe === "monthly" ? `Top Curtailed Farms (${format(date, "MMMM yyyy")})` :
-    `Top Curtailed Farms (${format(date, "PP")})`;
+    timeframe === "yearly" ? `Top 5 Curtailed Farms by Volume (${year})` :
+    timeframe === "monthly" ? `Top 5 Curtailed Farms by Volume (${format(date, "MMMM yyyy")})` :
+    `Top 5 Curtailed Farms by Volume (${format(date, "PP")})`;
   
   // Colors for the bars
   const curtailmentColor = "#000000"; // Black for curtailment
