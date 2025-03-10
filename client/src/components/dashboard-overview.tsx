@@ -52,7 +52,7 @@ export default function DashboardOverview() {
 
   // Determine the parameter to use for API calls
   // We now use selectedLeadParty for all non-"all" cases
-  const farmIdToUse = selectedLeadParty || "";
+  const bmuIdToUse = selectedLeadParty || "";
 
   return (
     <div className="min-h-screen">
@@ -88,7 +88,7 @@ export default function DashboardOverview() {
           timeframe={timeframe}
           date={date}
           minerModel={selectedMinerModel}
-          farmId={farmIdToUse}
+          bmuId={bmuIdToUse}
         />
         
         {/* Tabs for different analyses */}
@@ -104,7 +104,7 @@ export default function DashboardOverview() {
               timeframe={timeframe}
               date={date}
               minerModel={selectedMinerModel}
-              farmId={farmIdToUse}
+              farmId={bmuIdToUse}
             />
             
             {/* Farm Comparison Chart */}
@@ -121,7 +121,7 @@ export default function DashboardOverview() {
               timeframe={timeframe}
               date={date}
               minerModel={selectedMinerModel}
-              farmId={farmIdToUse}
+              farmId={bmuIdToUse}
             />
           </TabsContent>
         </Tabs>

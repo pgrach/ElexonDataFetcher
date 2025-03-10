@@ -10,10 +10,10 @@ interface SummaryCardsProps {
   timeframe: string;
   date: Date;
   minerModel: string;
-  farmId: string;
+  bmuId: string;
 }
 
-export default function SummaryCards({ timeframe, date, minerModel, farmId }: SummaryCardsProps) {
+export default function SummaryCards({ timeframe, date, minerModel, bmuId }: SummaryCardsProps) {
   // Format dates based on timeframe
   const formattedDate = format(date, "yyyy-MM-dd");
   const yearMonth = format(date, "yyyy-MM");
@@ -33,11 +33,11 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
   
   // Fetch summary data
   const { data: summaryData = {}, isLoading: isSummaryLoading } = useQuery({
-    queryKey: [summaryEndpoint, farmId],
+    queryKey: [summaryEndpoint, bmuId],
     queryFn: async () => {
       const url = new URL(summaryEndpoint, window.location.origin);
-      if (farmId) {
-        url.searchParams.set("leadParty", farmId);
+      if (bmuId) {
+        url.searchParams.set("leadParty", bmuId);
       }
       
       const response = await fetch(url);
@@ -54,13 +54,13 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
   
   // Fetch bitcoin data
   const { data: bitcoinData = {}, isLoading: isBitcoinLoading } = useQuery({
-    queryKey: [bitcoinEndpoint, minerModel, farmId, summaryData.totalCurtailedEnergy],
+    queryKey: [bitcoinEndpoint, minerModel, bmuId, summaryData.totalCurtailedEnergy],
     queryFn: async () => {
       const url = new URL(bitcoinEndpoint, window.location.origin);
       url.searchParams.set("minerModel", minerModel);
       
-      if (farmId) {
-        url.searchParams.set("leadParty", farmId);
+      if (bmuId) {
+        url.searchParams.set("leadParty", bmuId);
       }
       
       // For daily view, we need to pass the energy value
@@ -100,7 +100,7 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">
-            {farmId ? "Farm Curtailed Energy" : "Curtailed Energy"}
+            {bmuId ? "Farm Curtailed Energy" : "Curtailed Energy"}
           </CardTitle>
           <Wind className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
@@ -113,7 +113,7 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
-            {farmId ? `Farm energy for ${timeframeLabel}` : `Total energy for ${timeframeLabel}`}
+            {bmuId ? `Farm energy for ${timeframeLabel}` : `Total energy for ${timeframeLabel}`}
           </p>
         </CardContent>
       </Card>
@@ -122,7 +122,7 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">
-            {farmId ? "Farm Payment" : "Curtailment Payment"}
+            {bmuId ? "Farm Payment" : "Curtailment Payment"}
           </CardTitle>
           <Battery className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
@@ -135,7 +135,7 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
-            {farmId ? `Payment for ${timeframeLabel}` : `Total payment for ${timeframeLabel}`}
+            {bmuId ? `Payment for ${timeframeLabel}` : `Total payment for ${timeframeLabel}`}
           </p>
         </CardContent>
       </Card>
