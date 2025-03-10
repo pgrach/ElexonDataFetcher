@@ -99,8 +99,8 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
             const data = await response.json();
             monthlyDataArray.push({
               month: yearMonth,
-              curtailedEnergy: data.totalCurtailedEnergy || 0,
-              bitcoinMined: data.totalBitcoinMined || 0
+              curtailedEnergy: Number(data.totalCurtailedEnergy) || 0,
+              bitcoinMined: Number(data.totalBitcoinMined) || 0
             });
           } else {
             // If month doesn't have data yet, add empty data
