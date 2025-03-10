@@ -290,29 +290,28 @@ async function processDate(
     // Load BMU mappings once
     const { windFarmIds, bmuLeadPartyMap } = await loadWindFarmIds();
     
-    // First check if we need to clear existing records - use a raw query for simplicity
-    const countQuery = await db.execute(
-      `SELECT COUNT(*) as record_count 
-       FROM curtailment_records 
-       WHERE settlement_date = $1 
-         AND settlement_period BETWEEN $2 AND $3`,
-      [date, startPeriod, endPeriod]
-    );
-    
-    const recordCount = Number(countQuery.rows?.[0]?.record_count || 0);
-    
-    if (recordCount > 0) {
-      log(`Found ${recordCount} existing records for periods ${startPeriod}-${endPeriod}. Clearing...`, "warning");
-      
-      await db.delete(curtailmentRecords)
+    // First check if we need to clear existing records - simpler approach
+    try {
+      log(`Checking for existing records for periods ${startPeriod}-${endPeriod}...`, "info");
+        
+      // Clear any existing records
+      const deleteResult = await db.delete(curtailmentRecords)
         .where(
           and(
             eq(curtailmentRecords.settlementDate, date),
             between(curtailmentRecords.settlementPeriod, startPeriod, endPeriod)
           )
-        );
-      
-      log(`Cleared ${recordCount} existing records`, "success");
+        )
+        .returning({ id: curtailmentRecords.id });
+          
+      if (deleteResult.length > 0) {
+        log(`Cleared ${deleteResult.length} existing records for periods ${startPeriod}-${endPeriod}`, "success");
+      } else {
+        log(`No existing records found for periods ${startPeriod}-${endPeriod}`, "info");
+      }
+    } catch (error) {
+      log(`Error clearing existing records: ${error}`, "error");
+      // Continue with processing anyway
     }
     
     // Process periods in small batches to avoid timeouts
