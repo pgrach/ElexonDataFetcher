@@ -72,7 +72,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
   
   // Fetch monthly data for monthly view
   const { data: monthlyData = [], isLoading: isMonthlyLoading } = useQuery({
-    queryKey: [`/api/mining-potential/monthly`, currentYear, minerModel, farmId],
+    queryKey: [`/api/summary/monthly`, currentYear, minerModel, farmId],
     queryFn: async () => {
       // Fetch data for each month of the year
       const months = [];
@@ -87,60 +87,46 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
       // Fetch each month's data
       for (const yearMonth of months) {
         try {
-          const url = new URL(`/api/mining-potential/monthly/${yearMonth}`, window.location.origin);
-          url.searchParams.set("minerModel", minerModel);
+          // Get correct monthly summary data that matches the dashboard cards
+          const summaryUrl = new URL(`/api/summary/monthly/${yearMonth}`, window.location.origin);
+          const bitcoinUrl = new URL(`/api/summary/monthly/${yearMonth}/bitcoin`, window.location.origin);
           
+          // Add parameters
           if (farmId) {
-            url.searchParams.set("farmId", farmId);
+            summaryUrl.searchParams.set("leadParty", farmId);
+            bitcoinUrl.searchParams.set("leadParty", farmId);
           }
           
-          console.log(`Fetching monthly data for ${yearMonth}...`);
-          const response = await fetch(url);
+          bitcoinUrl.searchParams.set("minerModel", minerModel);
           
-          if (response.ok) {
-            const data = await response.json();
-            console.log(`Data received for ${yearMonth}:`, data);
-            
-            // Get the actual monthly data
-            const curtailedEnergy = Number(data.curtailedEnergy) || 0;
-            const bitcoinMined = Number(data.bitcoinMined) || 0;
-            
-            // Check if this looks like a yearly value
-            if (curtailedEnergy > 500000 || bitcoinMined > 250) {
-              console.warn(`WARNING: Unrealistic values detected for ${yearMonth}:`, 
-                           `Energy=${curtailedEnergy.toLocaleString()} MWh, Bitcoin=${bitcoinMined.toFixed(4)}`);
-              
-              // Scale down by approximating monthly value (divide by 12)
-              const adjustedEnergy = curtailedEnergy / 12;
-              const adjustedBitcoin = bitcoinMined / 12;
-              
-              console.log(`Adjusting to more realistic values: Energy=${adjustedEnergy.toLocaleString()} MWh, Bitcoin=${adjustedBitcoin.toFixed(4)}`);
-              
-              monthlyDataArray.push({
-                month: yearMonth,
-                curtailedEnergy: adjustedEnergy,
-                bitcoinMined: adjustedBitcoin
-              });
-            } else {
-              // Values look realistic, use as-is
-              monthlyDataArray.push({
-                month: yearMonth,
-                curtailedEnergy: curtailedEnergy,
-                bitcoinMined: bitcoinMined
-              });
-            }
-            
-            console.log(`Processed ${yearMonth}: Energy=${curtailedEnergy.toLocaleString()} MWh, Bitcoin=${bitcoinMined.toFixed(4)}`);
-          } else {
-            console.log(`No data for ${yearMonth} (Status: ${response.status})`);
-            
-            // For months without data (future months or not yet processed), add empty data
-            monthlyDataArray.push({
-              month: yearMonth,
-              curtailedEnergy: 0,
-              bitcoinMined: 0
-            });
+          console.log(`Fetching monthly summary data for ${yearMonth}...`);
+          
+          // Get curtailment energy data
+          const summaryResponse = await fetch(summaryUrl);
+          const bitcoinResponse = await fetch(bitcoinUrl);
+          
+          let curtailedEnergy = 0;
+          let bitcoinMined = 0;
+          
+          if (summaryResponse.ok) {
+            const summaryData = await summaryResponse.json();
+            curtailedEnergy = Number(summaryData.totalCurtailedEnergy) || 0;
+            console.log(`Energy data for ${yearMonth}:`, summaryData);
           }
+          
+          if (bitcoinResponse.ok) {
+            const bitcoinData = await bitcoinResponse.json();
+            bitcoinMined = Number(bitcoinData.bitcoinMined) || 0;
+            console.log(`Bitcoin data for ${yearMonth}:`, bitcoinData);
+          }
+          
+          console.log(`Using exact values: Energy=${curtailedEnergy.toLocaleString()} MWh, Bitcoin=${bitcoinMined.toFixed(4)}`);
+          
+          monthlyDataArray.push({
+            month: yearMonth,
+            curtailedEnergy: curtailedEnergy,
+            bitcoinMined: bitcoinMined
+          });
         } catch (error) {
           console.error(`Error fetching data for ${yearMonth}:`, error);
           
