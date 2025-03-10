@@ -15,7 +15,7 @@ interface FarmComparisonChartProps {
 
 interface TopFarmData {
   name: string;
-  farmId: string;
+  farmId: string; // This will be renamed to bmuId in the backend
   curtailedEnergy: number;
   curtailmentPayment: number;
   bitcoinMined: number;
