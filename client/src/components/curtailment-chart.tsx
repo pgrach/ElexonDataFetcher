@@ -48,8 +48,10 @@ const BitcoinIcon = ({ x, y, value }: { x: number, y: number, value: number }) =
 
 export default function CurtailmentChart({ timeframe, date, minerModel, farmId }: CurtailmentChartProps) {
   const formattedDate = format(date, "yyyy-MM-dd");
+  const formattedYearMonth = format(date, "yyyy-MM");
+  const currentYear = date.getFullYear();
   
-  // Fetch hourly data
+  // Fetch hourly data for daily view
   const { data: hourlyData = [], isLoading: isHourlyLoading } = useQuery({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, farmId],
     queryFn: async () => {
@@ -68,7 +70,57 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     enabled: timeframe === "daily" // Only fetch when in daily view
   });
   
-  // Fetch daily Bitcoin potential
+  // Fetch monthly data for monthly view
+  const { data: monthlyData = [], isLoading: isMonthlyLoading } = useQuery({
+    queryKey: [`/api/mining-potential/monthly`, currentYear, minerModel, farmId],
+    queryFn: async () => {
+      // Fetch data for each month of the year
+      const months = [];
+      const monthlyDataArray = [];
+      
+      for (let i = 1; i <= 12; i++) {
+        const monthStr = i.toString().padStart(2, '0');
+        const yearMonth = `${currentYear}-${monthStr}`;
+        months.push(yearMonth);
+      }
+      
+      // Fetch each month's data
+      for (const yearMonth of months) {
+        try {
+          const url = new URL(`/api/mining-potential/monthly/${yearMonth}`, window.location.origin);
+          url.searchParams.set("minerModel", minerModel);
+          
+          if (farmId) {
+            url.searchParams.set("farmId", farmId);
+          }
+          
+          const response = await fetch(url);
+          if (response.ok) {
+            const data = await response.json();
+            monthlyDataArray.push({
+              month: yearMonth,
+              curtailedEnergy: data.totalCurtailedEnergy || 0,
+              bitcoinMined: data.totalBitcoinMined || 0
+            });
+          } else {
+            // If month doesn't have data yet, add empty data
+            monthlyDataArray.push({
+              month: yearMonth,
+              curtailedEnergy: 0,
+              bitcoinMined: 0
+            });
+          }
+        } catch (error) {
+          console.error(`Error fetching data for ${yearMonth}:`, error);
+        }
+      }
+      
+      return monthlyDataArray;
+    },
+    enabled: timeframe === "monthly" // Only fetch when in monthly view
+  });
+  
+  // Fetch daily Bitcoin potential for daily view
   const { data: dailyBitcoin = { bitcoinMined: 0 }, isLoading: isBitcoinLoading } = useQuery({
     queryKey: [`/api/curtailment/mining-potential`, formattedDate, minerModel, farmId],
     queryFn: async () => {
@@ -105,10 +157,12 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     enabled: timeframe === "daily" // Only fetch when in daily view
   });
   
-  const isLoading = isHourlyLoading || isBitcoinLoading;
+  const isLoading = 
+    (timeframe === "daily" && (isHourlyLoading || isBitcoinLoading)) || 
+    (timeframe === "monthly" && isMonthlyLoading);
   
-  // Process data for the chart and calculate hourly Bitcoin based on energy ratio
-  const chartData = hourlyData.map((item: any) => {
+  // Process data for the daily chart
+  const dailyChartData = hourlyData.map((item: any) => {
     const curtailedEnergy = Number(item.curtailedEnergy);
     const totalEnergy = hourlyData.reduce((sum: number, h: any) => sum + Number(h.curtailedEnergy), 0);
     
@@ -124,6 +178,16 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     };
   });
   
+  // Process data for the monthly chart
+  const monthlyChartData = monthlyData.map((item: any) => {
+    const month = new Date(item.month + "-01").toLocaleString('default', { month: 'short' });
+    return {
+      month,
+      curtailedEnergy: Number(item.curtailedEnergy),
+      bitcoinMined: Number(item.bitcoinMined)
+    };
+  });
+  
   // Helper for checking if an hour is in the future
   const isHourInFuture = (hourStr: string) => {
     const [hour] = hourStr.split(":").map(Number);
@@ -136,29 +200,57 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     return selectedDate > now;
   };
   
-  // Get max Bitcoin value for right Y-axis scaling
-  const maxBitcoin = Math.max(...chartData.map((d: { bitcoinPotential: number }) => d.bitcoinPotential), 0.1);
+  // Helper for checking if a month is in the future
+  const isMonthInFuture = (monthStr: string) => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthIndex = months.indexOf(monthStr);
+    const now = new Date();
+    
+    if (currentYear > now.getFullYear()) return true;
+    if (currentYear < now.getFullYear()) return false;
+    return monthIndex > now.getMonth();
+  };
+  
+  // Get max Bitcoin value for right Y-axis scaling (daily)
+  const maxDailyBitcoin = Math.max(...dailyChartData.map((d: { bitcoinPotential: number }) => d.bitcoinPotential || 0), 0.1);
+  
+  // Get max Bitcoin value for right Y-axis scaling (monthly)
+  const maxMonthlyBitcoin = Math.max(...monthlyChartData.map((d: { bitcoinMined: number }) => d.bitcoinMined || 0), 0.1);
+  
+  // Get card title based on timeframe
+  const getCardTitle = () => {
+    switch(timeframe) {
+      case "daily":
+        return "Hourly Breakdown";
+      case "monthly":
+        return "Monthly Breakdown";
+      case "yearly":
+        return "Yearly Breakdown";
+      default:
+        return "Breakdown";
+    }
+  };
   
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Hourly Breakdown</CardTitle>
+        <CardTitle>{getCardTitle()}</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-[300px] w-full" />
-        ) : timeframe !== "daily" ? (
-          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-            This chart is only available in daily view
-          </div>
-        ) : chartData.length === 0 ? (
+        ) : timeframe === "daily" && dailyChartData.length === 0 ? (
           <div className="flex items-center justify-center h-[300px] text-muted-foreground">
             No curtailment data available for this date
           </div>
-        ) : (
+        ) : timeframe === "monthly" && monthlyChartData.length === 0 ? (
+          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+            No monthly data available for this year
+          </div>
+        ) : timeframe === "daily" ? (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart
-              data={chartData}
+              data={dailyChartData}
               margin={{ top: 20, right: 40, left: 20, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
@@ -184,7 +276,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               <YAxis 
                 yAxisId="right"
                 orientation="right"
-                domain={[0, Math.ceil(maxBitcoin * 1.2 * 10) / 10]}
+                domain={[0, Math.ceil(maxDailyBitcoin * 1.2 * 10) / 10]}
                 tick={{ fontSize: 12 }}
                 label={{ 
                   value: 'Potential Bitcoin Mined (₿)', 
@@ -211,7 +303,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                 fill="#000000"
                 name="Curtailed Energy (MWh)"
                 // Apply different styling for future hours
-                {...(chartData.some((d: { hour: string }) => isHourInFuture(d.hour)) && {
+                {...(dailyChartData.some((d: { hour: string }) => isHourInFuture(d.hour)) && {
                   shape: (props: any) => {
                     const { x, y, width, height, payload } = props;
                     const inFuture = isHourInFuture(payload.hour);
@@ -251,6 +343,111 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+        ) : timeframe === "monthly" ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart
+              data={monthlyChartData}
+              margin={{ top: 20, right: 40, left: 20, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="month" 
+                tick={{ fontSize: 12 }}
+              />
+              {/* Left Y axis for energy */}
+              <YAxis 
+                yAxisId="left"
+                orientation="left"
+                tick={{ fontSize: 12 }} 
+                label={{ 
+                  value: 'Curtailed Energy (MWh)', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  style: { textAnchor: 'middle' },
+                  offset: 0
+                }}
+              />
+              {/* Right Y axis for Bitcoin */}
+              <YAxis 
+                yAxisId="right"
+                orientation="right"
+                domain={[0, Math.ceil(maxMonthlyBitcoin * 1.2 * 10) / 10]}
+                tick={{ fontSize: 12 }}
+                label={{ 
+                  value: 'Bitcoin Mined (₿)', 
+                  angle: 90, 
+                  position: 'insideRight',
+                  style: { textAnchor: 'middle', fill: '#F7931A' }
+                }}
+                tickFormatter={(value) => value.toFixed(1)}
+                stroke="#F7931A"
+              />
+              <Tooltip 
+                formatter={(value: number, name: string) => {
+                  if (name === "curtailedEnergy") {
+                    return [`${value.toLocaleString()} MWh`, "Curtailed Energy"];
+                  }
+                  return [`₿${value.toFixed(4)}`, "Bitcoin Mined"];
+                }}
+                labelFormatter={(label) => `Month: ${label}`}
+              />
+              <Legend />
+              <Bar
+                yAxisId="left"
+                dataKey="curtailedEnergy"
+                fill="#000000"
+                name="Curtailed Energy (MWh)"
+                // Apply different styling for future months
+                shape={(props: any) => {
+                  const { x, y, width, height, payload } = props;
+                  const inFuture = isMonthInFuture(payload.month);
+                  
+                  return (
+                    <rect
+                      key={`bar-${payload.month}`}
+                      x={x}
+                      y={y}
+                      width={width}
+                      height={height}
+                      fill={inFuture ? "#f5f5f5" : "#000000"}
+                      stroke={inFuture ? "#000000" : "none"}
+                      strokeWidth={1}
+                      r={0}
+                    />
+                  );
+                }}
+              />
+              <Bar
+                yAxisId="right"
+                dataKey="bitcoinMined"
+                fill="#F7931A"
+                name="Bitcoin Mined (₿)"
+                // Apply different styling for future months
+                shape={(props: any) => {
+                  const { x, y, width, height, payload } = props;
+                  const inFuture = isMonthInFuture(payload.month);
+                  
+                  return (
+                    <rect
+                      key={`bitcoin-bar-${payload.month}`}
+                      x={x}
+                      y={y}
+                      width={width}
+                      height={height}
+                      fill={inFuture ? "#fce8cc" : "#F7931A"}
+                      stroke={inFuture ? "#F7931A" : "none"}
+                      strokeWidth={1}
+                      r={0}
+                    />
+                  );
+                }}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+            This chart is only available in daily and monthly views
+          </div>
         )}
       </CardContent>
     </Card>
