@@ -7,16 +7,13 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card"
-import { 
-  ChartContainer, 
-  ChartTooltip 
-} from "@/components/ui/chart"
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Legend,
   ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
 } from "recharts"
@@ -31,7 +28,6 @@ interface CurtailmentChartProps {
 interface HourlyData {
   hour: string
   curtailedEnergy: number
-  isFuture?: boolean
 }
 
 export default function CurtailmentChart({ timeframe, date, minerModel, farmId }: CurtailmentChartProps) {
@@ -66,9 +62,6 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     return selectedDate > now
   }
 
-  // Prepare chart data - we removed the future hour marking to fix TS errors
-  const chartData = hourlyData || []
-
   return (
     <Card>
       <CardHeader>
@@ -87,47 +80,37 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
           <div className="flex justify-center items-center h-80">
             <div className="animate-pulse">Loading curtailment data...</div>
           </div>
-        ) : !chartData || chartData.length === 0 ? (
+        ) : !hourlyData || hourlyData.length === 0 ? (
           <div className="flex justify-center items-center h-80 text-muted-foreground">
             No hourly data available for the selected date
           </div>
         ) : (
           <div className="h-80">
-            <ChartContainer
-              config={{
-                curtailedEnergy: {
-                  label: "Curtailed Energy (MWh)",
-                  color: "hsl(185, 70%, 50%)"
-                }
-              }}
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 10, right: 30, left: 0, bottom: 30 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="hour"
-                    interval={0}
-                    angle={-45}
-                    tickMargin={10}
-                    height={70}
-                  />
-                  <YAxis />
-                  <ChartTooltip />
-                  <Legend />
-                  <Bar
-                    dataKey="curtailedEnergy"
-                    fill="hsl(185, 70%, 50%)"
-                    fillOpacity={0.8}
-                    stroke="hsl(185, 70%, 35%)"
-                    strokeWidth={1}
-                    name="Curtailed Energy (MWh)"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={hourlyData}
+                margin={{ top: 10, right: 30, left: 0, bottom: 30 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="hour"
+                  interval={0}
+                  angle={-45}
+                  tickMargin={10}
+                  height={70}
+                />
+                <YAxis />
+                <Tooltip 
+                  formatter={(value: number) => [`${value.toLocaleString()} MWh`, 'Curtailed Energy']}
+                />
+                <Legend />
+                <Bar
+                  dataKey="curtailedEnergy"
+                  fill="#4f46e5"
+                  name="Curtailed Energy"
+                />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         )}
       </CardContent>

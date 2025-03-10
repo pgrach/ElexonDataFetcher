@@ -1,6 +1,12 @@
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -30,87 +36,104 @@ export default function BitcoinPotentialTable({ timeframe, date, minerModel, far
   const yearMonth = format(date, "yyyy-MM")
   const year = format(date, "yyyy")
   
-  // Generate API endpoint based on timeframe
-  const apiEndpoint = timeframe === "daily" 
-    ? `/api/farm-data/daily/${formattedDate}`
+  const endpoint = timeframe === "daily" 
+    ? `/api/mining-potential/daily?date=${formattedDate}&minerModel=${minerModel}`
     : timeframe === "monthly"
-      ? `/api/farm-data/monthly/${yearMonth}`
-      : `/api/farm-data/yearly/${year}`
-  
-  const { data, isLoading, error } = useQuery<BitcoinPotentialData[]>({
-    queryKey: [apiEndpoint, minerModel],
+      ? `/api/mining-potential/monthly/${yearMonth}?minerModel=${minerModel}`
+      : `/api/mining-potential/yearly/${year}?minerModel=${minerModel}`
+      
+  const { 
+    data: tableData, 
+    isLoading, 
+    error 
+  } = useQuery<BitcoinPotentialData[]>({
+    queryKey: [endpoint, farmId !== 'all' ? farmId : null],
     queryFn: async () => {
-      const url = new URL(apiEndpoint, window.location.origin)
-      url.searchParams.set("minerModel", minerModel)
+      const url = new URL(endpoint, window.location.origin)
+      if (farmId !== 'all') {
+        url.searchParams.set("leadParty", farmId)
+      }
       
-      // This is a placeholder for the actual API endpoint
-      // In a real implementation, you would call your actual API endpoint
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error("Failed to fetch mining potential data")
+      }
       
-      // For now, we'll return a placeholder array of data for demonstration
-      // This should be replaced with actual data from a real API call
-      
-      // Simulate an API call delay
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // This would be the actual API call
-      // const response = await fetch(url.toString())
-      // if (!response.ok) {
-      //   throw new Error("Failed to fetch data")
-      // }
-      // return response.json()
-      
-      // For now, let's return an empty array
-      return []
+      return response.json()
     },
-    enabled: false // Disabled until a real API endpoint is available
+    // Disable fetching for now as the endpoint is not available
+    enabled: false
   })
-  
+
+  // Mock data for demonstration
+  const mockData = [
+    { farm: "Moray West Wind Farm Ltd", curtailedEnergy: 7850, bitcoinPotential: 6.23, potentialValue: 398000, curtailmentPayment: 220000 },
+    { farm: "Dogger Bank Wind Farm Ltd", curtailedEnergy: 2740, bitcoinPotential: 2.17, potentialValue: 139000, curtailmentPayment: 76000 },
+    { farm: "Dunvegan Wind Farm Ltd", curtailedEnergy: 3900, bitcoinPotential: 3.10, potentialValue: 198500, curtailmentPayment: 110000 },
+    { farm: "Moray East Wind Farm Ltd", curtailedEnergy: 2100, bitcoinPotential: 1.67, potentialValue: 106700, curtailmentPayment: 59000 },
+    { farm: "Creag Riabhach Wind Farm Ltd", curtailedEnergy: 1900, bitcoinPotential: 1.51, potentialValue: 96500, curtailmentPayment: 53000 },
+    { farm: "Kilgallioch Wind Farm Ltd", curtailedEnergy: 1500, bitcoinPotential: 1.19, potentialValue: 76200, curtailmentPayment: 42000 },
+  ]
+
+  // Apply filter for selected farm
+  const filteredData = farmId === 'all' 
+    ? mockData 
+    : mockData.filter(item => item.farm === farmId)
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Detailed Bitcoin Potential</CardTitle>
+        <CardTitle>Bitcoin Mining Potential</CardTitle>
         <CardDescription>
           {timeframe === "daily" 
-            ? `Mining potential breakdown for ${format(date, "PPP")}`
+            ? `Potential Bitcoin mining from curtailed energy on ${format(date, "MMMM d, yyyy")} with ${minerModel.replace("_", " ")} miners`
             : timeframe === "monthly"
-              ? `Mining potential summary for ${format(date, "MMMM yyyy")}`
-              : `Mining potential summary for ${format(date, "yyyy")}`
+              ? `Potential Bitcoin mining from curtailed energy in ${format(date, "MMMM yyyy")} with ${minerModel.replace("_", " ")} miners`
+              : `Potential Bitcoin mining from curtailed energy in ${format(date, "yyyy")} with ${minerModel.replace("_", " ")} miners`
           }
         </CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="flex justify-center py-4">Loading detailed data...</div>
+          <div className="flex justify-center items-center h-80">
+            <div className="animate-pulse">Loading mining potential data...</div>
+          </div>
         ) : error ? (
-          <div className="text-red-500 py-4">Error loading data</div>
-        ) : data && data.length > 0 ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Farm</TableHead>
-                <TableHead className="text-right">Energy (MWh)</TableHead>
-                <TableHead className="text-right">Bitcoin (BTC)</TableHead>
-                <TableHead className="text-right">BTC Value (£)</TableHead>
-                <TableHead className="text-right">Payments (£)</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((item, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">{item.farm}</TableCell>
-                  <TableCell className="text-right">{item.curtailedEnergy.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{item.bitcoinPotential.toFixed(8)}</TableCell>
-                  <TableCell className="text-right">{item.potentialValue.toLocaleString('en-GB', { maximumFractionDigits: 2 })}</TableCell>
-                  <TableCell className="text-right">{item.curtailmentPayment.toLocaleString('en-GB', { maximumFractionDigits: 2 })}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="flex justify-center items-center text-red-500">
+            Error loading mining potential data
+          </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            No detailed data available for the selected period.
-            <br />
-            Please select a different date or timeframe.
+          <div className="overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Wind Farm</TableHead>
+                  <TableHead className="text-right">Curtailed Energy (MWh)</TableHead>
+                  <TableHead className="text-right">Bitcoin Potential (BTC)</TableHead>
+                  <TableHead className="text-right">BTC Value (GBP)</TableHead>
+                  <TableHead className="text-right">Curtailment Payment (GBP)</TableHead>
+                  <TableHead className="text-right">Difference (GBP)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredData.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="font-medium">{item.farm}</TableCell>
+                    <TableCell className="text-right">{item.curtailedEnergy.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{item.bitcoinPotential.toFixed(8)}</TableCell>
+                    <TableCell className="text-right">£{item.potentialValue.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">£{item.curtailmentPayment.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">
+                      {item.potentialValue > item.curtailmentPayment ? (
+                        <span className="text-green-600">+£{(item.potentialValue - item.curtailmentPayment).toLocaleString()}</span>
+                      ) : (
+                        <span className="text-red-600">-£{(item.curtailmentPayment - item.potentialValue).toLocaleString()}</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
       </CardContent>
