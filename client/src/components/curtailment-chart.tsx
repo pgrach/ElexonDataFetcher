@@ -436,28 +436,20 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               <Bar
                 yAxisId="right"
                 dataKey="bitcoinMined"
-                fill="#F7931A"
+                fill="transparent"
+                stroke="transparent"
                 name="Bitcoin Mined (₿)"
-                // Apply different styling for future months
-                shape={(props: any) => {
-                  const { x, y, width, height, payload } = props;
-                  const inFuture = isMonthInFuture(payload.month);
-                  
-                  return (
-                    <rect
-                      key={`bitcoin-bar-${payload.month}`}
-                      x={x}
-                      y={y}
-                      width={width}
-                      height={height}
-                      fill={inFuture ? "#fce8cc" : "#F7931A"}
-                      stroke={inFuture ? "#F7931A" : "none"}
-                      strokeWidth={1}
-                      r={0}
-                    />
-                  );
-                }}
-              />
+              >
+                {/* Custom label to show Bitcoin icons */}
+                <LabelList
+                  dataKey="bitcoinMined"
+                  position="top"
+                  content={(props: any) => {
+                    const { x, y, value, index } = props;
+                    return <BitcoinIcon x={x} y={y} value={value} key={`bitcoin-${index}`} />;
+                  }}
+                />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         ) : (
