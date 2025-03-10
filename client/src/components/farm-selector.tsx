@@ -20,7 +20,7 @@ interface FarmSelectorProps {
 
 interface FarmData {
   name: string;
-  bmuIds: string[];
+  farmIds: string[];
 }
 
 export default function FarmSelector({ value, onValueChange }: FarmSelectorProps) {
@@ -38,7 +38,7 @@ export default function FarmSelector({ value, onValueChange }: FarmSelectorProps
   
   // Sort farms by number of farms in descending order (largest at top)
   const farms = React.useMemo(() => {
-    return [...farmData].sort((a, b) => b.bmuIds.length - a.bmuIds.length);
+    return [...farmData].sort((a, b) => b.farmIds.length - a.farmIds.length);
   }, [farmData]);
 
   // Determine if we need to show an error message

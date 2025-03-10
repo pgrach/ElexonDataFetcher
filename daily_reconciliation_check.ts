@@ -327,7 +327,7 @@ async function checkDateReconciliationStatus(date: string): Promise<Reconciliati
       const query = `
         WITH required_combinations AS (
           SELECT 
-            count(DISTINCT (settlement_period || '-' || bmu_id)) * 3 AS expected_count
+            count(DISTINCT (settlement_period || '-' || farm_id)) * 3 AS expected_count
           FROM 
             curtailment_records
           WHERE 
@@ -386,7 +386,7 @@ async function checkDateReconciliationStatus(date: string): Promise<Reconciliati
           
           const fallbackQuery = `
             SELECT 
-              COUNT(DISTINCT (settlement_period || '-' || bmu_id)) * 3 AS expected_count 
+              COUNT(DISTINCT (settlement_period || '-' || farm_id)) * 3 AS expected_count 
             FROM 
               curtailment_records 
             WHERE 

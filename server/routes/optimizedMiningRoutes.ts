@@ -90,7 +90,7 @@ router.get('/daily', async (req: Request, res: Response) => {
   try {
     const requestDate = req.query.date ? parseISO(req.query.date as string) : new Date();
     const minerModel = req.query.minerModel as string || 'S19J_PRO';
-    const bmuId = req.query.bmuId as string;
+    const farmId = req.query.farmId as string;
     
     // Validate date
     if (!isValid(requestDate)) {
@@ -105,14 +105,14 @@ router.get('/daily', async (req: Request, res: Response) => {
     console.log('Daily mining potential request:', {
       date: formattedDate,
       minerModel,
-      bmuId
+      farmId
     });
     
     // Get current price from Minerstat
     const currentPrice = await fetchCurrentPrice();
     
     // Get daily mining potential data using optimized service
-    const potentialData = await getDailyMiningPotential(formattedDate, minerModel, bmuId);
+    const potentialData = await getDailyMiningPotential(formattedDate, minerModel, farmId);
     
     res.json({
       date: formattedDate,
@@ -137,7 +137,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
     const { yearMonth } = req.params;
     const minerModel = req.query.minerModel as string || 'S19J_PRO';
     const leadParty = req.query.leadParty as string;
-    let bmuId = req.query.bmuId as string;
+    let farmId = req.query.farmId as string;
     
     // Validate yearMonth format (YYYY-MM)
     if (!yearMonth.match(/^\d{4}-\d{2}$/)) {
@@ -148,8 +148,8 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
     }
     
     // Handle leadParty parameter (for compatibility with the frontend)
-    if (leadParty && !bmuId) {
-      // If leadParty is provided but bmuId is not, try to find the corresponding bmuId
+    if (leadParty && !farmId) {
+      // If leadParty is provided but farmId is not, try to find the corresponding farmId
       // First, get all farms for this lead party
       const { db } = await import("../../db");
       const { curtailmentRecords } = await import("../../db/schema");
@@ -157,17 +157,17 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
       
       const farms = await db
         .select({
-          bmuId: curtailmentRecords.bmuId
+          farmId: curtailmentRecords.farmId
         })
         .from(curtailmentRecords)
         .where(eq(curtailmentRecords.leadPartyName, leadParty))
-        .groupBy(curtailmentRecords.bmuId);
+        .groupBy(curtailmentRecords.farmId);
 
       console.log(`Found ${farms.length} farms for lead party ${leadParty}`);
       
       if (farms.length > 0) {
-        // Use the bmuIds for filtering
-        bmuId = farms[0].bmuId; // Just use the first farm for simplicity
+        // Use the farmIds for filtering
+        farmId = farms[0].farmId; // Just use the first farm for simplicity
       }
     }
     
@@ -175,7 +175,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
       yearMonth,
       minerModel,
       leadParty,
-      bmuId
+      farmId
     });
     
     // Get current price from Minerstat
@@ -195,14 +195,14 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
       const formattedStartDate = format(startDate, 'yyyy-MM-dd');
       const formattedEndDate = format(endDate, 'yyyy-MM-dd');
       
-      // First get all bmuIds that match the leadParty
+      // First get all farmIds that match the leadParty
       const farms = await db
         .select({
-          bmuId: curtailmentRecords.bmuId
+          farmId: curtailmentRecords.farmId
         })
         .from(curtailmentRecords)
         .where(eq(curtailmentRecords.leadPartyName, leadParty))
-        .groupBy(curtailmentRecords.bmuId);
+        .groupBy(curtailmentRecords.farmId);
       
       if (farms.length === 0) {
         return res.json({
@@ -215,7 +215,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
         });
       }
       
-      const bmuIds = farms.map(f => f.bmuId);
+      const farmIds = farms.map(f => f.farmId);
       
       // Query Bitcoin calculations for the specified farms
       const bitcoinData = await db
@@ -228,7 +228,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
           and(
             sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
             eq(historicalBitcoinCalculations.minerModel, minerModel),
-            inArray(historicalBitcoinCalculations.bmuId, bmuIds)
+            inArray(historicalBitcoinCalculations.farmId, farmIds)
           )
         );
       
@@ -256,7 +256,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
     }
     
     // Get monthly mining potential data
-    const potentialData = await getMonthlyMiningPotential(yearMonth, minerModel, bmuId);
+    const potentialData = await getMonthlyMiningPotential(yearMonth, minerModel, farmId);
     
     res.json({
       month: yearMonth,
@@ -281,7 +281,7 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
     const { year } = req.params;
     const minerModel = req.query.minerModel as string || 'S19J_PRO';
     const leadParty = req.query.leadParty as string;
-    let bmuId = req.query.bmuId as string;
+    let farmId = req.query.farmId as string;
     
     // Validate year format
     if (!year.match(/^\d{4}$/)) {
@@ -305,14 +305,14 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
       // Get all farms for this lead party
       const farms = await db
         .select({
-          bmuId: curtailmentRecords.bmuId
+          farmId: curtailmentRecords.farmId
         })
         .from(curtailmentRecords)
         .where(eq(curtailmentRecords.leadPartyName, leadParty))
-        .groupBy(curtailmentRecords.bmuId);
+        .groupBy(curtailmentRecords.farmId);
 
-      const bmuIds = farms.map(f => f.bmuId);
-      console.log(`Found ${farms.length} farms for lead party ${leadParty}: ${bmuIds.join(', ')}`);
+      const farmIds = farms.map(f => f.farmId);
+      console.log(`Found ${farms.length} farms for lead party ${leadParty}: ${farmIds.join(', ')}`);
       
       if (farms.length === 0) {
         return res.json({
@@ -337,7 +337,7 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
           and(
             sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
             eq(historicalBitcoinCalculations.minerModel, minerModel),
-            inArray(historicalBitcoinCalculations.bmuId, bmuIds)
+            inArray(historicalBitcoinCalculations.farmId, farmIds)
           )
         );
       
@@ -351,7 +351,7 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
         .where(
           and(
             sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
-            inArray(curtailmentRecords.bmuId, bmuIds)
+            inArray(curtailmentRecords.farmId, farmIds)
           )
         );
       
@@ -373,13 +373,13 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
       year,
       minerModel,
       leadParty,
-      bmuId
+      farmId
     });
     
     // We already handled leadParty above, so no need to check again here
     
     // Get yearly mining potential data for a single farm or all farms
-    const potentialData = await getYearlyMiningPotential(year, minerModel, bmuId);
+    const potentialData = await getYearlyMiningPotential(year, minerModel, farmId);
     
     res.json({
       year,
@@ -400,9 +400,9 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
 });
 
 // Farm-specific statistics endpoint
-router.get('/farm/:bmuId', async (req: Request, res: Response) => {
+router.get('/farm/:farmId', async (req: Request, res: Response) => {
   try {
-    const { bmuId } = req.params;
+    const { farmId } = req.params;
     const period = (req.query.period as 'day' | 'month' | 'year') || 'month';
     const value = req.query.value as string || format(new Date(), period === 'day' ? 'yyyy-MM-dd' : period === 'month' ? 'yyyy-MM' : 'yyyy');
     const useLeadParty = req.query.useLeadParty === 'true';
@@ -441,30 +441,30 @@ router.get('/farm/:bmuId', async (req: Request, res: Response) => {
             leadPartyName: curtailmentRecords.leadPartyName
           })
           .from(curtailmentRecords)
-          .where(eq(curtailmentRecords.bmuId, bmuId))
+          .where(eq(curtailmentRecords.farmId, farmId))
           .limit(1);
           
         if (farmResult.length === 0) {
           return res.status(404).json({
             error: 'Farm not found',
-            message: `No records found for farm: ${bmuId}`
+            message: `No records found for farm: ${farmId}`
           });
         }
           
         const leadPartyName = farmResult[0].leadPartyName;
-        console.log(`Using lead party "${leadPartyName}" for farm ${bmuId}`);
+        console.log(`Using lead party "${leadPartyName}" for farm ${farmId}`);
         
         // Then get all farms for this lead party
         const allFarms = await db
           .select({
-            bmuId: curtailmentRecords.bmuId
+            farmId: curtailmentRecords.farmId
           })
           .from(curtailmentRecords)
           .where(eq(curtailmentRecords.leadPartyName, leadPartyName))
-          .groupBy(curtailmentRecords.bmuId);
+          .groupBy(curtailmentRecords.farmId);
           
-        const bmuIds = allFarms.map(f => f.bmuId);
-        console.log(`Found ${bmuIds.length} farms for lead party "${leadPartyName}": ${bmuIds.join(', ')}`);
+        const farmIds = allFarms.map(f => f.farmId);
+        console.log(`Found ${farmIds.length} farms for lead party "${leadPartyName}": ${farmIds.join(', ')}`);
           
         // Process statistics for the farm group
         let bitcoinDateCondition;
@@ -504,7 +504,7 @@ router.get('/farm/:bmuId', async (req: Request, res: Response) => {
           .where(
             and(
               bitcoinDateCondition,
-              inArray(historicalBitcoinCalculations.bmuId, bmuIds)
+              inArray(historicalBitcoinCalculations.farmId, farmIds)
             )
           )
           .groupBy(historicalBitcoinCalculations.minerModel);
@@ -527,8 +527,8 @@ router.get('/farm/:bmuId', async (req: Request, res: Response) => {
         // Return statistics for the farm group
         const stats = {
           leadParty: leadPartyName,
-          farmCount: bmuIds.length,
-          farms: bmuIds,
+          farmCount: farmIds.length,
+          farms: farmIds,
           period,
           value,
           totalCurtailedEnergy: Number(curtailmentData[0]?.totalCurtailedEnergy || 0),
@@ -549,7 +549,7 @@ router.get('/farm/:bmuId', async (req: Request, res: Response) => {
     }
     
     // Get statistics for a single farm
-    const stats = await getFarmStatistics(bmuId, period, value);
+    const stats = await getFarmStatistics(farmId, period, value);
     
     res.json(stats);
   } catch (error) {

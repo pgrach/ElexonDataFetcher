@@ -11,7 +11,7 @@ interface CurtailmentChartProps {
   timeframe: string;
   date: Date;
   minerModel: string;
-  farmId: string; // Keeping farmId in prop interface for backward compatibility with existing code
+  farmId: string;
 }
 
 // SVG Bitcoin logo for chart label

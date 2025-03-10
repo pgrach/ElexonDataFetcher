@@ -15,7 +15,7 @@ interface FarmComparisonChartProps {
 
 interface TopFarmData {
   name: string;
-  bmuId: string;
+  farmId: string;
   curtailedEnergy: number;
   curtailmentPayment: number;
   bitcoinMined: number;
@@ -58,7 +58,7 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
   
   // Transform the data for the chart
   const chartData = farmsData.map(farm => ({
-    name: farm.name || farm.bmuId,
+    name: farm.name || farm.farmId,
     curtailmentPayment: Math.round(farm.curtailmentPayment),
     bitcoinValue: Math.round(farm.bitcoinValue)
   }));

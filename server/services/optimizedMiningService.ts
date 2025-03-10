@@ -22,8 +22,8 @@ import { format } from "date-fns";
 /**
  * Get daily mining potential data directly from core tables with optimized queries
  */
-export async function getDailyMiningPotential(date: string, minerModel: string, bmuId?: string): Promise<any> {
-  console.log(`Calculating daily mining potential for ${date}, model: ${minerModel}, farm: ${bmuId || 'all'}`);
+export async function getDailyMiningPotential(date: string, minerModel: string, farmId?: string): Promise<any> {
+  console.log(`Calculating daily mining potential for ${date}, model: ${minerModel}, farm: ${farmId || 'all'}`);
   
   try {
     // Query for Bitcoin calculations first
@@ -38,7 +38,7 @@ export async function getDailyMiningPotential(date: string, minerModel: string, 
         and(
           eq(historicalBitcoinCalculations.settlementDate, date),
           eq(historicalBitcoinCalculations.minerModel, minerModel),
-          bmuId ? eq(historicalBitcoinCalculations.bmuId, bmuId) : undefined
+          farmId ? eq(historicalBitcoinCalculations.farmId, farmId) : undefined
         )
       );
       
@@ -53,7 +53,7 @@ export async function getDailyMiningPotential(date: string, minerModel: string, 
       .where(
         and(
           eq(curtailmentRecords.settlementDate, date),
-          bmuId ? eq(curtailmentRecords.bmuId, bmuId) : undefined
+          farmId ? eq(curtailmentRecords.farmId, farmId) : undefined
         )
       );
       
@@ -75,8 +75,8 @@ export async function getDailyMiningPotential(date: string, minerModel: string, 
 /**
  * Get monthly mining potential data directly from core tables with optimized queries
  */
-export async function getMonthlyMiningPotential(yearMonth: string, minerModel: string, bmuId?: string): Promise<any> {
-  console.log(`Calculating monthly mining potential for ${yearMonth}, model: ${minerModel}, farm: ${bmuId || 'all'}`);
+export async function getMonthlyMiningPotential(yearMonth: string, minerModel: string, farmId?: string): Promise<any> {
+  console.log(`Calculating monthly mining potential for ${yearMonth}, model: ${minerModel}, farm: ${farmId || 'all'}`);
   
   try {
     // Convert yearMonth to date range (e.g., "2025-03" to "2025-03-01" and "2025-03-31")
@@ -98,7 +98,7 @@ export async function getMonthlyMiningPotential(yearMonth: string, minerModel: s
         and(
           sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
           eq(historicalBitcoinCalculations.minerModel, minerModel),
-          bmuId ? eq(historicalBitcoinCalculations.bmuId, bmuId) : undefined
+          farmId ? eq(historicalBitcoinCalculations.farmId, farmId) : undefined
         )
       );
       
@@ -113,7 +113,7 @@ export async function getMonthlyMiningPotential(yearMonth: string, minerModel: s
       .where(
         and(
           sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`,
-          bmuId ? eq(curtailmentRecords.bmuId, bmuId) : undefined
+          farmId ? eq(curtailmentRecords.farmId, farmId) : undefined
         )
       );
       
@@ -135,8 +135,8 @@ export async function getMonthlyMiningPotential(yearMonth: string, minerModel: s
 /**
  * Get yearly mining potential data directly from core tables with optimized queries
  */
-export async function getYearlyMiningPotential(year: string, minerModel: string, bmuId?: string, leadParty?: string): Promise<any> {
-  console.log(`Calculating yearly mining potential for ${year}, model: ${minerModel}, farm: ${bmuId || 'all'}, leadParty: ${leadParty || 'none'}`);
+export async function getYearlyMiningPotential(year: string, minerModel: string, farmId?: string, leadParty?: string): Promise<any> {
+  console.log(`Calculating yearly mining potential for ${year}, model: ${minerModel}, farm: ${farmId || 'all'}, leadParty: ${leadParty || 'none'}`);
   
   try {
     // If we have a lead party parameter, we need to get all farms for this lead party
@@ -146,11 +146,11 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
       // Get all farms for this lead party
       const farms = await db
         .select({
-          bmuId: curtailmentRecords.bmuId
+          farmId: curtailmentRecords.farmId
         })
         .from(curtailmentRecords)
         .where(eq(curtailmentRecords.leadPartyName, leadParty))
-        .groupBy(curtailmentRecords.bmuId);
+        .groupBy(curtailmentRecords.farmId);
       
       if (farms.length === 0) {
         console.log(`No farms found for lead party ${leadParty}`);
@@ -163,8 +163,8 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
         };
       }
       
-      const bmuIds = farms.map(f => f.bmuId);
-      console.log(`Found ${bmuIds.length} farms for lead party ${leadParty}: ${bmuIds.join(', ')}`);
+      const farmIds = farms.map(f => f.farmId);
+      console.log(`Found ${farmIds.length} farms for lead party ${leadParty}: ${farmIds.join(', ')}`);
       
       // Query for Bitcoin calculations for all farms in this lead party
       const bitcoinResults = await db
@@ -177,7 +177,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
           and(
             sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
             eq(historicalBitcoinCalculations.minerModel, minerModel),
-            inArray(historicalBitcoinCalculations.bmuId, bmuIds)
+            inArray(historicalBitcoinCalculations.farmId, farmIds)
           )
         );
       
@@ -193,7 +193,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
         .where(
           and(
             sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
-            inArray(curtailmentRecords.bmuId, bmuIds)
+            inArray(curtailmentRecords.farmId, farmIds)
           )
         );
       
@@ -210,7 +210,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
     }
     
     // If requesting for a specific farm, we still need to use the detailed calculation approach
-    if (bmuId) {
+    if (farmId) {
       // Query for Bitcoin calculations with year filter by farm
       let bitcoinQuery = db
         .select({
@@ -222,7 +222,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
           and(
             sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
             eq(historicalBitcoinCalculations.minerModel, minerModel),
-            eq(historicalBitcoinCalculations.bmuId, bmuId)
+            eq(historicalBitcoinCalculations.farmId, farmId)
           )
         );
         
@@ -238,7 +238,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
         .where(
           and(
             sql`EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}`,
-            eq(curtailmentRecords.bmuId, bmuId)
+            eq(curtailmentRecords.farmId, farmId)
           )
         );
         
@@ -254,7 +254,7 @@ export async function getYearlyMiningPotential(year: string, minerModel: string,
       };
     }
     
-    // For all farms (no bmuId filter), use the yearly summaries table for better performance
+    // For all farms (no farmId filter), use the yearly summaries table for better performance
     // Get the bitcoin yearly summary (note: the schema has already been updated to remove averageDifficulty)
     const yearlySummary = await db
       .select({
@@ -398,10 +398,10 @@ export async function getTopCurtailedFarms(
     
     // Now get Bitcoin data for each lead party
     const result = await Promise.all(topLeadParties.map(async (party) => {
-      // First get all bmuIds for this lead party
+      // First get all farmIds for this lead party
       const farms = await db
         .select({
-          bmuId: curtailmentRecords.bmuId
+          farmId: curtailmentRecords.farmId
         })
         .from(curtailmentRecords)
         .where(
@@ -410,9 +410,9 @@ export async function getTopCurtailedFarms(
             eq(curtailmentRecords.leadPartyName, party.leadPartyName)
           )
         )
-        .groupBy(curtailmentRecords.bmuId);
+        .groupBy(curtailmentRecords.farmId);
       
-      const bmuIds = farms.map(f => f.bmuId);
+      const farmIds = farms.map(f => f.farmId);
       
       // Get Bitcoin data for all farms under this lead party
       let bitcoinDateCondition;
@@ -439,7 +439,7 @@ export async function getTopCurtailedFarms(
         .where(
           and(
             bitcoinDateCondition,
-            inArray(historicalBitcoinCalculations.bmuId, bmuIds),
+            inArray(historicalBitcoinCalculations.farmId, farmIds),
             eq(historicalBitcoinCalculations.minerModel, minerModel)
           )
         );
@@ -465,7 +465,7 @@ export async function getTopCurtailedFarms(
       
       return {
         name: party.leadPartyName,
-        bmuIds: bmuIds,
+        farmIds: farmIds,
         curtailedEnergy: Number(party.totalCurtailedEnergy),
         curtailmentPayment: Math.abs(Number(party.totalPayment)), // Make positive for display
         bitcoinMined: bitcoinMined,
@@ -493,12 +493,12 @@ export async function getAvailableFarms(): Promise<any[]> {
     // Get all unique farms with their lead party names
     const farms = await db
       .select({
-        bmuId: curtailmentRecords.bmuId,
+        farmId: curtailmentRecords.farmId,
         leadPartyName: curtailmentRecords.leadPartyName
       })
       .from(curtailmentRecords)
-      .groupBy(curtailmentRecords.bmuId, curtailmentRecords.leadPartyName)
-      .orderBy(curtailmentRecords.leadPartyName, curtailmentRecords.bmuId);
+      .groupBy(curtailmentRecords.farmId, curtailmentRecords.leadPartyName)
+      .orderBy(curtailmentRecords.leadPartyName, curtailmentRecords.farmId);
     
     // Group farms by lead party name
     const farmsByParty: { [key: string]: string[] } = {};
@@ -507,13 +507,13 @@ export async function getAvailableFarms(): Promise<any[]> {
       if (!farmsByParty[partyName]) {
         farmsByParty[partyName] = [];
       }
-      farmsByParty[partyName].push(farm.bmuId);
+      farmsByParty[partyName].push(farm.farmId);
     });
     
     // Convert to array format for the API response
-    const result = Object.entries(farmsByParty).map(([name, bmuIds]) => ({
+    const result = Object.entries(farmsByParty).map(([name, farmIds]) => ({
       name,
-      bmuIds
+      farmIds
     }));
     
     return result;
@@ -523,8 +523,8 @@ export async function getAvailableFarms(): Promise<any[]> {
   }
 }
 
-export async function getFarmStatistics(bmuId: string, period: 'day' | 'month' | 'year', value: string): Promise<any> {
-  console.log(`Getting farm statistics for ${bmuId}, period: ${period}, value: ${value}`);
+export async function getFarmStatistics(farmId: string, period: 'day' | 'month' | 'year', value: string): Promise<any> {
+  console.log(`Getting farm statistics for ${farmId}, period: ${period}, value: ${value}`);
   
   try {
     let bitcoinDateCondition;
@@ -564,7 +564,7 @@ export async function getFarmStatistics(bmuId: string, period: 'day' | 'month' |
       .where(
         and(
           bitcoinDateCondition,
-          eq(historicalBitcoinCalculations.bmuId, bmuId)
+          eq(historicalBitcoinCalculations.farmId, farmId)
         )
       )
       .groupBy(historicalBitcoinCalculations.minerModel);
@@ -580,13 +580,13 @@ export async function getFarmStatistics(bmuId: string, period: 'day' | 'month' |
       .where(
         and(
           curtailmentDateCondition,
-          eq(curtailmentRecords.bmuId, bmuId)
+          eq(curtailmentRecords.farmId, farmId)
         )
       );
     
     // Combine and return results
     return {
-      bmuId,
+      farmId,
       period,
       value,
       totalCurtailedEnergy: Number(curtailmentData[0]?.totalCurtailedEnergy || 0),
@@ -599,7 +599,7 @@ export async function getFarmStatistics(bmuId: string, period: 'day' | 'month' |
       }))
     };
   } catch (error) {
-    console.error(`Error getting farm statistics for ${bmuId}:`, error);
+    console.error(`Error getting farm statistics for ${farmId}:`, error);
     throw error;
   }
 }

@@ -83,7 +83,7 @@ router.get('/mining-potential', async (req, res) => {
         and(
           eq(historicalBitcoinCalculations.settlementDate, formattedDate),
           eq(historicalBitcoinCalculations.minerModel, minerModel),
-          leadParty ? eq(historicalBitcoinCalculations.leadPartyName, leadParty) : undefined
+          leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
         )
       );
 
