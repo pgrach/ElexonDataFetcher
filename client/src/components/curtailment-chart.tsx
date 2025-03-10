@@ -1,16 +1,24 @@
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card"
 import { 
-  ResponsiveContainer,
+  ChartContainer, 
+  ChartTooltip 
+} from "@/components/ui/chart"
+import {
+  Bar,
   BarChart,
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+  CartesianGrid,
   Legend,
-  ReferenceLine
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
 } from "recharts"
 
 interface CurtailmentChartProps {
@@ -23,16 +31,17 @@ interface CurtailmentChartProps {
 interface HourlyData {
   hour: string
   curtailedEnergy: number
+  isFuture?: boolean
 }
 
 export default function CurtailmentChart({ timeframe, date, minerModel, farmId }: CurtailmentChartProps) {
   const formattedDate = format(date, "yyyy-MM-dd")
   
   const { data: hourlyData, isLoading } = useQuery<HourlyData[]>({
-    queryKey: [`/api/curtailment/hourly/${formattedDate}`, farmId !== "all" ? farmId : null],
+    queryKey: [`/api/curtailment/hourly/${formattedDate}`, farmId !== 'all' ? farmId : null],
     queryFn: async () => {
       const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin)
-      if (farmId && farmId !== "all") {
+      if (farmId !== 'all') {
         url.searchParams.set("leadParty", farmId)
       }
       
@@ -40,51 +49,90 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
       if (!response.ok) {
         throw new Error("Failed to fetch hourly data")
       }
-      
       return response.json()
     },
     enabled: timeframe === "daily"
   })
 
-  // For future: implement monthly/yearly chart data fetching based on timeframe
-  
+  // Function to check if an hour is in the future
+  const isHourInFuture = (hourStr: string) => {
+    const [hour] = hourStr.split(":").map(Number)
+    const now = new Date()
+    const selectedDate = new Date(date)
+
+    if (format(now, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd")) {
+      return hour > now.getHours()
+    }
+    return selectedDate > now
+  }
+
+  // Prepare chart data with future hours marked
   const chartData = hourlyData?.map(item => ({
-    hour: item.hour,
-    energy: item.curtailedEnergy,
-  })) || []
-  
+    ...item,
+    isFuture: isHourInFuture(item.hour)
+  }))
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Hourly Curtailment & Bitcoin Potential</CardTitle>
+        <CardTitle>Hourly Curtailment</CardTitle>
         <CardDescription>
           {timeframe === "daily" 
-            ? `Average hourly breakdown for ${format(date, "PPP")}`
+            ? `Wind farm curtailment by hour for ${format(date, "MMMM d, yyyy")}`
             : timeframe === "monthly"
-              ? `Daily breakdown for ${format(date, "MMMM yyyy")}`
-              : `Monthly breakdown for ${format(date, "yyyy")}`
+              ? `Wind farm curtailment for ${format(date, "MMMM yyyy")}`
+              : `Wind farm curtailment for ${format(date, "yyyy")}`
           }
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-[350px]">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-full">Loading chart data...</div>
-          ) : chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="hour" />
-                <YAxis yAxisId="left" orientation="left" label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft' }} />
-                <Tooltip />
-                <Legend />
-                <Bar yAxisId="left" dataKey="energy" name="Curtailed Energy (MWh)" fill="#0ea5e9" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full">No data available for the selected date</div>
-          )}
-        </div>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-80">
+            <div className="animate-pulse">Loading curtailment data...</div>
+          </div>
+        ) : !chartData || chartData.length === 0 ? (
+          <div className="flex justify-center items-center h-80 text-muted-foreground">
+            No hourly data available for the selected date
+          </div>
+        ) : (
+          <div className="h-80">
+            <ChartContainer
+              config={{
+                curtailedEnergy: {
+                  label: "Curtailed Energy (MWh)",
+                  color: "hsl(185, 70%, 50%)"
+                }
+              }}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 30 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="hour"
+                    interval={0}
+                    angle={-45}
+                    tickMargin={10}
+                    height={70}
+                  />
+                  <YAxis />
+                  <ChartTooltip />
+                  <Legend />
+                  <Bar
+                    dataKey="curtailedEnergy"
+                    fill="hsl(185, 70%, 50%)"
+                    fillOpacity={(entry) => (entry.isFuture ? 0.3 : 1)}
+                    stroke="hsl(185, 70%, 35%)"
+                    strokeWidth={1}
+                    name="Curtailed Energy (MWh)"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
