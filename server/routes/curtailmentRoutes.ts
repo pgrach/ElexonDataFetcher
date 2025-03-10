@@ -10,9 +10,30 @@ import axios from 'axios';
 
 const router = Router();
 
+import { priceCache, difficultyCache } from '../utils/cache';
+
 // Minerstat API helper function
 async function fetchFromMinerstat() {
   try {
+    // First check if we have cached values
+    const cachedPrice = priceCache.get('current');
+    const cachedDifficulty = difficultyCache.get('current');
+    
+    // If both values are in cache, return them
+    if (cachedPrice !== undefined && cachedDifficulty !== undefined) {
+      console.log('Using cached Minerstat data:', {
+        difficulty: cachedDifficulty,
+        priceGbp: cachedPrice,
+        source: 'cache'
+      });
+      
+      return {
+        difficulty: cachedDifficulty,
+        price: cachedPrice
+      };
+    }
+    
+    // Otherwise, fetch from API
     const response = await axios.get('https://api.minerstat.com/v2/coins?list=BTC');
     const btcData = response.data[0];
 
@@ -27,8 +48,13 @@ async function fetchFromMinerstat() {
     console.log('Minerstat API response:', {
       difficulty: btcData.difficulty,
       priceUsd: btcData.price,
-      priceGbp: priceInGbp
+      priceGbp: priceInGbp,
+      source: 'api'
     });
+
+    // Store values in cache
+    priceCache.set('current', priceInGbp);
+    difficultyCache.set('current', btcData.difficulty);
 
     return {
       difficulty: btcData.difficulty,
@@ -42,6 +68,19 @@ async function fetchFromMinerstat() {
         data: error.response.data
       });
     }
+    
+    // Check if we have any cached values to fall back to
+    const cachedPrice = priceCache.get('current');
+    const cachedDifficulty = difficultyCache.get('current');
+    
+    if (cachedPrice !== undefined && cachedDifficulty !== undefined) {
+      console.log('Falling back to cached values after API error');
+      return {
+        difficulty: cachedDifficulty,
+        price: cachedPrice
+      };
+    }
+    
     throw error;
   }
 }

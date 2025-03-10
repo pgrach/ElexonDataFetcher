@@ -444,15 +444,29 @@ export async function getTopCurtailedFarms(
           )
         );
       
-      // Get current Bitcoin price for calculating value in GBP
+      // Get current Bitcoin price for calculating value in GBP - use cache if available
       let currentPrice = 0;
       try {
-        const priceResponse = await fetch('https://api.minerstat.com/v2/coins?list=BTC');
-        const priceData = await priceResponse.json();
-        if (priceData && priceData[0] && priceData[0].price) {
-          // Convert USD to GBP (using a fixed rate - for simplicity)
-          const usdToGbpRate = 0.79;
-          currentPrice = priceData[0].price * usdToGbpRate;
+        // Try to get the price from the cache first
+        const { priceCache } = await import('../utils/cache');
+        const cachedPrice = priceCache.get('current');
+        
+        if (cachedPrice !== undefined) {
+          console.log('Using cached Bitcoin price for top farms calculation:', cachedPrice);
+          currentPrice = cachedPrice;
+        } else {
+          // If not in cache, fetch it from the API
+          const priceResponse = await fetch('https://api.minerstat.com/v2/coins?list=BTC');
+          const priceData = await priceResponse.json();
+          if (priceData && priceData[0] && priceData[0].price) {
+            // Convert USD to GBP (using a fixed rate - for simplicity)
+            const usdToGbpRate = 0.79;
+            currentPrice = priceData[0].price * usdToGbpRate;
+            
+            // Store in cache for future use
+            priceCache.set('current', currentPrice);
+            console.log('Stored new Bitcoin price in cache:', currentPrice);
+          }
         }
       } catch (error) {
         console.error('Error fetching Bitcoin price:', error);

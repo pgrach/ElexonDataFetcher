@@ -18,9 +18,30 @@ import {
   getAvailableFarms
 } from "../services/optimizedMiningService";
 
+import { priceCache, difficultyCache } from '../utils/cache';
+
 // Minerstat API helper function
 async function fetchFromMinerstat() {
   try {
+    // First check if we have cached values
+    const cachedPrice = priceCache.get('current');
+    const cachedDifficulty = difficultyCache.get('current');
+    
+    // If both values are in cache, return them
+    if (cachedPrice !== undefined && cachedDifficulty !== undefined) {
+      console.log('Using cached Minerstat data:', {
+        difficulty: cachedDifficulty,
+        priceGbp: cachedPrice,
+        source: 'cache'
+      });
+      
+      return {
+        difficulty: cachedDifficulty,
+        price: cachedPrice
+      };
+    }
+    
+    // Otherwise, fetch from API
     const response = await axios.get('https://api.minerstat.com/v2/coins?list=BTC');
     const btcData = response.data[0];
 
@@ -35,8 +56,13 @@ async function fetchFromMinerstat() {
     console.log('Minerstat API response:', {
       difficulty: btcData.difficulty,
       priceUsd: btcData.price,
-      priceGbp: priceInGbp
+      priceGbp: priceInGbp,
+      source: 'api'
     });
+
+    // Store values in cache
+    priceCache.set('current', priceInGbp);
+    difficultyCache.set('current', btcData.difficulty);
 
     return {
       difficulty: btcData.difficulty,
@@ -50,7 +76,20 @@ async function fetchFromMinerstat() {
         data: error.response.data
       });
     }
-    // Fallback to default values for error handling
+    
+    // Check if we have any cached values to fall back to
+    const cachedPrice = priceCache.get('current');
+    const cachedDifficulty = difficultyCache.get('current');
+    
+    if (cachedPrice !== undefined && cachedDifficulty !== undefined) {
+      console.log('Falling back to cached values after API error');
+      return {
+        difficulty: cachedDifficulty,
+        price: cachedPrice
+      };
+    }
+    
+    // Last resort fallback values
     return {
       difficulty: 110568428300952, // Current difficulty as fallback
       price: 60000 // Example GBP price as fallback
@@ -186,14 +225,14 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
     });
     
     // Get current price from Minerstat
-    let currentPrice;
-    try {
-      const { price } = await fetchFromMinerstat();
-      currentPrice = price;
-    } catch (error) {
-      console.error('Failed to fetch current price:', error);
-    // Get current price from Minerstat
     const currentPrice = await fetchCurrentPrice();
+    
+    // If a lead party is specified, handle it specifically
+    if (leadParty) {
+      // Import dependencies needed for this section
+      const { db } = await import("../../db");
+      const { curtailmentRecords, historicalBitcoinCalculations } = await import("../../db/schema");
+      const { eq, and, inArray, sql } = await import("drizzle-orm");
       
       // Get date range for the month
       const [year, month] = yearMonth.split('-').map(n => parseInt(n, 10));
@@ -262,7 +301,7 @@ router.get('/monthly/:yearMonth', async (req: Request, res: Response) => {
       });
     }
     
-    // Get monthly mining potential data
+    // Get monthly mining potential data for non-lead party requests
     const potentialData = await getMonthlyMiningPotential(yearMonth, minerModel, farmId);
     
     res.json({
