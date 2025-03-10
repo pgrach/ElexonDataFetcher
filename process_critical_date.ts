@@ -15,7 +15,7 @@
 
 import { db } from "./db";
 import { curtailmentRecords } from "./db/schema";
-import { eq, and, between, sql } from "drizzle-orm";
+import { eq, and, between, sql, inArray } from "drizzle-orm";
 import { fetchBidsOffers, delay } from "./server/services/elexon";
 import * as fs from "fs/promises";
 import path from "path";
