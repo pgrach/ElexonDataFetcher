@@ -322,7 +322,7 @@ export async function getHourlyComparison(req: Request, res: Response) {
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
         volume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-        payment: sql<string>`SUM(${curtailmentRecords.payment}::numeric) * -1`, // Flip the sign to make it positive
+        payment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`,
       })
       .from(curtailmentRecords)
       .where(and(
