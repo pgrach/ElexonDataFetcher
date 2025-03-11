@@ -381,25 +381,22 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               data={monthlyChartData}
               margin={{ top: 20, right: 40, left: 20, bottom: 5 }}
             >
-              {/* Add background highlight for selected month - we do this using a custom layer before the chart components */}
-              {monthlyChartData.map((entry, index) => {
-                // Check if this is the currently selected month
-                if (entry.month === selectedMonth) {
-                  return (
-                    <g key={`highlight-${entry.month}`}>
-                      <rect
-                        x={`${(index / monthlyChartData.length) * 100}%`}
-                        y="0"
-                        width={`${100 / monthlyChartData.length}%`}
-                        height="100%"
-                        fill="#f0f0f0"
-                        fillOpacity={0.7}
-                      />
-                    </g>
-                  );
-                }
-                return null;
-              })}
+              {/* Add background highlight for selected month - using a better approach with cell background */}
+              <defs>
+                <pattern id="selectedMonthPattern" patternUnits="userSpaceOnUse" width="100%" height="100%">
+                  <rect x="0" y="0" width="100%" height="100%" fill="#f0f0f0" />
+                </pattern>
+              </defs>
+              {/* We'll use a reference area to create a full-column highlight */}
+              <ReferenceArea
+                x1={selectedMonth} 
+                x2={selectedMonth}
+                yAxisId="left"
+                strokeOpacity={0}
+                fill="#f0f0f0"
+                fillOpacity={0.5}
+                ifOverflow="extendDomain"
+              />
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="month" 
