@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList, ReferenceLine } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList, ReferenceLine, ReferenceArea } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface CurtailmentChartProps {
@@ -381,46 +381,25 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               data={monthlyChartData}
               margin={{ top: 20, right: 40, left: 20, bottom: 5 }}
             >
-              {/* Add background highlight for selected month */}
-              <ReferenceLine 
-                x={selectedMonth}
-                stroke="none" 
-                strokeWidth={0}
-                ifOverflow="hidden"
-                isFront={false}
-                className="highlight-selected-month"
-                segment={[
-                  { x: selectedMonth, y: 0 },
-                  { x: selectedMonth, y: Math.max(...monthlyChartData.map(d => d.curtailedEnergy)) * 1.5 }
-                ]}
-                shape={(props) => {
-                  // Find the x value of the selected month
-                  const selectedMonthIndex = monthlyChartData.findIndex(d => d.month === selectedMonth);
-                  
-                  if (selectedMonthIndex === -1) return null;
-                  
-                  // Get the bar widths
-                  const barCount = monthlyChartData.length;
-                  const barWidth = props.width / barCount;
-                  
-                  // Calculate x position
-                  const x = props.xAxis.scale(selectedMonth) - barWidth/2;
-                  
-                  // Calculate full height
-                  const height = props.chartHeight;
-                  
+              {/* Add background highlight for selected month - we do this using a custom layer before the chart components */}
+              {monthlyChartData.map((entry, index) => {
+                // Check if this is the currently selected month
+                if (entry.month === selectedMonth) {
                   return (
-                    <rect
-                      x={x}
-                      y={0}
-                      width={barWidth}
-                      height={height}
-                      fill="#f0f0f0"
-                      fillOpacity={0.7}
-                    />
+                    <g key={`highlight-${entry.month}`}>
+                      <rect
+                        x={`${(index / monthlyChartData.length) * 100}%`}
+                        y="0"
+                        width={`${100 / monthlyChartData.length}%`}
+                        height="100%"
+                        fill="#f0f0f0"
+                        fillOpacity={0.7}
+                      />
+                    </g>
                   );
-                }}
-              />
+                }
+                return null;
+              })}
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="month" 
