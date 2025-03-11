@@ -70,9 +70,9 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     enabled: timeframe === "daily" // Only fetch when in daily view
   });
   
-  // Fetch monthly data for monthly view - using actual API data for all months
+  // Fetch monthly data for monthly view - using same endpoints as summary cards
   const { data: monthlyData = [], isLoading: isMonthlyLoading } = useQuery({
-    queryKey: [`/api/monthly-chart-data`, currentYear, minerModel, farmId],
+    queryKey: [`/api/mining-potential/monthly-data`, currentYear, minerModel, farmId],
     queryFn: async () => {
       // Fetch data for each month of the year
       const months = [];
@@ -87,9 +87,12 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
       // Get data from API for all months
       for (const yearMonth of months) {
         try {
-          // For all months, fetch from the API
-          const summaryUrl = new URL(`/api/summary/monthly/${yearMonth}`, window.location.origin);
-          const bitcoinUrl = new URL(`/api/curtailment/monthly-mining-potential/${yearMonth}`, window.location.origin);
+          // Use the same endpoints as summary cards to ensure data consistency
+          const summaryEndpoint = `/api/summary/monthly/${yearMonth}`;
+          const bitcoinEndpoint = `/api/mining-potential/monthly/${yearMonth}`;
+          
+          const summaryUrl = new URL(summaryEndpoint, window.location.origin);
+          const bitcoinUrl = new URL(bitcoinEndpoint, window.location.origin);
           
           // Add parameters
           if (farmId) {
@@ -98,8 +101,6 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
           }
           
           bitcoinUrl.searchParams.set("minerModel", minerModel);
-          
-          console.log(`Fetching monthly summary data for ${yearMonth}...`);
           
           // Get curtailment energy data
           const summaryResponse = await fetch(summaryUrl);
@@ -111,16 +112,14 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
           if (summaryResponse.ok) {
             const summaryData = await summaryResponse.json();
             curtailedEnergy = Number(summaryData.totalCurtailedEnergy) || 0;
-            console.log(`Energy data for ${yearMonth}:`, summaryData);
           }
           
           if (bitcoinResponse.ok) {
             const bitcoinData = await bitcoinResponse.json();
             bitcoinMined = Number(bitcoinData.bitcoinMined) || 0;
-            console.log(`Bitcoin data for ${yearMonth}:`, bitcoinData);
           }
           
-          console.log(`API values for ${yearMonth}: Energy=${curtailedEnergy.toLocaleString()} MWh, Bitcoin=${bitcoinMined.toFixed(4)}`);
+          console.log(`Monthly data for ${yearMonth}: Energy=${curtailedEnergy.toLocaleString()} MWh, Bitcoin=${bitcoinMined.toFixed(4)}`);
           
           monthlyDataArray.push({
             month: yearMonth,
@@ -203,18 +202,20 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
   });
   
   // Process data for the monthly chart
-  console.log("Monthly data before processing:", monthlyData);
+  // Convert yearMonth strings to short month names and format values
   const monthlyChartData = monthlyData
     .filter((item: any) => item && item.month) // Filter out any invalid items
     .map((item: any) => {
+      // Convert YYYY-MM to abbreviated month name (Jan, Feb, etc.)
       const month = new Date(item.month + "-01").toLocaleString('default', { month: 'short' });
       return {
         month,
+        originalMonth: item.month, // Keep original format for debugging
         curtailedEnergy: Number(item.curtailedEnergy) || 0,
         bitcoinMined: Number(item.bitcoinMined) || 0
       };
     });
-  console.log("Processed monthly chart data:", monthlyChartData);
+  console.log("Monthly data for chart:", monthlyChartData);
   
   // Helper for checking if an hour is in the future
   const isHourInFuture = (hourStr: string) => {
@@ -237,6 +238,13 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     if (currentYear > now.getFullYear()) return true;
     if (currentYear < now.getFullYear()) return false;
     return monthIndex > now.getMonth();
+  };
+  
+  // Helper for checking if a month is the selected month
+  const isSelectedMonth = (monthStr: string) => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const selectedMonth = format(date, 'MMM');
+    return monthStr === selectedMonth;
   };
   
   // Get max Bitcoin value for right Y-axis scaling (daily)
@@ -417,7 +425,12 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                   }
                   return [`₿${value.toFixed(4)}`, "Bitcoin Mined"];
                 }}
-                labelFormatter={(label) => `Month: ${label}`}
+                labelFormatter={(label) => {
+                  const isCurrentMonth = isSelectedMonth(label);
+                  return isCurrentMonth 
+                    ? `Month: ${label} (Selected)` 
+                    : `Month: ${label}`;
+                }}
               />
               <Legend />
               <Bar
@@ -425,10 +438,27 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                 dataKey="curtailedEnergy"
                 fill="#000000"
                 name="Curtailed Energy (MWh)"
-                // Apply different styling for future months
+                // Apply different styling for future months and selected month
                 shape={(props: any) => {
                   const { x, y, width, height, payload } = props;
                   const inFuture = isMonthInFuture(payload.month);
+                  const isSelected = isSelectedMonth(payload.month);
+                  
+                  // Determine fill and stroke colors based on month status
+                  let fillColor = "#000000"; // Default fill for normal months
+                  let strokeColor = "none"; // Default no stroke
+                  let strokeWidth = 1;
+                  
+                  if (inFuture) {
+                    fillColor = "#f5f5f5"; // Light fill for future months
+                    strokeColor = "#000000"; // Outlined
+                  }
+                  
+                  if (isSelected) {
+                    fillColor = "#e5e5e5"; // Highlight color for selected month
+                    strokeColor = "#0070f3"; // Blue outline for selected month
+                    strokeWidth = 2; // Thicker stroke for emphasis
+                  }
                   
                   return (
                     <rect
@@ -437,9 +467,9 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                       y={y}
                       width={width}
                       height={height}
-                      fill={inFuture ? "#f5f5f5" : "#000000"}
-                      stroke={inFuture ? "#000000" : "none"}
-                      strokeWidth={1}
+                      fill={fillColor}
+                      stroke={strokeColor}
+                      strokeWidth={strokeWidth}
                       r={0}
                     />
                   );
