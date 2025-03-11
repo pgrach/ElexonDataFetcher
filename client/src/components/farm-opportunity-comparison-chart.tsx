@@ -52,6 +52,17 @@ export default function FarmOpportunityComparisonChart({
   
   // Format GBP values for tooltips
   const formatGBP = (value: number) => {
+    // For small values under 1, use 2 decimal places to show proper precision
+    if (value > 0 && value < 1) {
+      return new Intl.NumberFormat('en-GB', {
+        style: 'currency',
+        currency: 'GBP',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+    }
+    
+    // For larger values, use no decimal places
     return new Intl.NumberFormat('en-GB', {
       style: 'currency',
       currency: 'GBP',
