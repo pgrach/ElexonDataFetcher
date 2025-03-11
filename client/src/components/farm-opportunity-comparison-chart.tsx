@@ -84,7 +84,6 @@ export default function FarmOpportunityComparisonChart({
       return (
         <div className="bg-white p-3 border border-gray-200 rounded-md shadow-md">
           <p className="font-semibold">{label}</p>
-          <p>Energy: {curtailedEnergy.toFixed(2)} MWh</p>
           <p style={{ color: '#000000' }}>Curtailment Payment: {formatGBP(paymentPerMwh)}/MWh</p>
           <p style={{ color: '#F7931A' }}>Bitcoin Value: {formatGBP(bitcoinValuePerMwh)}/MWh</p>
           <div className="border-t pt-1 mt-1">
