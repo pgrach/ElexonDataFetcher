@@ -50,6 +50,10 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
   const formattedDate = format(date, "yyyy-MM-dd");
   const formattedYearMonth = format(date, "yyyy-MM");
   const currentYear = date.getFullYear();
+  const selectedMonth = format(date, "MMM");  // Get the selected month abbreviation (e.g., "Mar")
+  
+  // Log the selected month for debugging
+  console.log("Selected month for highlighting:", selectedMonth);
   
   // Fetch hourly data for daily view
   const { data: hourlyData = [], isLoading: isHourlyLoading } = useQuery({
@@ -429,6 +433,24 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                 shape={(props: any) => {
                   const { x, y, width, height, payload } = props;
                   const inFuture = isMonthInFuture(payload.month);
+                  const isSelectedMonth = payload.month === selectedMonth;
+                  
+                  // Choose fill color based on whether it's the selected month or future month
+                  let fillColor = "#000000"; // Default black
+                  let strokeColor = "none";
+                  let strokeWidth = 1;
+                  
+                  if (inFuture) {
+                    fillColor = "#f5f5f5"; // Light grey for future months
+                    strokeColor = "#000000";
+                  } else if (isSelectedMonth) {
+                    // Use a darker grey fill for the selected month to make it stand out
+                    fillColor = "#c0c0c0"; // Medium grey highlight for selected month
+                    strokeColor = "#000000";
+                    
+                    // Debug info
+                    console.log(`Highlighting month: ${payload.month} (selected: ${selectedMonth})`);
+                  }
                   
                   return (
                     <rect
@@ -437,9 +459,9 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                       y={y}
                       width={width}
                       height={height}
-                      fill={inFuture ? "#f5f5f5" : "#000000"}
-                      stroke={inFuture ? "#000000" : "none"}
-                      strokeWidth={1}
+                      fill={fillColor}
+                      stroke={strokeColor}
+                      strokeWidth={strokeWidth}
                       r={0}
                     />
                   );
