@@ -538,10 +538,10 @@ export async function getFarmOpportunityComparison(
         timePeriod: period === 'day' 
           ? curtailmentRecords.settlementPeriod
           : sql`EXTRACT(DAY FROM ${curtailmentRecords.settlementDate})::integer`,
-        totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`,
-        totalPayment: sql<number>`SUM(payment)`,
+        totalCurtailedEnergy: sql<number>`SUM(ABS(${curtailmentRecords.volume}))`,
+        totalPayment: sql<number>`SUM(${curtailmentRecords.payment})`,
         // Payment per MWh (£/MWh) for curtailment
-        paymentPerMwh: sql<number>`CASE WHEN SUM(ABS(volume)) > 0 THEN SUM(payment) / SUM(ABS(volume)) ELSE 0 END`
+        paymentPerMwh: sql<number>`CASE WHEN SUM(ABS(${curtailmentRecords.volume})) > 0 THEN SUM(${curtailmentRecords.payment}) / SUM(ABS(${curtailmentRecords.volume})) ELSE 0 END`
       })
       .from(curtailmentRecords)
       .where(
@@ -550,7 +550,7 @@ export async function getFarmOpportunityComparison(
           eq(curtailmentRecords.farmId, farmId)
         )
       )
-      .groupBy(groupByExpression)
+      .groupBy(period === 'day' ? curtailmentRecords.settlementPeriod : sql`EXTRACT(DAY FROM ${curtailmentRecords.settlementDate})`)
       .orderBy(
         period === 'day' 
           ? curtailmentRecords.settlementPeriod
@@ -563,8 +563,8 @@ export async function getFarmOpportunityComparison(
         timePeriod: period === 'day' 
           ? historicalBitcoinCalculations.settlementPeriod
           : sql`EXTRACT(DAY FROM ${historicalBitcoinCalculations.settlementDate})::integer`,
-        totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`,
-        difficulty: sql<number>`AVG(difficulty)`,
+        totalBitcoinMined: sql<number>`SUM(${historicalBitcoinCalculations.bitcoinMined})`,
+        difficulty: sql<number>`AVG(${historicalBitcoinCalculations.difficulty})`,
         // We need to match the same settlement date and periods that exist in curtailment data
         settlementDate: historicalBitcoinCalculations.settlementDate
       })
@@ -579,7 +579,7 @@ export async function getFarmOpportunityComparison(
       .groupBy(
         period === 'day' 
           ? historicalBitcoinCalculations.settlementPeriod
-          : sql`EXTRACT(DAY FROM ${historicalBitcoinCalculations.settlementDate})::integer`,
+          : sql`EXTRACT(DAY FROM ${historicalBitcoinCalculations.settlementDate})`,
         historicalBitcoinCalculations.settlementDate
       )
       .orderBy(
