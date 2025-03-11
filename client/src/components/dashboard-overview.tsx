@@ -7,7 +7,6 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import TimeframeSelector from "@/components/timeframe-selector";
 import CurtailmentChart from "@/components/curtailment-chart";
 import FarmComparisonChart from "@/components/farm-comparison-chart";
-import FarmOpportunityComparisonChart from "@/components/farm-opportunity-comparison-chart";
 import BitcoinPotentialTable from "@/components/bitcoin-potential-table";
 import MinerModelSelector from "@/components/miner-model-selector";
 import { DatePicker } from "@/components/date-picker";
@@ -110,23 +109,12 @@ export default function DashboardOverview() {
               farmId={farmIdToUse}
             />
             
-            {/* Show different charts based on farm selection */}
-            {selectedFarm === 'all' ? (
-              // For all farms, show the Farm Comparison Chart
-              <FarmComparisonChart
-                timeframe={timeframe}
-                date={date}
-                minerModel={selectedMinerModel}
-              />
-            ) : (
-              // For specific farm selection, show the Farm Opportunity Comparison Chart
-              <FarmOpportunityComparisonChart
-                timeframe={timeframe}
-                date={date}
-                minerModel={selectedMinerModel}
-                farmId={selectedFarm}
-              />
-            )}
+            {/* Farm Comparison Chart */}
+            <FarmComparisonChart
+              timeframe={timeframe}
+              date={date}
+              minerModel={selectedMinerModel}
+            />
           </TabsContent>
           
           <TabsContent value="data">

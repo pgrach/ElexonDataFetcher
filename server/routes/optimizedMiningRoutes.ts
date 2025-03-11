@@ -15,8 +15,7 @@ import {
   getYearlyMiningPotential,
   getFarmStatistics,
   getTopCurtailedFarms,
-  getAvailableFarms,
-  getFarmOpportunityComparison
+  getAvailableFarms
 } from "../services/optimizedMiningService";
 
 import { priceCache, difficultyCache } from '../utils/cache';
@@ -441,63 +440,6 @@ router.get('/yearly/:year', async (req: Request, res: Response) => {
     console.error('Error in yearly mining potential endpoint:', error);
     res.status(500).json({
       error: 'Failed to calculate yearly mining potential',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Farm opportunity comparison endpoint
-router.get('/farm-opportunity-comparison/:farmId', async (req: Request, res: Response) => {
-  try {
-    const { farmId } = req.params;
-    const period = (req.query.period as 'day' | 'month') || 'day';
-    let value = req.query.value as string;
-    const minerModel = req.query.minerModel as string || 'S19J_PRO';
-    
-    // Validate farmId
-    if (!farmId) {
-      return res.status(400).json({
-        error: 'Missing farmId',
-        message: 'Please provide a valid farm ID'
-      });
-    }
-    
-    // Set default value based on period type
-    if (!value) {
-      if (period === 'day') {
-        value = format(new Date(), 'yyyy-MM-dd');
-      } else if (period === 'month') {
-        value = format(new Date(), 'yyyy-MM');
-      }
-    }
-    
-    // Validate value format based on period
-    if (period === 'day' && !value.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      return res.status(400).json({
-        error: 'Invalid date format',
-        message: 'Please provide a valid date in YYYY-MM-DD format'
-      });
-    } else if (period === 'month' && !value.match(/^\d{4}-\d{2}$/)) {
-      return res.status(400).json({
-        error: 'Invalid month format',
-        message: 'Please provide a valid month in YYYY-MM format'
-      });
-    }
-    
-    console.log(`Farm opportunity comparison request for ${farmId}:`, {
-      period,
-      value,
-      minerModel
-    });
-    
-    // Get opportunity comparison data
-    const data = await getFarmOpportunityComparison(period, value, farmId, minerModel);
-    
-    res.json(data);
-  } catch (error) {
-    console.error('Error in farm opportunity comparison endpoint:', error);
-    res.status(500).json({
-      error: 'Failed to get farm opportunity comparison data',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
