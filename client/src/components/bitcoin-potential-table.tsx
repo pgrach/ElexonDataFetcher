@@ -147,15 +147,15 @@ export default function BitcoinPotentialTable({
               </TableRow>
               <TableRow>
                 <TableCell>Bitcoin Value (at current price)</TableCell>
-                <TableCell className="text-right">£{Number(bitcoinData.valueAtCurrentPrice).toLocaleString('en-GB', { maximumFractionDigits: 2 })}</TableCell>
+                <TableCell className="text-right">£{Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString('en-GB')}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Current Bitcoin Price</TableCell>
-                <TableCell className="text-right">£{Number(bitcoinData.currentPrice).toLocaleString('en-GB', { maximumFractionDigits: 2 })}</TableCell>
+                <TableCell className="text-right">£{Math.round(Number(bitcoinData.currentPrice)).toLocaleString('en-GB')}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Curtailment Payment</TableCell>
-                <TableCell className="text-right">£{Number(summaryData.totalPayment).toLocaleString()}</TableCell>
+                <TableCell className="text-right">£{Math.round(Number(summaryData.totalPayment)).toLocaleString()}</TableCell>
               </TableRow>
               {/* Add ratio comparison */}
               <TableRow>
