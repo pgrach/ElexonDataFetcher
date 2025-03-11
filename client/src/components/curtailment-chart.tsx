@@ -70,9 +70,9 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     enabled: timeframe === "daily" // Only fetch when in daily view
   });
   
-  // Fetch monthly data for monthly view using hard-coded values for Feb to match the dashboard (temporary fix)
+  // Fetch monthly data for monthly view - using actual API data for all months
   const { data: monthlyData = [], isLoading: isMonthlyLoading } = useQuery({
-    queryKey: [`/api/summary/monthly-fixed`, currentYear, minerModel, farmId],
+    queryKey: [`/api/monthly-chart-data`, currentYear, minerModel, farmId],
     queryFn: async () => {
       // Fetch data for each month of the year
       const months = [];
@@ -84,45 +84,12 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
         months.push(yearMonth);
       }
       
-      // Use hard-coded data for February to match dashboard cards
-      // For all other months, fetch from the API
+      // Get data from API for all months
       for (const yearMonth of months) {
         try {
-          // Special cases for Q1 months to make chart data complete
-          // This is a temporary solution until we fix the API discrepancies
-          if (yearMonth === "2025-01") {
-            console.log("Using fixed values for January 2025");
-            monthlyDataArray.push({
-              month: yearMonth,
-              curtailedEnergy: 543298.347, // Example value based on card pattern
-              bitcoinMined: 98.4     // Example value based on card pattern
-            });
-            continue; // Skip API call for January
-          }
-          
-          if (yearMonth === "2025-02") {
-            console.log("Using fixed values for February 2025 to match dashboard card");
-            monthlyDataArray.push({
-              month: yearMonth,
-              curtailedEnergy: 1146396.662, // From dashboard card exactly
-              bitcoinMined: 217        // From dashboard card exactly
-            });
-            continue; // Skip API call for February
-          }
-          
-          if (yearMonth === "2025-03") {
-            console.log("Using fixed values for March 2025");
-            monthlyDataArray.push({
-              month: yearMonth,
-              curtailedEnergy: 362514.789, // Example value based on card pattern
-              bitcoinMined: 75.64      // Example value based on card pattern
-            });
-            continue; // Skip API call for March
-          }
-          
-          // For other months, get data from API
+          // For all months, fetch from the API
           const summaryUrl = new URL(`/api/summary/monthly/${yearMonth}`, window.location.origin);
-          const bitcoinUrl = new URL(`/api/summary/monthly/${yearMonth}/bitcoin`, window.location.origin);
+          const bitcoinUrl = new URL(`/api/curtailment/monthly-mining-potential/${yearMonth}`, window.location.origin);
           
           // Add parameters
           if (farmId) {
