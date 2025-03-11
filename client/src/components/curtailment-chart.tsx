@@ -393,8 +393,8 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                 x2={selectedMonth}
                 yAxisId="left"
                 strokeOpacity={0}
-                fill="#f0f0f0"
-                fillOpacity={0.5}
+                fill="#f6f6f6"
+                fillOpacity={0.9}
                 ifOverflow="extendDomain"
               />
               <CartesianGrid strokeDasharray="3 3" />
