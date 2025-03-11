@@ -495,6 +495,174 @@ export async function getTopCurtailedFarms(
 }
 
 /**
+ * Get comparative data for Payment vs Bitcoin opportunity loss
+ * Returns hourly data (by settlement period) for a specific farm
+ */
+export async function getFarmOpportunityComparison(
+  period: 'day' | 'month', 
+  value: string, 
+  farmId: string,
+  minerModel: string = 'S19J_PRO'
+): Promise<any[]> {
+  console.log(`Getting opportunity comparison for ${farmId}, period: ${period}, value: ${value}, model: ${minerModel}`);
+  
+  try {
+    let dateCondition;
+    let groupByExpression;
+    
+    if (period === 'day') {
+      // For a specific day - group by settlement period (hour)
+      dateCondition = eq(curtailmentRecords.settlementDate, value);
+      groupByExpression = curtailmentRecords.settlementPeriod;
+    } else if (period === 'month') {
+      // For a specific month - group by day of month
+      const [year, month] = value.split('-').map(n => parseInt(n, 10));
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0); // Last day of month
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+      
+      dateCondition = sql`${curtailmentRecords.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
+      groupByExpression = sql`EXTRACT(DAY FROM ${curtailmentRecords.settlementDate})`;
+    } else {
+      throw new Error(`Invalid period type: ${period}`);
+    }
+    
+    // Get curtailment data grouped by period or day
+    const curtailmentData = await db
+      .select({
+        // For daily, this is the hour (settlement period 1-48)
+        // For monthly, this is the day of month (1-31)
+        timePeriod: period === 'day' 
+          ? curtailmentRecords.settlementPeriod
+          : sql`EXTRACT(DAY FROM ${curtailmentRecords.settlementDate})::integer`,
+        totalCurtailedEnergy: sql<number>`SUM(ABS(volume))`,
+        totalPayment: sql<number>`SUM(payment)`,
+        // Payment per MWh (£/MWh) for curtailment
+        paymentPerMwh: sql<number>`CASE WHEN SUM(ABS(volume)) > 0 THEN SUM(payment) / SUM(ABS(volume)) ELSE 0 END`
+      })
+      .from(curtailmentRecords)
+      .where(
+        and(
+          dateCondition,
+          eq(curtailmentRecords.farmId, farmId)
+        )
+      )
+      .groupBy(groupByExpression)
+      .orderBy(
+        period === 'day' 
+          ? curtailmentRecords.settlementPeriod
+          : sql`EXTRACT(DAY FROM ${curtailmentRecords.settlementDate})::integer`
+      );
+    
+    // Get corresponding Bitcoin data for the same periods
+    const bitcoinData = await db
+      .select({
+        timePeriod: period === 'day' 
+          ? historicalBitcoinCalculations.settlementPeriod
+          : sql`EXTRACT(DAY FROM ${historicalBitcoinCalculations.settlementDate})::integer`,
+        totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`,
+        difficulty: sql<number>`AVG(difficulty)`,
+        // We need to match the same settlement date and periods that exist in curtailment data
+        settlementDate: historicalBitcoinCalculations.settlementDate
+      })
+      .from(historicalBitcoinCalculations)
+      .where(
+        and(
+          dateCondition,
+          eq(historicalBitcoinCalculations.farmId, farmId),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        )
+      )
+      .groupBy(
+        period === 'day' 
+          ? historicalBitcoinCalculations.settlementPeriod
+          : sql`EXTRACT(DAY FROM ${historicalBitcoinCalculations.settlementDate})::integer`,
+        historicalBitcoinCalculations.settlementDate
+      )
+      .orderBy(
+        period === 'day' 
+          ? historicalBitcoinCalculations.settlementPeriod
+          : sql`EXTRACT(DAY FROM ${historicalBitcoinCalculations.settlementDate})::integer`
+      );
+    
+    // Fetch current price for Bitcoin
+    let currentPrice;
+    try {
+      const priceQuery = await db
+        .select({
+          price: sql<number>`MAX(value_at_mining / bitcoin_mined)`
+        })
+        .from(bitcoinMonthlySummaries)
+        .where(sql`created_at > NOW() - INTERVAL '7 days'`);
+        
+      currentPrice = Number(priceQuery[0]?.price || 0);
+      
+      // If we couldn't get price from DB, default to a reasonable value
+      if (!currentPrice) {
+        console.log('Could not determine Bitcoin price from DB, using cached or default value');
+        const cachedPrice = priceCache.get('current');
+        currentPrice = cachedPrice || 50000; // Default fallback
+      }
+    } catch (error) {
+      console.error('Error fetching current Bitcoin price:', error);
+      currentPrice = 50000; // Default fallback if everything fails
+    }
+    
+    // Merge and transform the data
+    const mergedResults = curtailmentData.map(curtailment => {
+      // Find matching Bitcoin data
+      const bitcoin = bitcoinData.find(b => b.timePeriod === curtailment.timePeriod);
+      
+      // Calculate Bitcoin value in GBP
+      const bitcoinValueGbp = bitcoin 
+        ? Number(bitcoin.totalBitcoinMined) * currentPrice 
+        : 0;
+      
+      // Calculate Bitcoin value per MWh
+      const bitcoinValuePerMwh = Number(curtailment.totalCurtailedEnergy) > 0
+        ? bitcoinValueGbp / Number(curtailment.totalCurtailedEnergy)
+        : 0;
+      
+      // Convert settlement period to hour format for display (1-48 to 00:30, 01:00, etc.)
+      let timeLabel;
+      if (period === 'day') {
+        // Settlement periods are 30-minute intervals, 48 per day
+        const periodNumber = Number(curtailment.timePeriod);
+        const hour = Math.floor((periodNumber - 1) / 2);
+        const minute = ((periodNumber - 1) % 2) * 30;
+        timeLabel = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      } else {
+        // For monthly view, just use the day number
+        timeLabel = `Day ${curtailment.timePeriod}`;
+      }
+      
+      return {
+        // Time period label (hour or day)
+        timeLabel,
+        // Original period number for sorting
+        timePeriod: Number(curtailment.timePeriod),
+        // Curtailment data
+        curtailedEnergy: Number(curtailment.totalCurtailedEnergy),
+        curtailmentPayment: Number(curtailment.totalPayment),
+        paymentPerMwh: Number(curtailment.paymentPerMwh),
+        // Bitcoin data
+        bitcoinMined: bitcoin ? Number(bitcoin.totalBitcoinMined) : 0,
+        bitcoinValueGbp: bitcoinValueGbp,
+        bitcoinValuePerMwh: bitcoinValuePerMwh,
+        // Additional metadata
+        difficulty: bitcoin ? Number(bitcoin.difficulty) : 0
+      };
+    });
+    
+    return mergedResults;
+  } catch (error) {
+    console.error(`Error getting opportunity comparison for ${farmId}:`, error);
+    throw error;
+  }
+}
+
+/**
  * Get farm-specific statistics across time periods
  */
 /**

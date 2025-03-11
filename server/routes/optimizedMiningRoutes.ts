@@ -15,7 +15,8 @@ import {
   getYearlyMiningPotential,
   getFarmStatistics,
   getTopCurtailedFarms,
-  getAvailableFarms
+  getAvailableFarms,
+  getFarmOpportunityComparison
 } from "../services/optimizedMiningService";
 
 import { priceCache, difficultyCache } from '../utils/cache';
