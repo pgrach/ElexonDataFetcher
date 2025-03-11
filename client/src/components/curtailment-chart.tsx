@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList, ReferenceLine } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface CurtailmentChartProps {
@@ -381,6 +381,46 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               data={monthlyChartData}
               margin={{ top: 20, right: 40, left: 20, bottom: 5 }}
             >
+              {/* Add background highlight for selected month */}
+              <ReferenceLine 
+                x={selectedMonth}
+                stroke="none" 
+                strokeWidth={0}
+                ifOverflow="hidden"
+                isFront={false}
+                className="highlight-selected-month"
+                segment={[
+                  { x: selectedMonth, y: 0 },
+                  { x: selectedMonth, y: Math.max(...monthlyChartData.map(d => d.curtailedEnergy)) * 1.5 }
+                ]}
+                shape={(props) => {
+                  // Find the x value of the selected month
+                  const selectedMonthIndex = monthlyChartData.findIndex(d => d.month === selectedMonth);
+                  
+                  if (selectedMonthIndex === -1) return null;
+                  
+                  // Get the bar widths
+                  const barCount = monthlyChartData.length;
+                  const barWidth = props.width / barCount;
+                  
+                  // Calculate x position
+                  const x = props.xAxis.scale(selectedMonth) - barWidth/2;
+                  
+                  // Calculate full height
+                  const height = props.chartHeight;
+                  
+                  return (
+                    <rect
+                      x={x}
+                      y={0}
+                      width={barWidth}
+                      height={height}
+                      fill="#f0f0f0"
+                      fillOpacity={0.7}
+                    />
+                  );
+                }}
+              />
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="month" 
@@ -445,7 +485,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                     strokeColor = "#000000";
                   } else if (isSelectedMonth) {
                     // Use a darker grey fill for the selected month to make it stand out
-                    fillColor = "#c0c0c0"; // Medium grey highlight for selected month
+                    fillColor = "#000000"; // Keep black for selected month bar
                     strokeColor = "#000000";
                     
                     // Debug info
