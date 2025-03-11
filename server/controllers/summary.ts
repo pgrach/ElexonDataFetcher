@@ -321,7 +321,7 @@ export async function getHourlyComparison(req: Request, res: Response) {
     const periodData = await db
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
-        volume: sql<string>`SUM(${curtailmentRecords.volume}::numeric)`,
+        volume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
         payment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`,
       })
       .from(curtailmentRecords)
@@ -488,7 +488,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       return res.json({
         year,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Number(farmTotals[0].totalPayment) // No need to flip the sign as values are already positive
+        totalPayment: Number(farmTotals[0].totalPayment) * -1 // Flip the sign
       });
     }
 
@@ -538,7 +538,7 @@ export async function getYearlySummary(req: Request, res: Response) {
     res.json({
       year,
       totalCurtailedEnergy: yearTotals.totalCurtailedEnergy,
-      totalPayment: yearTotals.totalPayment // No need to flip the sign as values are already positive
+      totalPayment: yearTotals.totalPayment * -1 // Flip the sign
     });
   } catch (error) {
     console.error('Error fetching yearly summary:', error);
