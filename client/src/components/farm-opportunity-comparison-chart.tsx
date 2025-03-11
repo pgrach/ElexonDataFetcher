@@ -23,6 +23,16 @@ interface HourlyComparisonData {
   bitcoinValuePerMwh: number;
 }
 
+interface MonthlyComparisonData {
+  day: string;
+  curtailedEnergy: number;
+  paymentAmount: number;
+  bitcoinMined: number;
+  currentPrice: number;
+  paymentPerMwh: number;
+  bitcoinValuePerMwh: number;
+}
+
 export default function FarmOpportunityComparisonChart({ 
   timeframe, 
   date, 
@@ -30,9 +40,10 @@ export default function FarmOpportunityComparisonChart({
   farmId 
 }: FarmOpportunityComparisonChartProps) {
   const formattedDate = format(date, "yyyy-MM-dd");
+  const formattedYearMonth = format(date, "yyyy-MM");
   
   // Only fetch when timeframe is daily and a farm is selected
-  const { data: hourlyData = [], isLoading } = useQuery<HourlyComparisonData[]>({
+  const { data: hourlyData = [], isLoading: isLoadingHourly } = useQuery<HourlyComparisonData[]>({
     queryKey: [`/api/curtailment/hourly-comparison/${formattedDate}`, farmId, minerModel],
     queryFn: async () => {
       const url = new URL(`/api/curtailment/hourly-comparison/${formattedDate}`, window.location.origin);
@@ -48,6 +59,28 @@ export default function FarmOpportunityComparisonChart({
       return response.json();
     },
     enabled: timeframe === "daily" && !!farmId // Only fetch when in daily view and a farm is selected
+  });
+  
+  // Only fetch monthly data when timeframe is monthly and a farm is selected
+  const { data: monthlyData = [], isLoading: isLoadingMonthly } = useQuery<MonthlyComparisonData[]>({
+    queryKey: [`/api/curtailment/monthly-comparison/${formattedYearMonth}`, farmId, minerModel],
+    queryFn: async () => {
+      const url = new URL(`/api/curtailment/monthly-comparison/${formattedYearMonth}`, window.location.origin);
+      url.searchParams.set("leadParty", farmId);
+      url.searchParams.set("minerModel", minerModel);
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch monthly comparison data");
+      }
+      
+      console.log("Monthly data before processing:", await response.clone().json());
+      const data = await response.json();
+      console.log("Processed monthly chart data:", data);
+      return data;
+    },
+    enabled: timeframe === "monthly" && !!farmId // Only fetch when in monthly view and a farm is selected
   });
   
   // Format GBP values for tooltips

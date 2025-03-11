@@ -448,6 +448,166 @@ async function fetchCurrentPrice(): Promise<number | null> {
   }
 }
 
+export async function getMonthlyComparison(req: Request, res: Response) {
+  try {
+    const { yearMonth } = req.params;
+    const { leadParty, minerModel = 'S19J_PRO' } = req.query;
+
+    // Validate yearMonth format (YYYY-MM)
+    if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
+      return res.status(400).json({
+        error: "Invalid format. Please use YYYY-MM"
+      });
+    }
+
+    if (!leadParty) {
+      return res.status(400).json({
+        error: "leadParty parameter is required"
+      });
+    }
+
+    // Parse the year and month
+    const year = yearMonth.split('-')[0];
+    const month = yearMonth.split('-')[1];
+    
+    // Get all dates in the month
+    const startDate = new Date(`${yearMonth}-01`);
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + 1);
+    endDate.setDate(0); // Last day of the month
+    
+    const daysInMonth = endDate.getDate();
+    
+    // Initialize an array for each day of the month
+    const dailyResults = Array.from({ length: daysInMonth }, (_, i) => ({
+      day: `${(i + 1).toString().padStart(2, '0')}`,
+      curtailedEnergy: 0,
+      paymentAmount: 0,
+      bitcoinMined: 0,
+      currentPrice: 0,
+      paymentPerMwh: 0,
+      bitcoinValuePerMwh: 0
+    }));
+    
+    // First, get the current Bitcoin price
+    let currentPrice = 65000; // Default fallback value
+    try {
+      const fetchedPrice = await fetchCurrentPrice();
+      if (fetchedPrice) {
+        currentPrice = fetchedPrice;
+      }
+    } catch (error) {
+      console.warn('Error fetching Bitcoin price, using default value:', error);
+    }
+
+    // Get data per day for the whole month
+    const dailyData = await db
+      .select({
+        settlementDate: curtailmentRecords.settlementDate,
+        volume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+        payment: sql<string>`SUM(ABS(${curtailmentRecords.payment}::numeric))`,
+      })
+      .from(curtailmentRecords)
+      .where(and(
+        sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}::date) = ${year}`,
+        sql`EXTRACT(MONTH FROM ${curtailmentRecords.settlementDate}::date) = ${month}`,
+        eq(curtailmentRecords.leadPartyName, leadParty as string)
+      ))
+      .groupBy(curtailmentRecords.settlementDate)
+      .orderBy(curtailmentRecords.settlementDate);
+    
+    // Create a map of daily data for quick lookup
+    const dataByDay = new Map();
+    for (const record of dailyData) {
+      if (record.settlementDate) {
+        const date = new Date(record.settlementDate);
+        const day = date.getDate();
+        
+        dataByDay.set(day, {
+          volume: Number(record.volume || 0),
+          payment: Number(record.payment || 0)
+        });
+      }
+    }
+    
+    // Get Bitcoin data per day for the month
+    const bitcoinData = await db
+      .select({
+        settlementDate: historicalBitcoinCalculations.settlementDate,
+        bitcoinMined: sql<string>`SUM(${historicalBitcoinCalculations.bitcoinMined}::numeric)`,
+      })
+      .from(historicalBitcoinCalculations)
+      .innerJoin(
+        curtailmentRecords,
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, curtailmentRecords.settlementDate),
+          eq(historicalBitcoinCalculations.settlementPeriod, curtailmentRecords.settlementPeriod),
+          eq(historicalBitcoinCalculations.farmId, curtailmentRecords.farmId)
+        )
+      )
+      .where(and(
+        sql`EXTRACT(YEAR FROM ${historicalBitcoinCalculations.settlementDate}::date) = ${year}`,
+        sql`EXTRACT(MONTH FROM ${historicalBitcoinCalculations.settlementDate}::date) = ${month}`,
+        eq(curtailmentRecords.leadPartyName, leadParty as string),
+        eq(historicalBitcoinCalculations.minerModel, minerModel as string)
+      ))
+      .groupBy(historicalBitcoinCalculations.settlementDate)
+      .orderBy(historicalBitcoinCalculations.settlementDate);
+    
+    // Create a map of Bitcoin data by day for quick lookup
+    const bitcoinByDay = new Map();
+    for (const record of bitcoinData) {
+      if (record.settlementDate) {
+        const date = new Date(record.settlementDate);
+        const day = date.getDate();
+        
+        bitcoinByDay.set(day, {
+          bitcoinMined: Number(record.bitcoinMined || 0)
+        });
+      }
+    }
+    
+    // Fill the daily results array with actual data
+    for (let i = 0; i < daysInMonth; i++) {
+      const day = i + 1;
+      const dayData = dataByDay.get(day);
+      const bitcoinData = bitcoinByDay.get(day);
+      
+      if (dayData) {
+        dailyResults[i].curtailedEnergy = dayData.volume;
+        dailyResults[i].paymentAmount = dayData.payment;
+      }
+      
+      if (bitcoinData) {
+        dailyResults[i].bitcoinMined = bitcoinData.bitcoinMined;
+      }
+      
+      dailyResults[i].currentPrice = currentPrice;
+      
+      // Calculate per MWh rates
+      if (dailyResults[i].curtailedEnergy > 0) {
+        dailyResults[i].paymentPerMwh = Number((dailyResults[i].paymentAmount / dailyResults[i].curtailedEnergy).toFixed(2));
+        dailyResults[i].bitcoinValuePerMwh = Number(((dailyResults[i].bitcoinMined * currentPrice) / dailyResults[i].curtailedEnergy).toFixed(2));
+      }
+    }
+    
+    // Format values for consistency
+    dailyResults.forEach(result => {
+      result.curtailedEnergy = Number(result.curtailedEnergy.toFixed(2));
+      result.paymentAmount = Number(result.paymentAmount.toFixed(2));
+      result.bitcoinMined = Number(result.bitcoinMined.toFixed(6));
+    });
+    
+    res.json(dailyResults);
+    
+  } catch (error) {
+    console.error('Error fetching monthly comparison data:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching monthly comparison data"
+    });
+  }
+}
+
 export async function getYearlySummary(req: Request, res: Response) {
   try {
     const { year } = req.params;
