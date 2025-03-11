@@ -125,9 +125,14 @@ export default function FarmOpportunityComparisonChart({
         ? ((paymentPerMwh / bitcoinValuePerMwh) * 100).toFixed(2) 
         : '0';
       
+      // Format the label with appropriate prefix based on timeframe
+      const formattedLabel = timeframe === "daily" 
+        ? `${label}` 
+        : `Day ${label}`;
+      
       return (
         <div className="bg-white p-3 border border-gray-200 rounded-md shadow-md">
-          <p className="font-semibold">{label}</p>
+          <p className="font-semibold">{formattedLabel}</p>
           <p style={{ color: '#000000' }}>Curtailment Payment: {formatGBP(paymentPerMwh)}/MWh</p>
           <p style={{ color: '#F7931A' }}>Bitcoin Value: {formatGBP(bitcoinValuePerMwh)}/MWh</p>
           <div className="border-t pt-1 mt-1">
@@ -144,19 +149,50 @@ export default function FarmOpportunityComparisonChart({
     return null;
   };
   
-  // Check if hourly data has valid values
-  const hasValidData = hourlyData.some(hour => 
+  // Check if data has valid values
+  const hasValidHourlyData = hourlyData.some(hour => 
     hour.curtailedEnergy > 0 && (hour.paymentPerMwh > 0 || hour.bitcoinValuePerMwh > 0)
   );
   
-  // Get card title based on timeframe and farm ID
-  const chartTitle = farmId 
-    ? `Rate Comparison: Curtailment vs. Bitcoin (${format(date, "PP")})`
-    : "Select a farm to see rate comparison";
+  const hasValidMonthlyData = monthlyData.some(day => 
+    day.curtailedEnergy > 0 && (day.paymentPerMwh > 0 || day.bitcoinValuePerMwh > 0)
+  );
+  
+  // Determine if we have valid data for the current timeframe
+  const hasValidData = timeframe === "daily" ? hasValidHourlyData : hasValidMonthlyData;
+  
+  // Get chart data based on timeframe
+  const chartData = timeframe === "daily" ? hourlyData : monthlyData;
+  
+  // Get chart X-axis key based on timeframe
+  const xAxisKey = timeframe === "daily" ? "hour" : "day";
+  
+  // Get loading state based on timeframe
+  const isLoading = (timeframe === "daily" ? isLoadingHourly : isLoadingMonthly) || false;
+  
+  // Get X-axis label based on timeframe
+  const xAxisLabel = timeframe === "daily" ? "Hour" : "Day";
+  
+  // Get chart title based on timeframe and farm ID
+  const chartTitle = !farmId 
+    ? "Select a farm to see rate comparison"
+    : timeframe === "daily"
+      ? `Daily Rate Comparison: Curtailment vs. Bitcoin (${format(date, "PP")})`
+      : `Monthly Rate Comparison: Curtailment vs. Bitcoin (${format(date, "MMMM yyyy")})`;
   
   // Colors for the lines
   const curtailmentColor = "#000000"; // Black for curtailment
   const bitcoinColor = "#F7931A"; // Bitcoin orange
+  
+  // Format X-axis tick
+  const formatXAxisTick = (value: string) => {
+    if (timeframe === "daily") {
+      return value; // Return hour as is
+    } else {
+      // For daily view, add a "Day" prefix
+      return `${value}`;
+    }
+  };
   
   return (
     <Card>
@@ -172,18 +208,24 @@ export default function FarmOpportunityComparisonChart({
           </div>
         ) : !hasValidData ? (
           <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-            No comparison data available for this farm on {format(date, "PP")}
+            No comparison data available for this farm on {timeframe === "daily" ? format(date, "PP") : format(date, "MMMM yyyy")}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <LineChart
-              data={hourlyData}
+              data={chartData}
               margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
-                dataKey="hour" 
+                dataKey={xAxisKey} 
                 tick={{ fontSize: 12 }}
+                tickFormatter={formatXAxisTick}
+                label={{
+                  value: xAxisLabel,
+                  position: 'insideBottomRight',
+                  offset: -5
+                }}
               />
               {/* Use two separate Y axes to handle the different scales */}
               <YAxis 
