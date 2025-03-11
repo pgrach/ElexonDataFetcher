@@ -109,7 +109,7 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold">
-              {Number(summaryData.totalCurtailedEnergy).toLocaleString()} MWh
+              {Math.round(Number(summaryData.totalCurtailedEnergy)).toLocaleString()} MWh
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
@@ -131,7 +131,7 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold">
-              £{Number(summaryData.totalPayment).toLocaleString()}
+              £{Math.round(Number(summaryData.totalPayment)).toLocaleString()}
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
@@ -175,9 +175,7 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold text-[#F7931A]">
-              £{Number(bitcoinData.valueAtCurrentPrice).toLocaleString('en-GB', { 
-                maximumFractionDigits: 2 
-              })}
+              £{Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString('en-GB')}
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">

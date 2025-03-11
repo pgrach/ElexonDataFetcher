@@ -139,7 +139,7 @@ export default function BitcoinPotentialTable({
             <TableBody>
               <TableRow>
                 <TableCell>Curtailed Energy</TableCell>
-                <TableCell className="text-right">{Number(summaryData.totalCurtailedEnergy).toLocaleString()} MWh</TableCell>
+                <TableCell className="text-right">{Math.round(Number(summaryData.totalCurtailedEnergy)).toLocaleString()} MWh</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Bitcoin Potential</TableCell>
