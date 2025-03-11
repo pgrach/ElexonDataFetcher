@@ -153,13 +153,10 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
               </Bar>
               <Bar 
                 dataKey="bitcoinValue" 
-                name="Bitcoin Value" 
+                name="Bitcoin Value"
+                fill={bitcoinColor}
                 stackId="b"
-              >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={bitcoinColor} />
-                ))}
-              </Bar>
+              />
             </BarChart>
           </ResponsiveContainer>
         )}
