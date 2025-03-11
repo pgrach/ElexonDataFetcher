@@ -70,51 +70,38 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     enabled: timeframe === "daily" // Only fetch when in daily view
   });
   
-  // Fetch monthly data for monthly view - using actual API data for 3 months
+  // Fetch monthly data for monthly view - using actual API data for all months
   const { data: monthlyData = [], isLoading: isMonthlyLoading } = useQuery({
-    queryKey: [`/api/monthly-chart-data`, formattedYearMonth, minerModel, farmId],
+    queryKey: [`/api/monthly-chart-data`, currentYear, minerModel, farmId],
     queryFn: async () => {
-      // Get the selected month and the months before and after
-      const selectedMonth = new Date(date);
-      const monthlyDataArray = [];
+      // Fetch data for each month of the year
       const months = [];
+      const monthlyDataArray = [];
       
-      // Get previous month
-      const prevMonth = new Date(selectedMonth);
-      prevMonth.setMonth(prevMonth.getMonth() - 1);
+      for (let i = 1; i <= 12; i++) {
+        const monthStr = i.toString().padStart(2, '0');
+        const yearMonth = `${currentYear}-${monthStr}`;
+        months.push(yearMonth);
+      }
       
-      // Get next month
-      const nextMonth = new Date(selectedMonth);
-      nextMonth.setMonth(nextMonth.getMonth() + 1);
-      
-      // Format the 3 months
-      const prevMonthStr = format(prevMonth, "yyyy-MM");
-      const selectedMonthStr = formattedYearMonth;
-      const nextMonthStr = format(nextMonth, "yyyy-MM");
-      
-      // Add all three months to array
-      months.push(prevMonthStr, selectedMonthStr, nextMonthStr);
-      
-      console.log(`Fetching 3 months data: ${prevMonthStr}, ${selectedMonthStr}, ${nextMonthStr}`);
-      
-      // Get data from API for all 3 months
+      // Get data from API for all months
       for (const yearMonth of months) {
         try {
-          // Same endpoints used by the summary cards to ensure data consistency
+          // For all months, fetch from the API
           const summaryUrl = new URL(`/api/summary/monthly/${yearMonth}`, window.location.origin);
-          const bitcoinUrl = new URL(`/api/mining-potential/monthly/${yearMonth}`, window.location.origin);
+          const bitcoinUrl = new URL(`/api/curtailment/monthly-mining-potential/${yearMonth}`, window.location.origin);
           
           // Add parameters
           if (farmId) {
             summaryUrl.searchParams.set("leadParty", farmId);
-            bitcoinUrl.searchParams.set("farmId", farmId);
+            bitcoinUrl.searchParams.set("leadParty", farmId);
           }
           
           bitcoinUrl.searchParams.set("minerModel", minerModel);
           
           console.log(`Fetching monthly summary data for ${yearMonth}...`);
           
-          // Get curtailment energy data and bitcoin data
+          // Get curtailment energy data
           const summaryResponse = await fetch(summaryUrl);
           const bitcoinResponse = await fetch(bitcoinUrl);
           
@@ -135,12 +122,10 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
           
           console.log(`API values for ${yearMonth}: Energy=${curtailedEnergy.toLocaleString()} MWh, Bitcoin=${bitcoinMined.toFixed(4)}`);
           
-          // Add to array with an isSelected flag to identify the current month
           monthlyDataArray.push({
             month: yearMonth,
             curtailedEnergy: curtailedEnergy,
-            bitcoinMined: bitcoinMined,
-            isSelected: yearMonth === selectedMonthStr
+            bitcoinMined: bitcoinMined
           });
         } catch (error) {
           console.error(`Error fetching data for ${yearMonth}:`, error);
@@ -149,8 +134,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
           monthlyDataArray.push({
             month: yearMonth,
             curtailedEnergy: 0,
-            bitcoinMined: 0,
-            isSelected: yearMonth === selectedMonthStr
+            bitcoinMined: 0
           });
         }
       }
@@ -227,8 +211,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
       return {
         month,
         curtailedEnergy: Number(item.curtailedEnergy) || 0,
-        bitcoinMined: Number(item.bitcoinMined) || 0,
-        isSelected: item.isSelected || false // Pass through the isSelected flag
+        bitcoinMined: Number(item.bitcoinMined) || 0
       };
     });
   console.log("Processed monthly chart data:", monthlyChartData);
@@ -442,41 +425,23 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                 dataKey="curtailedEnergy"
                 fill="#000000"
                 name="Curtailed Energy (MWh)"
-                // Apply different styling for selected month and future months
+                // Apply different styling for future months
                 shape={(props: any) => {
                   const { x, y, width, height, payload } = props;
                   const inFuture = isMonthInFuture(payload.month);
-                  const isSelected = payload.isSelected;
                   
-                  // Create a glowing effect for the selected month
                   return (
-                    <g>
-                      {isSelected && (
-                        <rect
-                          key={`highlight-${payload.month}`}
-                          x={x - 2}
-                          y={y - 2}
-                          width={width + 4}
-                          height={height + 4}
-                          fill="none"
-                          stroke="#F7931A"
-                          strokeWidth={2}
-                          r={2}
-                          opacity={0.7}
-                        />
-                      )}
-                      <rect
-                        key={`bar-${payload.month}`}
-                        x={x}
-                        y={y}
-                        width={width}
-                        height={height}
-                        fill={inFuture ? "#f5f5f5" : isSelected ? "#333333" : "#000000"}
-                        stroke={inFuture ? "#000000" : isSelected ? "#F7931A" : "none"}
-                        strokeWidth={isSelected ? 1 : inFuture ? 1 : 0}
-                        r={0}
-                      />
-                    </g>
+                    <rect
+                      key={`bar-${payload.month}`}
+                      x={x}
+                      y={y}
+                      width={width}
+                      height={height}
+                      fill={inFuture ? "#f5f5f5" : "#000000"}
+                      stroke={inFuture ? "#000000" : "none"}
+                      strokeWidth={1}
+                      r={0}
+                    />
                   );
                 }}
               />
