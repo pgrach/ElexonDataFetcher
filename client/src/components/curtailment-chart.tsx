@@ -321,10 +321,13 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               />
               <Tooltip 
                 formatter={(value: number, name: string) => {
-                  if (name === "curtailedEnergy") {
+                  if (name === "Curtailed Energy (MWh)") {
                     return [`${Math.round(value).toLocaleString()} MWh`, "Curtailed Energy"];
                   }
-                  return [`₿${value.toFixed(2)}`, "Bitcoin Potential"];
+                  if (name === "Bitcoin Potential (₿)") {
+                    return [`₿${value.toFixed(2)}`, "Bitcoin Potential"];
+                  }
+                  return [value, name];
                 }}
                 labelFormatter={(label) => `Hour: ${label}`}
               />
@@ -432,10 +435,13 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               />
               <Tooltip 
                 formatter={(value: number, name: string) => {
-                  if (name === "curtailedEnergy") {
+                  if (name === "Curtailed Energy (MWh)") {
                     return [`${Math.round(value).toLocaleString()} MWh`, "Curtailed Energy"];
                   }
-                  return [`₿${value.toFixed(2)}`, "Bitcoin Mined"];
+                  if (name === "Bitcoin Mined (₿)") {
+                    return [`₿${value.toFixed(2)}`, "Bitcoin Mined"];
+                  }
+                  return [value, name];
                 }}
                 labelFormatter={(label) => `Month: ${label}`}
               />
