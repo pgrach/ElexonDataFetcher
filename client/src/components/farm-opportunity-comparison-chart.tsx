@@ -200,9 +200,10 @@ export default function FarmOpportunityComparisonChart({
                 dot={{ r: 3 }}
                 activeDot={{ r: 6 }}
               />
-              {/* Add a reference line where values match for clearer comparison */}
+              {/* Add reference lines */}
               <ReferenceLine
                 y={0}
+                yAxisId="payment"
                 stroke="#e5e5e5"
                 strokeDasharray="3 3"
               />
