@@ -128,8 +128,8 @@ async function processPeriod(
       const deleteResult = await db.delete(curtailmentRecords)
         .where(
           and(
-            eq(curtailmentRecords.settlement_date, date),
-            eq(curtailmentRecords.settlement_period, period)
+            eq(curtailmentRecords.settlementDate, date),
+            eq(curtailmentRecords.settlementPeriod, period)
           )
         );
       
@@ -148,16 +148,16 @@ async function processPeriod(
       totalPaymentAdded += payment;
       
       return {
-        settlement_date: date,
-        settlement_period: period,
-        farm_id: record.id,
-        lead_party_name: bmuLeadPartyMap.get(record.id) || 'Unknown',
+        settlementDate: date,
+        settlementPeriod: period,
+        farmId: record.id,
+        leadPartyName: bmuLeadPartyMap.get(record.id) || 'Unknown',
         volume: record.volume.toString(), // Keep negative value
         payment: payment.toString(),
-        original_price: record.originalPrice.toString(),
-        final_price: record.finalPrice.toString(),
-        so_flag: record.soFlag,
-        cadl_flag: record.cadlFlag
+        originalPrice: record.originalPrice.toString(),
+        finalPrice: record.finalPrice.toString(),
+        soFlag: record.soFlag,
+        cadlFlag: record.cadlFlag
       };
     });
     
@@ -221,13 +221,13 @@ async function checkPeriodCompleteness(
   try {
     // Get existing records for this period
     const existingRecords = await db.select({
-      farm_id: curtailmentRecords.farm_id
+      farmId: curtailmentRecords.farmId
     })
     .from(curtailmentRecords)
     .where(
       and(
-        eq(curtailmentRecords.settlement_date, date),
-        eq(curtailmentRecords.settlement_period, period)
+        eq(curtailmentRecords.settlementDate, date),
+        eq(curtailmentRecords.settlementPeriod, period)
       )
     );
     
@@ -241,10 +241,10 @@ async function checkPeriodCompleteness(
     });
     
     // Get farm IDs that exist in API but not in database
-    const dbFarmIds = new Set(existingRecords.map(r => r.farm_id));
+    const dbFarmIds = new Set(existingRecords.map(r => r.farmId));
     const apiFarmIds = new Set(validApiRecords.map((r: any) => r.id));
     
-    const missingFarms = [...apiFarmIds].filter(farmId => !dbFarmIds.has(farmId));
+    const missingFarms = [...apiFarmIds].filter((farmId: string) => !dbFarmIds.has(farmId));
     
     // If we have missing farms or no records at all, consider it incomplete
     const isComplete = missingFarms.length === 0 && existingRecords.length === validApiRecords.length;
@@ -350,17 +350,17 @@ async function main() {
     log(`Checking for missing periods 47-48...`, "info");
     
     const periodCounts = await db.select({
-      period: curtailmentRecords.settlement_period,
-      count: { count: db.fn.count() }
+      period: curtailmentRecords.settlementPeriod,
+      count: db.sql<number>`count(*)`
     })
     .from(curtailmentRecords)
     .where(
       and(
-        eq(curtailmentRecords.settlement_date, date),
-        between(curtailmentRecords.settlement_period, 47, 48)
+        eq(curtailmentRecords.settlementDate, date),
+        between(curtailmentRecords.settlementPeriod, 47, 48)
       )
     )
-    .groupBy(curtailmentRecords.settlement_period);
+    .groupBy(curtailmentRecords.settlementPeriod);
     
     // Check if we're missing periods 47-48
     const existingPeriods = new Set(periodCounts.map(p => p.period));
@@ -442,12 +442,12 @@ async function main() {
     
     // Final check
     const finalStats = await db.select({
-      count: db.fn.count(),
-      totalVolume: db.fn.sum(db.sql`CAST(${curtailmentRecords.volume} AS DECIMAL)`),
-      totalPayment: db.fn.sum(db.sql`CAST(${curtailmentRecords.payment} AS DECIMAL)`)
+      count: db.sql<number>`count(*)`,
+      totalVolume: db.sql<number>`SUM(CAST(${curtailmentRecords.volume} AS DECIMAL))`,
+      totalPayment: db.sql<number>`SUM(CAST(${curtailmentRecords.payment} AS DECIMAL))`
     })
     .from(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlement_date, date));
+    .where(eq(curtailmentRecords.settlementDate, date));
     
     log(`=== Final statistics for ${date} ===`, "success");
     log(`- Total records: ${finalStats[0].count}`, "info");
