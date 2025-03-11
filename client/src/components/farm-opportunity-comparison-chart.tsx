@@ -141,42 +141,51 @@ export default function FarmOpportunityComparisonChart({
     // Current Bitcoin price from mining potential data
     const currentPrice = bitcoinData.currentPrice || 50000; // Use a fallback if needed
     
+    // Log data for debugging
+    console.log("Hourly data:", hourlyData);
+    console.log("Bitcoin data:", bitcoinData);
+
     // Process the hourly data
-    hourlyData.forEach((hour: any) => {
-      // Skip if there's no curtailment
-      if (!hour.curtailedEnergy || hour.curtailedEnergy <= 0) {
-        return;
-      }
-      
-      // Calculate payment per MWh (£)
-      const paymentPerMwh = hour.payment && hour.curtailedEnergy 
-        ? Math.abs(hour.payment / hour.curtailedEnergy) 
-        : 0;
-      
-      // The Bitcoin calculation will be the same for all hours in the same day
-      // We'll use the total Bitcoin mined divided by total energy
-      const bitcoinValuePerMwh = bitcoinData.bitcoinMined && bitcoinData.energy
-        ? (bitcoinData.bitcoinMined * currentPrice) / bitcoinData.energy
-        : 0;
-      
-      // Format the hour label (convert period number to time)
-      const periodNumber = Number(hour.period);
-      const hourNum = Math.floor((periodNumber - 1) / 2);
-      const minute = ((periodNumber - 1) % 2) * 30;
-      const timeLabel = `${hourNum.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-      
-      hourlyComparison.push({
-        timeLabel,
-        timePeriod: periodNumber,
-        curtailedEnergy: hour.curtailedEnergy,
-        curtailmentPayment: Math.abs(hour.payment || 0),
-        paymentPerMwh,
-        bitcoinMined: 0, // We don't have per-hour Bitcoin data
-        bitcoinValueGbp: 0, // We don't have per-hour Bitcoin value
-        bitcoinValuePerMwh,
-        difficulty: bitcoinData.difficulty || 0
+    if (Array.isArray(hourlyData)) {
+      hourlyData.forEach((hour: any) => {
+        // Skip if there's no curtailment
+        if (!hour.curtailedEnergy || hour.curtailedEnergy <= 0) {
+          return;
+        }
+        
+        // Calculate payment per MWh (£)
+        // Make sure to handle NaN values
+        const payment = typeof hour.payment === 'number' ? hour.payment : 0;
+        const energy = typeof hour.curtailedEnergy === 'number' ? hour.curtailedEnergy : 0;
+        const paymentPerMwh = energy > 0 ? Math.abs(payment / energy) : 0;
+        
+        // The Bitcoin calculation will be the same for all hours in the same day
+        // We'll use the total Bitcoin mined divided by total energy
+        const bitcoinMined = typeof bitcoinData?.bitcoinMined === 'number' ? bitcoinData.bitcoinMined : 0;
+        const totalEnergy = typeof bitcoinData?.energy === 'number' ? bitcoinData.energy : 1; // Prevent division by zero
+        const bitcoinValuePerMwh = (bitcoinMined * currentPrice) / totalEnergy;
+        
+        // Format the hour label (convert period number to time)
+        const periodNumber = Number(hour.period);
+        const hourNum = Math.floor((periodNumber - 1) / 2);
+        const minute = ((periodNumber - 1) % 2) * 30;
+        const timeLabel = `${hourNum.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        
+        hourlyComparison.push({
+          timeLabel,
+          timePeriod: periodNumber,
+          curtailedEnergy: energy,
+          curtailmentPayment: Math.abs(payment),
+          paymentPerMwh: isNaN(paymentPerMwh) ? 0 : paymentPerMwh,
+          bitcoinMined: 0, // We don't have per-hour Bitcoin data
+          bitcoinValueGbp: 0, // We don't have per-hour Bitcoin value
+          bitcoinValuePerMwh: isNaN(bitcoinValuePerMwh) ? 0 : bitcoinValuePerMwh,
+          difficulty: bitcoinData?.difficulty || 0
+        });
       });
-    });
+    } else {
+      console.error("Expected hourlyData to be an array but got:", typeof hourlyData);
+    }
     
     // Sort by time period for correct chart display
     return hourlyComparison.sort((a, b) => a.timePeriod - b.timePeriod);
@@ -221,7 +230,7 @@ export default function FarmOpportunityComparisonChart({
               />
               <YAxis 
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => `£${value.toFixed(0)}`}
+                tickFormatter={(value) => `£${Number.isFinite(value) ? value.toFixed(0) : 0}`}
                 label={{ 
                   value: 'British Pounds per MWh (£/MWh)', 
                   angle: -90, 
@@ -231,6 +240,7 @@ export default function FarmOpportunityComparisonChart({
                   dx: -10 
                 }}
                 width={80}
+                domain={[0, 'dataMax']} // Always start from 0
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend 
