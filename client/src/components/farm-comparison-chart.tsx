@@ -73,11 +73,13 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
   const curtailmentColor = "#000000"; // Black for curtailment
   const bitcoinColor = "#F7931A"; // Bitcoin orange
   
-  // Format GBP values for tooltips
+  // Format GBP values for tooltips without decimal places
   const formatGBP = (value: number) => {
     return new Intl.NumberFormat('en-GB', {
       style: 'currency',
-      currency: 'GBP'
+      currency: 'GBP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(value);
   };
   
@@ -129,7 +131,7 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
               <YAxis 
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => `£${value.toLocaleString()}`}
+                tickFormatter={(value) => `£${Math.round(value).toLocaleString()}`}
                 label={{ 
                   value: 'British Pounds (£)', 
                   angle: -90, 
