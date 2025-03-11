@@ -322,7 +322,7 @@ export async function getHourlyComparison(req: Request, res: Response) {
       .select({
         settlementPeriod: curtailmentRecords.settlementPeriod,
         volume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-        payment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`,
+        payment: sql<string>`SUM(ABS(${curtailmentRecords.payment}::numeric))`, // Take absolute value to get positive number
       })
       .from(curtailmentRecords)
       .where(and(
@@ -407,11 +407,13 @@ export async function getHourlyComparison(req: Request, res: Response) {
     // Calculate rates per MWh and round values for consistency
     hourlyResults.forEach(result => {
       result.curtailedEnergy = Number(result.curtailedEnergy.toFixed(2));
-      result.paymentAmount = Number(result.paymentAmount.toFixed(2));
+      // Take absolute value of payment amount since payments are stored as negative numbers in the database
+      result.paymentAmount = Number(Math.abs(result.paymentAmount).toFixed(2));
       result.bitcoinMined = Number(result.bitcoinMined.toFixed(6));
       
       // Calculate payment and Bitcoin value per MWh (£/MWh)
       if (result.curtailedEnergy > 0) {
+        // Since we're already using absolute values for the payment, we can divide directly
         result.paymentPerMwh = Number((result.paymentAmount / result.curtailedEnergy).toFixed(2));
         result.bitcoinValuePerMwh = Number(((result.bitcoinMined * currentPrice) / result.curtailedEnergy).toFixed(2));
       } else {
