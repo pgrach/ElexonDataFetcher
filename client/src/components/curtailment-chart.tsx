@@ -324,7 +324,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                   if (name === "curtailedEnergy") {
                     return [`${Math.round(value).toLocaleString()} MWh`, "Curtailed Energy"];
                   }
-                  return [`₿${value.toFixed(4)}`, "Bitcoin Potential"];
+                  return [`₿${value.toFixed(2)}`, "Bitcoin Potential"];
                 }}
                 labelFormatter={(label) => `Hour: ${label}`}
               />
@@ -435,7 +435,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                   if (name === "curtailedEnergy") {
                     return [`${Math.round(value).toLocaleString()} MWh`, "Curtailed Energy"];
                   }
-                  return [`₿${value.toFixed(4)}`, "Bitcoin Mined"];
+                  return [`₿${value.toFixed(2)}`, "Bitcoin Mined"];
                 }}
                 labelFormatter={(label) => `Month: ${label}`}
               />

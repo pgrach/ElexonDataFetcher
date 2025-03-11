@@ -143,7 +143,7 @@ export default function BitcoinPotentialTable({
               </TableRow>
               <TableRow>
                 <TableCell>Bitcoin Potential</TableCell>
-                <TableCell className="text-right">₿{Number(bitcoinData.bitcoinMined).toFixed(8)}</TableCell>
+                <TableCell className="text-right">₿{Number(bitcoinData.bitcoinMined).toFixed(2)}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Bitcoin Value (at current price)</TableCell>

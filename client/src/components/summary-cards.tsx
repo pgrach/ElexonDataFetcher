@@ -153,7 +153,7 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold text-[#F7931A]">
-              ₿{Number(bitcoinData.bitcoinMined).toFixed(8)}
+              ₿{Number(bitcoinData.bitcoinMined).toFixed(2)}
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
