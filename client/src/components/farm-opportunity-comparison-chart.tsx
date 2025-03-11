@@ -76,6 +76,11 @@ export default function FarmOpportunityComparisonChart({
       // Calculate difference
       const difference = bitcoinValuePerMwh - paymentPerMwh;
       
+      // Calculate what percentage the payment is of bitcoin value
+      const percentage = paymentPerMwh > 0 && bitcoinValuePerMwh > 0 
+        ? ((paymentPerMwh / bitcoinValuePerMwh) * 100).toFixed(2) 
+        : '0';
+      
       return (
         <div className="bg-white p-3 border border-gray-200 rounded-md shadow-md">
           <p className="font-semibold">{label}</p>
@@ -85,6 +90,9 @@ export default function FarmOpportunityComparisonChart({
           <div className="border-t pt-1 mt-1">
             <p style={{ color: difference >= 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
               Difference: {difference >= 0 ? '+' : ''}{formatGBP(difference)}/MWh
+            </p>
+            <p className="text-sm text-gray-500">
+              Payment is {percentage}% of potential Bitcoin value
             </p>
           </div>
         </div>
@@ -134,22 +142,46 @@ export default function FarmOpportunityComparisonChart({
                 dataKey="hour" 
                 tick={{ fontSize: 12 }}
               />
+              {/* Use two separate Y axes to handle the different scales */}
               <YAxis 
+                yAxisId="bitcoin"
+                orientation="right"
                 tick={{ fontSize: 12 }}
                 tickFormatter={(value) => `£${Math.round(value)}`}
+                domain={['auto', 'auto']}
                 label={{ 
-                  value: 'Rate (£/MWh)', 
+                  value: 'Bitcoin Value (£/MWh)', 
+                  angle: 90, 
+                  position: 'insideRight',
+                  style: { 
+                    textAnchor: 'middle',
+                    fill: bitcoinColor 
+                  },
+                  dy: -20
+                }}
+              />
+              <YAxis 
+                yAxisId="payment"
+                orientation="left"
+                tick={{ fontSize: 12 }}
+                tickFormatter={(value) => `£${value.toFixed(2)}`}
+                domain={[0, 'dataMax + 1']}
+                label={{ 
+                  value: 'Payment (£/MWh)', 
                   angle: -90, 
                   position: 'insideLeft',
-                  offset: 5,
-                  style: { textAnchor: 'middle' },
-                  dx: -30 
+                  style: { 
+                    textAnchor: 'middle',
+                    fill: curtailmentColor 
+                  },
+                  dx: -20
                 }}
                 width={80}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
               <Line 
+                yAxisId="payment"
                 type="monotone" 
                 dataKey="paymentPerMwh" 
                 name="Curtailment Payment (£/MWh)" 
@@ -159,6 +191,7 @@ export default function FarmOpportunityComparisonChart({
                 activeDot={{ r: 6 }}
               />
               <Line 
+                yAxisId="bitcoin"
                 type="monotone" 
                 dataKey="bitcoinValuePerMwh" 
                 name="Bitcoin Value (£/MWh)" 
