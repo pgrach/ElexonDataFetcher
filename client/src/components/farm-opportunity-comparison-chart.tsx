@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -84,19 +85,40 @@ export default function FarmOpportunityComparisonChart({
   const value = 
     timeframe === "monthly" ? yearMonth : formattedDate;
   
-  // Fetch data from our new API endpoint
-  const { data: chartData = [], isLoading } = useQuery<ChartData[]>({
-    queryKey: ['/api/mining-potential/farm-opportunity-comparison', farmId, period, value, minerModel],
+  // Fetch the raw curtailment and bitcoin data for the selected date/farm,
+  // then we'll calculate the comparison metrics ourselves
+  const { data: hourlyData, isLoading: isHourlyLoading } = useQuery({
+    queryKey: [`/api/curtailment/hourly/${formattedDate}`, farmId],
     queryFn: async () => {
-      const url = new URL(`/api/mining-potential/farm-opportunity-comparison/${farmId}`, window.location.origin);
-      url.searchParams.append('period', period);
-      url.searchParams.append('value', value);
-      url.searchParams.append('minerModel', minerModel);
+      const url = new URL(`/api/curtailment/hourly/${formattedDate}`, window.location.origin);
+      if (farmId && farmId !== 'all') {
+        url.searchParams.append('leadParty', farmId);
+      }
       
       const response = await fetch(url);
-      
       if (!response.ok) {
-        throw new Error("Failed to fetch opportunity comparison data");
+        throw new Error("Failed to fetch hourly curtailment data");
+      }
+      
+      return response.json();
+    },
+    enabled: !!farmId && farmId !== 'all' && timeframe === 'daily'
+  });
+  
+  // Get Bitcoin mining potential data
+  const { data: bitcoinData, isLoading: isBitcoinLoading } = useQuery({
+    queryKey: ['/api/curtailment/mining-potential', formattedDate, minerModel, farmId],
+    queryFn: async () => {
+      const url = new URL('/api/curtailment/mining-potential', window.location.origin);
+      url.searchParams.append('date', formattedDate);
+      url.searchParams.append('minerModel', minerModel);
+      if (farmId && farmId !== 'all') {
+        url.searchParams.append('leadParty', farmId);
+      }
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error("Failed to fetch Bitcoin mining potential data");
       }
       
       return response.json();
@@ -104,8 +126,64 @@ export default function FarmOpportunityComparisonChart({
     enabled: !!farmId && farmId !== 'all'
   });
   
-  // Format data for the chart
-  const formattedChartData = chartData.map(item => ({
+  // Are we loading any data?
+  const isLoading = isHourlyLoading || isBitcoinLoading;
+  
+  // Process the hourly curtailment data and bitcoin data to create our comparison chart data
+  const chartData = React.useMemo(() => {
+    if (timeframe !== 'daily' || !hourlyData || !bitcoinData) {
+      return [];
+    }
+    
+    // Structure needed for chart: array of { timeLabel, timePeriod, paymentPerMwh, bitcoinValuePerMwh }
+    const hourlyComparison: ChartData[] = [];
+    
+    // Current Bitcoin price from mining potential data
+    const currentPrice = bitcoinData.currentPrice || 50000; // Use a fallback if needed
+    
+    // Process the hourly data
+    hourlyData.forEach((hour: any) => {
+      // Skip if there's no curtailment
+      if (!hour.curtailedEnergy || hour.curtailedEnergy <= 0) {
+        return;
+      }
+      
+      // Calculate payment per MWh (£)
+      const paymentPerMwh = hour.payment && hour.curtailedEnergy 
+        ? Math.abs(hour.payment / hour.curtailedEnergy) 
+        : 0;
+      
+      // The Bitcoin calculation will be the same for all hours in the same day
+      // We'll use the total Bitcoin mined divided by total energy
+      const bitcoinValuePerMwh = bitcoinData.bitcoinMined && bitcoinData.energy
+        ? (bitcoinData.bitcoinMined * currentPrice) / bitcoinData.energy
+        : 0;
+      
+      // Format the hour label (convert period number to time)
+      const periodNumber = Number(hour.period);
+      const hourNum = Math.floor((periodNumber - 1) / 2);
+      const minute = ((periodNumber - 1) % 2) * 30;
+      const timeLabel = `${hourNum.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      
+      hourlyComparison.push({
+        timeLabel,
+        timePeriod: periodNumber,
+        curtailedEnergy: hour.curtailedEnergy,
+        curtailmentPayment: Math.abs(hour.payment || 0),
+        paymentPerMwh,
+        bitcoinMined: 0, // We don't have per-hour Bitcoin data
+        bitcoinValueGbp: 0, // We don't have per-hour Bitcoin value
+        bitcoinValuePerMwh,
+        difficulty: bitcoinData.difficulty || 0
+      });
+    });
+    
+    // Sort by time period for correct chart display
+    return hourlyComparison.sort((a, b) => a.timePeriod - b.timePeriod);
+  }, [hourlyData, bitcoinData, timeframe]);
+  
+  // Format data for the chart with proper typing and rounding
+  const formattedChartData = chartData.map((item: ChartData) => ({
     ...item,
     // Round values for better display
     paymentPerMwh: Math.abs(Number(item.paymentPerMwh)),  // Abs to handle negative payment values
