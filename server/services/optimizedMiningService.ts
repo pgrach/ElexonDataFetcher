@@ -498,6 +498,8 @@ export async function getTopCurtailedFarms(
  * Get comparative data for Payment vs Bitcoin opportunity loss
  * Returns hourly data (by settlement period) for a specific farm
  */
+import { priceCache } from '../utils/cache';
+
 export async function getFarmOpportunityComparison(
   period: 'day' | 'month', 
   value: string, 
