@@ -51,30 +51,52 @@ async function processPeriod(period: number, windFarmIds: Set<string>, bmuLeadPa
   console.log(`Processing period ${period}...`);
   
   try {
-    // Fetch data from the Elexon API with correct endpoint format
-    // Make parallel requests for bids and offers as in the elexon.ts service
-    const [bidsResponse, offersResponse] = await Promise.all([
-      axios.get(`${API_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`),
-      axios.get(`${API_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`)
-    ]).catch(error => {
-      console.error(`[${date} P${period}] Error fetching data:`, error.message);
-      return [{ data: { data: [] } }, { data: { data: [] } }];
-    });
+    // Fetch data from multiple Elexon API endpoints for maximum coverage
+    // Make parallel requests to all available endpoints
+    const [bidsResponse, offersResponse, acceptedResponse] = await Promise.all([
+      axios.get(`${API_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`).catch(() => ({ data: { data: [] } })),
+      axios.get(`${API_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`).catch(() => ({ data: { data: [] } })),
+      axios.get(`${API_BASE_URL}/balancing/bid-offer/accepted/settlement-period/${period}/settlement-date/${date}`).catch(() => ({ data: { data: [] } }))
+    ]);
     
-    if (!bidsResponse.data?.data || !offersResponse.data?.data) {
-      console.error(`[${date} P${period}] Invalid API response format`);
-      return { records: 0, volume: 0, payment: 0 };
-    }
+    // Extract data from all sources
+    const bidsData = bidsResponse.data?.data || [];
+    const offersData = offersResponse.data?.data || [];
+    const acceptedData = acceptedResponse.data?.data || [];
     
-    const validBids = bidsResponse.data.data.filter((record: any) => 
+    console.log(`[${date} P${period}] Retrieved ${bidsData.length} bids, ${offersData.length} offers, ${acceptedData.length} accepted records`);
+    
+    // Filter to keep only valid wind farm records
+    const validBids = bidsData.filter((record: any) => 
       record.volume < 0 && record.soFlag && windFarmIds.has(record.id)
     );
     
-    const validOffers = offersResponse.data.data.filter((record: any) => 
+    const validOffers = offersData.filter((record: any) => 
       record.volume < 0 && record.soFlag && windFarmIds.has(record.id)
     );
     
-    const validRecords = [...validBids, ...validOffers];
+    const validAccepted = acceptedData.filter((record: any) => 
+      record.volume < 0 && windFarmIds.has(record.id)
+    );
+    
+    // Combine all records and remove duplicates by using a Map with a unique key
+    const recordMap = new Map();
+    
+    // Helper to add records to the map
+    const addRecordsToMap = (records: any[], source: string) => {
+      for (const record of records) {
+        const key = `${record.id}_${record.volume}_${record.originalPrice}`;
+        if (!recordMap.has(key)) {
+          recordMap.set(key, { ...record, source });
+        }
+      }
+    };
+    
+    addRecordsToMap(validBids, 'bids');
+    addRecordsToMap(validOffers, 'offers');
+    addRecordsToMap(validAccepted, 'accepted');
+    
+    const validRecords = Array.from(recordMap.values());
     
     const totalVolume = validRecords.reduce((sum: number, record: any) => sum + Math.abs(record.volume), 0);
     const totalPayment = validRecords.reduce((sum: number, record: any) => sum + (Math.abs(record.volume) * record.originalPrice), 0);
