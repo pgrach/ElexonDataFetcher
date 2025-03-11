@@ -320,16 +320,34 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                 stroke="#F7931A"
               />
               <Tooltip 
-                formatter={(value: number, name: string) => {
-                  if (name === "Curtailed Energy (MWh)") {
-                    return [`${Math.round(value).toLocaleString()} MWh`, "Curtailed Energy"];
+                content={({ active, payload, label }) => {
+                  if (active && payload && payload.length) {
+                    // Find curtailed energy and bitcoin potential from payload
+                    const energyItem = payload.find(p => p.name === "Curtailed Energy (MWh)");
+                    const bitcoinItem = payload.find(p => p.name === "Bitcoin Potential (₿)");
+                    
+                    const energyValue = energyItem && typeof energyItem.value === 'number' 
+                      ? Math.round(energyItem.value).toLocaleString() 
+                      : "0";
+                    const bitcoinValue = bitcoinItem && typeof bitcoinItem.value === 'number' 
+                      ? Number(bitcoinItem.value).toFixed(2) 
+                      : "0.00";
+                    
+                    return (
+                      <div className="custom-tooltip" style={{ 
+                        backgroundColor: 'white', 
+                        padding: '10px', 
+                        border: '1px solid #ccc',
+                        borderRadius: '4px'
+                      }}>
+                        <p className="label" style={{ margin: '0 0 5px', fontWeight: 'bold' }}>{`Hour: ${label}`}</p>
+                        <p style={{ margin: '0', color: '#333' }}>{`Curtailed Energy: ${energyValue} MWh`}</p>
+                        <p style={{ margin: '0', color: '#F7931A' }}>{`Bitcoin Potential: ₿${bitcoinValue}`}</p>
+                      </div>
+                    );
                   }
-                  if (name === "Bitcoin Potential (₿)") {
-                    return [`₿${value.toFixed(2)}`, "Bitcoin Potential"];
-                  }
-                  return [value, name];
+                  return null;
                 }}
-                labelFormatter={(label) => `Hour: ${label}`}
               />
               <Legend />
               <Bar
@@ -434,16 +452,34 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                 stroke="#F7931A"
               />
               <Tooltip 
-                formatter={(value: number, name: string) => {
-                  if (name === "Curtailed Energy (MWh)") {
-                    return [`${Math.round(value).toLocaleString()} MWh`, "Curtailed Energy"];
+                content={({ active, payload, label }) => {
+                  if (active && payload && payload.length) {
+                    // Find curtailed energy and bitcoin potential from payload
+                    const energyItem = payload.find(p => p.name === "Curtailed Energy (MWh)");
+                    const bitcoinItem = payload.find(p => p.name === "Bitcoin Mined (₿)");
+                    
+                    const energyValue = energyItem && typeof energyItem.value === 'number' 
+                      ? Math.round(energyItem.value).toLocaleString() 
+                      : "0";
+                    const bitcoinValue = bitcoinItem && typeof bitcoinItem.value === 'number' 
+                      ? Number(bitcoinItem.value).toFixed(2) 
+                      : "0.00";
+                    
+                    return (
+                      <div className="custom-tooltip" style={{ 
+                        backgroundColor: 'white', 
+                        padding: '10px', 
+                        border: '1px solid #ccc',
+                        borderRadius: '4px'
+                      }}>
+                        <p className="label" style={{ margin: '0 0 5px', fontWeight: 'bold' }}>{`Month: ${label}`}</p>
+                        <p style={{ margin: '0', color: '#333' }}>{`Curtailed Energy: ${energyValue} MWh`}</p>
+                        <p style={{ margin: '0', color: '#F7931A' }}>{`Bitcoin Mined: ₿${bitcoinValue}`}</p>
+                      </div>
+                    );
                   }
-                  if (name === "Bitcoin Mined (₿)") {
-                    return [`₿${value.toFixed(2)}`, "Bitcoin Mined"];
-                  }
-                  return [value, name];
+                  return null;
                 }}
-                labelFormatter={(label) => `Month: ${label}`}
               />
               <Legend />
               <Bar
