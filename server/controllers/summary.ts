@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { db } from "@db";
-import { dailySummaries, curtailmentRecords, monthlySummaries, yearlySummaries } from "@db/schema";
+import { dailySummaries, curtailmentRecords, monthlySummaries, yearlySummaries, historicalBitcoinCalculations } from "@db/schema";
 import { eq, sql, and, desc } from "drizzle-orm";
+import axios from 'axios';
 
 export async function getLeadParties(req: Request, res: Response) {
   try {
@@ -273,6 +274,177 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
     res.status(500).json({
       error: "Internal server error while fetching hourly data"
     });
+  }
+}
+
+export async function getHourlyComparison(req: Request, res: Response) {
+  try {
+    const { date } = req.params;
+    const { leadParty, minerModel = 'S19J_PRO' } = req.query;
+
+    // Validate date format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({
+        error: "Invalid date format. Please use YYYY-MM-DD"
+      });
+    }
+
+    if (!leadParty) {
+      return res.status(400).json({
+        error: "leadParty parameter is required"
+      });
+    }
+
+    // Initialize 24-hour array with zeros for all metrics
+    const hourlyResults = Array.from({ length: 24 }, (_, i) => ({
+      hour: `${i.toString().padStart(2, '0')}:00`,
+      curtailedEnergy: 0,
+      paymentAmount: 0,
+      bitcoinMined: 0,
+      currentPrice: 0, // This will be set from the API or default value
+      paymentPerMwh: 0,
+      bitcoinValuePerMwh: 0
+    }));
+
+    // First, get the current Bitcoin price
+    let currentPrice = 65000; // Default fallback value
+    try {
+      const fetchedPrice = await fetchCurrentPrice();
+      if (fetchedPrice) {
+        currentPrice = fetchedPrice;
+      }
+    } catch (error) {
+      console.warn('Error fetching Bitcoin price, using default value:', error);
+    }
+
+    // Get data per settlement period
+    const periodData = await db
+      .select({
+        settlementPeriod: curtailmentRecords.settlementPeriod,
+        volume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+        payment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`,
+      })
+      .from(curtailmentRecords)
+      .where(and(
+        eq(curtailmentRecords.settlementDate, date),
+        eq(curtailmentRecords.leadPartyName, leadParty as string)
+      ))
+      .groupBy(curtailmentRecords.settlementPeriod)
+      .orderBy(curtailmentRecords.settlementPeriod);
+
+    // Get Bitcoin data per settlement period for the same lead party
+    const bitcoinData = await db
+      .select({
+        settlementPeriod: historicalBitcoinCalculations.settlementPeriod,
+        bitcoinMined: sql<string>`SUM(${historicalBitcoinCalculations.bitcoinMined}::numeric)`,
+      })
+      .from(historicalBitcoinCalculations)
+      .innerJoin(
+        curtailmentRecords,
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, curtailmentRecords.settlementDate),
+          eq(historicalBitcoinCalculations.settlementPeriod, curtailmentRecords.settlementPeriod),
+          eq(historicalBitcoinCalculations.farmId, curtailmentRecords.farmId)
+        )
+      )
+      .where(and(
+        eq(historicalBitcoinCalculations.settlementDate, date),
+        eq(curtailmentRecords.leadPartyName, leadParty as string),
+        eq(historicalBitcoinCalculations.minerModel, minerModel as string)
+      ))
+      .groupBy(historicalBitcoinCalculations.settlementPeriod)
+      .orderBy(historicalBitcoinCalculations.settlementPeriod);
+
+    // Create a map of Bitcoin data by period for quick lookup
+    const bitcoinByPeriod = new Map();
+    for (const record of bitcoinData) {
+      if (record.settlementPeriod) {
+        bitcoinByPeriod.set(Number(record.settlementPeriod), {
+          bitcoinMined: Number(record.bitcoinMined)
+        });
+      }
+    }
+
+    // Map settlement periods to hours
+    for (const record of periodData) {
+      if (record.settlementPeriod) {
+        const period = Number(record.settlementPeriod);
+        const hour = Math.floor((period - 1) / 2);  // Periods 1-2 -> hour 0, 3-4 -> hour 1, etc.
+
+        if (hour >= 0 && hour < 24) {
+          const volume = Number(record.volume || 0);
+          const payment = Number(record.payment || 0);
+          
+          // Get Bitcoin data if available
+          const bitcoinRecord = bitcoinByPeriod.get(period);
+          const bitcoinMined = bitcoinRecord ? bitcoinRecord.bitcoinMined : 0;
+          
+          hourlyResults[hour].curtailedEnergy += volume;
+          hourlyResults[hour].paymentAmount += payment;
+          hourlyResults[hour].bitcoinMined += bitcoinMined;
+          hourlyResults[hour].currentPrice = currentPrice;
+        }
+      }
+    }
+
+    // Zero out future hours for current day
+    const currentDate = new Date();
+    const requestDate = new Date(date);
+
+    if (
+      requestDate.getFullYear() === currentDate.getFullYear() &&
+      requestDate.getMonth() === currentDate.getMonth() &&
+      requestDate.getDate() === currentDate.getDate()
+    ) {
+      const currentHour = currentDate.getHours();
+      for (let i = currentHour + 1; i < 24; i++) {
+        hourlyResults[i].curtailedEnergy = 0;
+        hourlyResults[i].paymentAmount = 0;
+        hourlyResults[i].bitcoinMined = 0;
+      }
+    }
+
+    // Calculate rates per MWh and round values for consistency
+    hourlyResults.forEach(result => {
+      result.curtailedEnergy = Number(result.curtailedEnergy.toFixed(2));
+      result.paymentAmount = Number(result.paymentAmount.toFixed(2));
+      result.bitcoinMined = Number(result.bitcoinMined.toFixed(6));
+      
+      // Calculate payment and Bitcoin value per MWh (£/MWh)
+      if (result.curtailedEnergy > 0) {
+        result.paymentPerMwh = Number((result.paymentAmount / result.curtailedEnergy).toFixed(2));
+        result.bitcoinValuePerMwh = Number(((result.bitcoinMined * currentPrice) / result.curtailedEnergy).toFixed(2));
+      } else {
+        result.paymentPerMwh = 0;
+        result.bitcoinValuePerMwh = 0;
+      }
+    });
+
+    res.json(hourlyResults);
+
+  } catch (error) {
+    console.error('Error fetching hourly comparison data:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching hourly comparison data"
+    });
+  }
+}
+
+// Helper function to fetch current Bitcoin price from Minerstat API
+async function fetchCurrentPrice(): Promise<number | null> {
+  try {
+    const response = await axios.get('https://api.minerstat.com/v2/coins?list=BTC');
+    
+    if (response.status === 200 && Array.isArray(response.data) && response.data.length > 0) {
+      const btcData = response.data[0];
+      if (btcData && btcData.price) {
+        return Number(btcData.price);
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Error fetching Bitcoin price:', error);
+    return null;
   }
 }
 

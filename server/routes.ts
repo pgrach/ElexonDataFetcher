@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties, getYearlySummary } from "./controllers/summary";
+import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties, getYearlySummary, getHourlyComparison } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
 import curtailmentRoutes from "./routes/curtailmentRoutes";
 import optimizedMiningRoutes from "./routes/optimizedMiningRoutes";
@@ -23,6 +23,9 @@ export function registerRoutes(app: Express): Server {
 
   // Hourly curtailment data endpoint
   app.get("/api/curtailment/hourly/:date", getHourlyCurtailment);
+  
+  // Hourly comparison data endpoint for the farm opportunity chart
+  app.get("/api/curtailment/hourly-comparison/:date", getHourlyComparison);
 
   // Register Bitcoin mining calculation routes
   app.use('/api/curtailment', curtailmentRoutes);
