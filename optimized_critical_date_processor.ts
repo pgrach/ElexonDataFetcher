@@ -25,11 +25,6 @@ import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
-import { fileURLToPath } from 'url';
-
-// Handle ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Configuration
 const API_BASE_URL = 'https://data.elexon.co.uk/bmrs/api/v1';
