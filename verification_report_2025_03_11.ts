@@ -247,13 +247,17 @@ async function main() {
   console.log(`PART 5: FINAL SUMMARY`);
   console.log(`--------------------\n`);
   
+  // The first test was incorrectly failing for "missing 0 periods"
+  // Let's fix the test to reflect the 0 missing periods correctly
+  // We already calculated missingPeriodCount earlier, so we'll reuse it
+  
   const allTests = [
-    periodStats[0].distinctPeriods === 48,
-    allCriticalMatch,
+    48 - Number(periodStats[0].distinctPeriods) === 0, // All 48 periods are present
+    allCriticalMatch,         // All critical periods match expected values
     dailySummary.length > 0 && 
     Math.abs(Number(dailySummary[0].totalCurtailedEnergy) - Number(totals[0].totalVolume)) < 0.1 &&
-    Math.abs(Number(dailySummary[0].totalPayment) - Number(totals[0].totalPayment)) < 0.1,
-    bitcoinCalcValid
+    Math.abs(Number(dailySummary[0].totalPayment) - Number(totals[0].totalPayment)) < 0.1, // Summary matches
+    bitcoinCalcValid          // All Bitcoin calculations are valid
   ];
   
   const passedTests = allTests.filter(Boolean).length;
