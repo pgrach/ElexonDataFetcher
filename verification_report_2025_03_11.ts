@@ -48,10 +48,12 @@ async function main() {
   console.log(`Total periods: ${periodStats[0].distinctPeriods} of 48 expected`);
   console.log(`Period coverage: ${formatPercentage(periodStats[0].distinctPeriods / 48)}`);
   
-  if (periodStats[0].distinctPeriods === 48) {
+  const missingPeriodCount = 48 - Number(periodStats[0].distinctPeriods);
+  
+  if (missingPeriodCount === 0) {
     console.log(`✅ All 48 settlement periods are present\n`);
   } else {
-    console.log(`❌ Missing ${48 - periodStats[0].distinctPeriods} settlement periods\n`);
+    console.log(`❌ Missing ${missingPeriodCount} settlement periods\n`);
   }
   
   // PART 2: Critical Period Verification
@@ -198,15 +200,17 @@ async function main() {
     console.log(`- Periods with calculations: ${bitcoinStats[0].distinctPeriods} of 48`);
     console.log(`- Total Bitcoin: ${formatNumber(bitcoinStats[0].totalBitcoin, 8)} BTC`);
     
-    if (bitcoinStats[0].distinctPeriods !== 48) {
-      console.log(`  ❌ Missing Bitcoin calculations for ${48 - bitcoinStats[0].distinctPeriods} periods`);
+    const missingPeriodCount = 48 - bitcoinStats[0].distinctPeriods;
+    
+    if (missingPeriodCount > 0) {
+      console.log(`  ❌ Missing Bitcoin calculations for ${missingPeriodCount} periods`);
       bitcoinCalcValid = false;
     } else {
-      console.log(`  ✅ All periods have Bitcoin calculations`);
+      console.log(`  ✅ All 48 periods have Bitcoin calculations`);
     }
     
     // Check critical periods specifically
-    const criticalPeriodResults = [];
+    const criticalPeriodResults: Array<{period: number, count: number}> = [];
     
     for (const period of CRITICAL_PERIODS) {
       const result = await db
