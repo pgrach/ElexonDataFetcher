@@ -4,6 +4,12 @@
  * 
  * This script reingests settlement periods 3, 4, 7, and 8
  * using data from the Elexon API.
+ * 
+ * CRITICAL UPDATE: Major discrepancies detected:
+ * - Period 7: DB has 16,748 records (288,544.97 MWh), API has 10 records (339.13 MWh)
+ * - Period 8: DB has 16,620 records (285,368.16 MWh), API has 9 records (336.97 MWh)
+ * 
+ * This fix will correct all four periods with the authentic API data.
  */
 
 import { db } from "./db";
