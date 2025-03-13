@@ -95,9 +95,10 @@ async function processSpecificPeriods() {
         }
         
         // Filter for valid wind farm records
+        // NOTE: We're using only soFlag (not cadlFlag) to match the original elexon.ts service logic
         const validRecords = records.filter(record =>
           record.volume < 0 &&
-          (record.soFlag || record.cadlFlag) &&
+          record.soFlag &&
           validWindFarmIds.has(record.id)
         );
         
