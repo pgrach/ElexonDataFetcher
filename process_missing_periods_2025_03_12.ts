@@ -11,17 +11,41 @@
  */
 
 import { db } from './db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, count } from 'drizzle-orm';
 import { curtailmentRecords } from './db/schema';
 import { fetchBidsOffers, delay } from './server/services/elexon';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { processDailyCurtailment } from './server/services/curtailment';
+import { processSingleDay } from './server/services/bitcoinService';
+import { exec } from 'child_process';
 
 // Configuration
 const TARGET_DATE = '2025-03-12';
 const MISSING_PERIODS = [39, 40, 41, 42, 43, 44, 47];
-const BMU_MAPPING_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'server/data/bmuMapping.json');
+const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
+
+/**
+ * Execute a command and return its output as a Promise
+ */
+async function executeCommand(command: string): Promise<string> {
+  console.log(`Executing command: ${command}`);
+  
+  return new Promise((resolve, reject) => {
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error: ${error.message}`);
+        reject(error);
+        return;
+      }
+      if (stderr) {
+        console.error(`stderr: ${stderr}`);
+      }
+      resolve(stdout);
+    });
+  });
+}
 
 // Main function
 async function processData() {
@@ -29,8 +53,8 @@ async function processData() {
     console.log(`=== Processing missing periods for ${TARGET_DATE} ===`);
     
     // Load BMU mapping for looking up lead party names
-    console.log('Loading BMU mapping...');
-    const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
+    console.log('Loading BMU mapping from server/data/bmuMapping.json');
+    const mappingContent = await fs.readFile('./server/data/bmuMapping.json', 'utf8');
     const bmuMapping = JSON.parse(mappingContent);
     
     // Create a map for lead party names
@@ -49,6 +73,23 @@ async function processData() {
     
     console.log(`Loaded ${validWindFarmIds.size} wind farm BMUs`);
     
+    // First check current state
+    const beforeState = await db
+      .select({
+        recordCount: count(),
+        periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
+        totalVolume: sql<string>`SUM(ABS(volume::numeric))`,
+        totalPayment: sql<string>`SUM(payment::numeric)`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+    
+    console.log(`Current state for ${TARGET_DATE}:`);
+    console.log(`- ${beforeState[0].recordCount} records`);
+    console.log(`- ${beforeState[0].periodCount} periods`);
+    console.log(`- ${Number(beforeState[0].totalVolume || 0).toFixed(2)} MWh`);
+    console.log(`- £${Number(beforeState[0].totalPayment || 0).toFixed(2)}`);
+    
     // Process each missing period
     for (const period of MISSING_PERIODS) {
       try {
@@ -56,14 +97,14 @@ async function processData() {
         
         // Check if data already exists for this period
         const existingCount = await db
-          .select({ count: db.fn.count() })
+          .select({ count: count() })
           .from(curtailmentRecords)
           .where(and(
             eq(curtailmentRecords.settlementDate, TARGET_DATE),
             eq(curtailmentRecords.settlementPeriod, period)
           ));
         
-        if (Number(existingCount[0].count) > 0) {
+        if (existingCount[0].count > 0) {
           console.log(`Period ${period} already has ${existingCount[0].count} records, skipping.`);
           continue;
         }
@@ -91,6 +132,10 @@ async function processData() {
         console.log(`Found ${validRecords.length} valid wind farm records for period ${period}`);
         
         // Insert records to the database
+        let insertedCount = 0;
+        let totalVolume = 0;
+        let totalPayment = 0;
+        
         for (const record of validRecords) {
           const volume = record.volume;
           const payment = volume * record.originalPrice;
@@ -106,14 +151,18 @@ async function processData() {
               originalPrice: record.originalPrice.toString(),
               finalPrice: record.finalPrice.toString(),
               soFlag: record.soFlag,
-              cadlFlag: record.cadlFlag
+              cadlFlag: record.cadlFlag || false
             });
             
-            console.log(`Added record for ${record.id}: ${Math.abs(volume)} MWh, £${Math.abs(payment)}`);
+            insertedCount++;
+            totalVolume += Math.abs(volume);
+            totalPayment += Math.abs(payment);
           } catch (error) {
             console.error(`Error inserting record for ${record.id}:`, error);
           }
         }
+        
+        console.log(`[${TARGET_DATE} P${period}] Records: ${insertedCount} (${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)})`);
         
         // Wait between periods to avoid rate limiting
         await delay(2000);
@@ -123,37 +172,55 @@ async function processData() {
       }
     }
     
+    // Update Bitcoin calculations
+    console.log(`\nUpdating Bitcoin calculations...`);
+    for (const minerModel of MINER_MODELS) {
+      console.log(`Processing ${minerModel}...`);
+      await processSingleDay(TARGET_DATE, minerModel);
+    }
+    console.log(`Bitcoin calculations updated for all miner models`);
+    
+    // Run reconciliation
+    console.log(`\nRunning reconciliation for ${TARGET_DATE}...`);
+    try {
+      await executeCommand(`npx tsx unified_reconciliation.ts date ${TARGET_DATE}`);
+      console.log(`Reconciliation completed successfully`);
+    } catch (error) {
+      console.error(`Error during reconciliation:`, error);
+      console.log(`Continuing with verification...`);
+    }
+    
     // Verify the final state
-    const finalStats = await db.execute(sql`
-      SELECT 
-        COUNT(*) as record_count,
-        COUNT(DISTINCT settlement_period) as period_count,
-        COUNT(DISTINCT farm_id) as farm_count,
-        SUM(ABS(volume::numeric)) as total_volume,
-        SUM(payment::numeric) as total_payment
-      FROM curtailment_records
-      WHERE settlement_date = ${TARGET_DATE}
-    `);
+    const finalStats = await db
+      .select({
+        recordCount: count(),
+        periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
+        farmCount: sql<number>`COUNT(DISTINCT farm_id)`,
+        totalVolume: sql<string>`SUM(ABS(volume::numeric))`,
+        totalPayment: sql<string>`SUM(payment::numeric)`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
     
     console.log(`\n=== Final State ===`);
-    console.log(`- Records: ${finalStats.rows[0].record_count}`);
-    console.log(`- Periods: ${finalStats.rows[0].period_count}`);
-    console.log(`- Farms: ${finalStats.rows[0].farm_count}`);
-    console.log(`- Volume: ${Number(finalStats.rows[0].total_volume).toFixed(2)} MWh`);
-    console.log(`- Payment: £${Number(finalStats.rows[0].total_payment).toFixed(2)}`);
+    console.log(`- Records: ${finalStats[0].recordCount}`);
+    console.log(`- Periods: ${finalStats[0].periodCount}`);
+    console.log(`- Farms: ${finalStats[0].farmCount}`);
+    console.log(`- Volume: ${Number(finalStats[0].totalVolume || 0).toFixed(2)} MWh`);
+    console.log(`- Payment: £${Number(finalStats[0].totalPayment || 0).toFixed(2)}`);
     
     // Check if any periods are still missing
     const missingPeriods = [];
     for (let i = 1; i <= 48; i++) {
       const count = await db
-        .select({ count: db.fn.count() })
+        .select({ count: count() })
         .from(curtailmentRecords)
         .where(and(
           eq(curtailmentRecords.settlementDate, TARGET_DATE),
           eq(curtailmentRecords.settlementPeriod, i)
         ));
         
-      if (Number(count[0].count) === 0) {
+      if (count[0].count === 0) {
         missingPeriods.push(i);
       }
     }
