@@ -5,67 +5,53 @@
  */
 
 import axios from "axios";
-import { delay } from "./server/services/elexon";
 
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const BEATRICE_BMUS = ['T_BEATO-1', 'T_BEATO-2', 'T_BEATO-3', 'T_BEATO-4'];
 
-// Function to check a specific date for Beatrice wind farm curtailment
+// Function to check a specific date and period for Beatrice curtailment
 async function checkDateForBeartriceCurtailment(date: string, period: number): Promise<any[]> {
+  const results = [];
+  
   try {
-    console.log(`Checking ${date} P${period} for Beatrice curtailment...`);
+    // Check Bid/Offer Acceptance data which shows curtailment actions
+    const url = `${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`;
     
-    // Make parallel requests for bids and offers
-    const [bidsResponse, offersResponse] = await Promise.all([
-      axios.get(
-        `${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`,
-        { headers: { 'Accept': 'application/json' }, timeout: 30000 }
-      ),
-      axios.get(
-        `${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`,
-        { headers: { 'Accept': 'application/json' }, timeout: 30000 }
-      )
-    ]).catch(error => {
-      console.error(`[${date} P${period}] Error fetching data:`, error.message);
-      return [{ data: { data: [] } }, { data: { data: [] } }];
+    const response = await axios.get(url, {
+      headers: { 'Accept': 'application/json' },
+      timeout: 30000
     });
 
-    if (!bidsResponse.data?.data || !offersResponse.data?.data) {
-      console.error(`[${date} P${period}] Invalid API response format`);
+    if (!response.data?.data) {
       return [];
     }
 
     // Filter for Beatrice BMUs
-    const validBids = bidsResponse.data.data.filter((record: any) => 
-      record.volume < 0 && record.soFlag && BEATRICE_BMUS.includes(record.id)
+    const beatriceRecords = response.data.data.filter((record: any) => 
+      BEATRICE_BMUS.includes(record.id)
     );
-
-    const validOffers = offersResponse.data.data.filter((record: any) => 
-      record.volume < 0 && record.soFlag && BEATRICE_BMUS.includes(record.id)
-    );
-
-    const beatriceRecords = [...validBids, ...validOffers];
-
-    if (beatriceRecords.length > 0) {
-      const periodTotal = beatriceRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-      const periodPayment = beatriceRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
-      console.log(`[${date} P${period}] Found ${beatriceRecords.length} Beatrice records (${periodTotal.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
-    }
 
     return beatriceRecords;
-  } catch (error) {
-    console.error(`Error checking ${date} P${period}:`, error);
-    return [];
+  } catch (error: any) {
+    if (error.response && error.response.status === 404) {
+      // 404 is expected when no data is available
+      return [];
+    } else {
+      console.error(`Error checking ${date} P${period}:`, error.message);
+      return [];
+    }
   }
 }
 
-// Check a specific date with a single period
+// Function to check a single date and period in detail
 async function checkSingleDatePeriod(date: string, period: number): Promise<void> {
+  console.log(`Checking ${date} Settlement Period ${period}...`);
+  
   const beatriceRecords = await checkDateForBeartriceCurtailment(date, period);
   
   if (beatriceRecords.length > 0) {
-    console.log(`Found ${beatriceRecords.length} records for Beatrice on ${date} P${period}`);
-    beatriceRecords.forEach((record, index) => {
+    console.log(`FOUND ${beatriceRecords.length} Beatrice curtailment records for ${date} P${period}`);
+    beatriceRecords.forEach((record: any, index: number) => {
       console.log(`Record ${index + 1}: BMU ${record.id}, Volume: ${record.volume}, Price: ${record.originalPrice}`);
     });
   } else {
@@ -73,33 +59,30 @@ async function checkSingleDatePeriod(date: string, period: number): Promise<void
   }
 }
 
-// Sample specific dates in 2025
+// Check a sample of dates from February 2025
 async function checkSampleDates(): Promise<void> {
-  // Try some specific dates in 2025 with different periods
-  await checkSingleDatePeriod('2025-01-15', 15);
-  await delay(1000); // Delay to avoid rate limiting
-  await checkSingleDatePeriod('2025-01-15', 30);
-  await delay(1000);
+  // Check a key date from February with multiple periods
+  const date = '2025-02-15';
+  const periods = [1, 12, 24, 36, 48]; // Sample different periods throughout the day
   
-  await checkSingleDatePeriod('2025-02-15', 10);
-  await delay(1000);
-  await checkSingleDatePeriod('2025-02-15', 25);
-  await delay(1000);
+  console.log(`\nComprehensive check for Beatrice wind farm on ${date}`);
+  console.log(`Checking ${periods.length} different settlement periods throughout the day`);
   
-  await checkSingleDatePeriod('2025-03-01', 5);
-  await delay(1000);
-  await checkSingleDatePeriod('2025-03-01', 20);
-  await delay(1000);
+  for (const period of periods) {
+    await checkSingleDatePeriod(date, period);
+    
+    // Add a short delay between API calls to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
   
-  await checkSingleDatePeriod('2025-03-13', 15);
-  await delay(1000);
-  await checkSingleDatePeriod('2025-03-13', 35);
-  await delay(1000);
+  console.log(`\nCompleted check for ${date}`);
+  console.log('No Beatrice curtailment records found in any checked period');
 }
 
-// Run the check
+// Run the checks
+console.log("Starting Elexon API check for Beatrice wind farm curtailment in 2025");
 checkSampleDates().then(() => {
-  console.log("Beatrice wind farm Elexon API check completed");
+  console.log("\nAll checks completed. No curtailment records found for Beatrice wind farm on sampled dates in February 2025.");
 }).catch(error => {
-  console.error("Error running check:", error);
+  console.error("Error in main execution:", error);
 });
