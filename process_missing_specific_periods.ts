@@ -17,7 +17,7 @@ import { exec } from 'child_process';
 
 // Configuration
 const TARGET_DATE = '2025-03-12';
-const SPECIFIC_PERIODS = [39, 40, 41, 43, 44, 47]; // All remaining missing periods
+const SPECIFIC_PERIODS = [43, 44, 47]; // Remaining periods to process
 
 /**
  * Execute a command and return its output as a Promise
