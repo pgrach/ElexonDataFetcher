@@ -16,20 +16,21 @@ import path from 'path';
 const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 
 // Cache for BMU mappings to avoid repeated file reads
-let bmuMappingCache: any[] | null = null;
+let bmuMappingCache: any[] = [];
 
 /**
  * Load BMU mappings from JSON file
  */
 async function loadBmuMappings(): Promise<any[]> {
-  if (bmuMappingCache !== null) {
+  if (bmuMappingCache.length > 0) {
     return bmuMappingCache;
   }
 
   try {
     const data = await readFile(BMU_MAPPING_PATH, 'utf8');
-    bmuMappingCache = JSON.parse(data);
-    return bmuMappingCache;
+    const mappings = JSON.parse(data);
+    bmuMappingCache = mappings;
+    return mappings;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
     throw new Error('Failed to load BMU data');
