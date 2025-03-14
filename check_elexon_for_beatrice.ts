@@ -12,9 +12,9 @@ const BEATRICE_BMU_IDS = ['T_BEATO-1', 'T_BEATO-2', 'T_BEATO-3', 'T_BEATO-4'];
 const YEAR_MONTH = '2025-02'; // February 2025
 
 // Define a test period range - we'll check a specific day (shorter for testing purposes)
-const TEST_DAY = '2024-12-01'; // Let's try a more recent date that should definitely have data
-const START_PERIOD = 1;
-const END_PERIOD = 10; // Reduced to save time
+const TEST_DAY = '2025-02-15'; // February 2025 - our target date
+const START_PERIOD = 1; // Start from the beginning of the day
+const END_PERIOD = 5; // Limited range to avoid rate limiting
 
 interface ElexonBidOffer {
   settlementDate: string;
@@ -37,24 +37,44 @@ async function fetchBidsOffers(date: string, period: number): Promise<ElexonBidO
   try {
     console.log(`Fetching data for ${date} Period ${period}...`);
     
-    const url = `${ELEXON_BASE_URL}/balancing/bid-offer/accepted/settlement-period/${period}/settlement-date/${date}`;
-    const response = await axios.get(url, {
-      headers: { 'Accept': 'application/json' },
-      timeout: 30000 // 30 second timeout
+    // Use the same endpoints as in our production elexon.ts service
+    const [bidsResponse, offersResponse] = await Promise.all([
+      axios.get(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`, {
+        headers: { 'Accept': 'application/json' },
+        timeout: 30000 // 30 second timeout
+      }),
+      axios.get(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`, {
+        headers: { 'Accept': 'application/json' },
+        timeout: 30000 // 30 second timeout
+      })
+    ]).catch(error => {
+      console.error(`[${date} P${period}] Error fetching data:`, error.message);
+      return [{ data: { data: [] } }, { data: { data: [] } }];
     });
-    
-    const records = response.data.data || [];
     
     // Add a small delay to avoid rate limiting
     await delay(500);
     
-    // Filter to get only Beatrice records
-    const filteredRecords = records.filter((record: ElexonBidOffer) => 
-      BEATRICE_BMU_IDS.includes(record.id) && 
-      record.volume < 0  // Negative volume indicates curtailment
+    if (!bidsResponse.data?.data || !offersResponse.data?.data) {
+      console.error(`[${date} P${period}] Invalid API response format`);
+      return [];
+    }
+    
+    const validBids = bidsResponse.data.data.filter((record: any) => 
+      record.volume < 0 && record.soFlag && BEATRICE_BMU_IDS.includes(record.id)
     );
     
-    return filteredRecords;
+    const validOffers = offersResponse.data.data.filter((record: any) => 
+      record.volume < 0 && record.soFlag && BEATRICE_BMU_IDS.includes(record.id)
+    );
+    
+    const allRecords = [...validBids, ...validOffers];
+    
+    if (allRecords.length > 0) {
+      console.log(`[${date} P${period}] Found ${allRecords.length} records`);
+    }
+    
+    return allRecords;
   } catch (error) {
     if (axios.isAxiosError(error)) {
       console.error(`API error for ${date} P${period}:`, error.response?.data || error.message);
