@@ -1,37 +1,37 @@
 [
   {
+    "elexonBmUnit": "T_SGRWO-1",
+    "leadPartyName": "Seagreen Wind Energy Limited",
+    "fuelType": "WIND"
+  },
+  {
+    "elexonBmUnit": "T_SGRWO-2",
+    "leadPartyName": "Seagreen Wind Energy Limited",
+    "fuelType": "WIND"
+  },
+  {
     "elexonBmUnit": "T_SGRWO-3",
-    "leadPartyName": "Viking Energy Wind Farm LLP",
+    "leadPartyName": "Seagreen Wind Energy Limited",
     "fuelType": "WIND"
   },
   {
     "elexonBmUnit": "T_SGRWO-4",
-    "leadPartyName": "Viking Energy Wind Farm LLP",
+    "leadPartyName": "Seagreen Wind Energy Limited",
+    "fuelType": "WIND"
+  },
+  {
+    "elexonBmUnit": "T_SGRWO-5",
+    "leadPartyName": "Seagreen Wind Energy Limited",
     "fuelType": "WIND"
   },
   {
     "elexonBmUnit": "T_SGRWO-6",
-    "leadPartyName": "Viking Energy Wind Farm LLP",
+    "leadPartyName": "Seagreen Wind Energy Limited",
     "fuelType": "WIND"
   },
   {
-    "elexonBmUnit": "T_SGLEO-1",
-    "leadPartyName": "Moray East Offshore Wind Farm",
-    "fuelType": "WIND"
-  },
-  {
-    "elexonBmUnit": "T_SGLEO-2",
-    "leadPartyName": "Moray East Offshore Wind Farm",
-    "fuelType": "WIND"
-  },
-  {
-    "elexonBmUnit": "T_STWBW-1",
-    "leadPartyName": "Beatrice Offshore Windfarm",
-    "fuelType": "WIND"
-  },
-  {
-    "elexonBmUnit": "T_SGWFD-1",
-    "leadPartyName": "Whitelee Wind Farm",
+    "elexonBmUnit": "T_MOWEO-1",
+    "leadPartyName": "Moray Offshore Wind East Ltd",
     "fuelType": "WIND"
   }
 ]

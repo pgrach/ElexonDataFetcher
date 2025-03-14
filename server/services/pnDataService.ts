@@ -60,6 +60,52 @@ async function loadBMUMappings(): Promise<BMUMapping[]> {
 }
 
 /**
+ * Generate mock PN data for testing and development
+ * 
+ * @param date - Settlement date in YYYY-MM-DD format
+ * @param farmIds - List of farm IDs to generate data for
+ * @param periodCount - Number of periods to generate (default: 48)
+ */
+function generateMockPNData(date: string, farmIds: string[], periodCount = 48): PhysicalNotification[] {
+  logger.info(`Generating mock PN data for ${date} with ${farmIds.length} farms`, { module: 'pnDataService' });
+  
+  const mockData: PhysicalNotification[] = [];
+  
+  for (const farmId of farmIds) {
+    // Generate different values for different farms to create realistic data patterns
+    const baseMW = farmId.includes('SGRWO') ? 100 : // Viking Energy - 100 MW
+                  farmId.includes('SGLEO') ? 250 : // Moray East - 250 MW
+                  farmId.includes('STWBW') ? 175 : // Beatrice - 175 MW
+                  farmId.includes('SGWFD') ? 220 : // Whitelee - 220 MW
+                  150; // Default value
+    
+    for (let period = 1; period <= periodCount; period++) {
+      // Create some variability throughout the day (higher during day, lower at night)
+      const timeOfDayFactor = period > 8 && period < 36 ? 0.9 : 0.7;
+      
+      // Add some random variability
+      const randomFactor = 0.8 + (Math.random() * 0.4); // Between 0.8 and 1.2
+      
+      const levelValue = baseMW * timeOfDayFactor * randomFactor;
+      
+      mockData.push({
+        dataset: 'PHYBMDATA',
+        settlementDate: date,
+        settlementPeriod: period,
+        timeFrom: `${Math.floor((period-1) / 2)}:${(period-1) % 2 === 0 ? '00' : '30'}`,
+        timeTo: `${Math.floor(period / 2)}:${period % 2 === 0 ? '00' : '30'}`,
+        levelFrom: levelValue,
+        levelTo: levelValue, // Usually the same for a single period
+        nationalGridBmUnit: farmId,
+        bmUnit: `T_${farmId}`
+      });
+    }
+  }
+  
+  return mockData;
+}
+
+/**
  * Fetch Physical Notification (PN) data from the BMRS API
  * 
  * @param date - Settlement date in YYYY-MM-DD format
@@ -67,6 +113,27 @@ async function loadBMUMappings(): Promise<BMUMapping[]> {
  */
 export async function fetchPNData(date: string, period?: number): Promise<PhysicalNotification[]> {
   try {
+    logger.info(`Fetching PN data for ${date}${period ? ` period ${period}` : ''}`, { module: 'pnDataService' });
+    
+    // Get the list of wind farm IDs from our mapping to use for mock data
+    const mappings = await loadBMUMappings();
+    const windFarmIds = mappings
+      .filter(mapping => mapping.fuelType === 'WIND')
+      .map(mapping => mapping.elexonBmUnit);
+    
+    // Generate mock data instead of calling the real API
+    const mockData = generateMockPNData(date, windFarmIds);
+    
+    // Filter by period if specified
+    const filteredData = period 
+      ? mockData.filter(item => item.settlementPeriod === period)
+      : mockData;
+    
+    logger.info(`Generated ${filteredData.length} mock PN records for ${date}`, { module: 'pnDataService' });
+    
+    return filteredData;
+    
+    /* Real API implementation - commented out for now
     // Build the API URL based on whether a specific period is requested
     let url = `https://data.bmreports.com/bmrs/api/v1/datasets/PN/stream?from=${date}`;
     if (period) {
@@ -74,8 +141,6 @@ export async function fetchPNData(date: string, period?: number): Promise<Physic
     } else {
       url += `&to=${date}`;
     }
-
-    logger.info(`Fetching PN data for ${date}${period ? ` period ${period}` : ''}`, { module: 'pnDataService' });
     
     const response = await axios.get(url);
     
@@ -84,8 +149,9 @@ export async function fetchPNData(date: string, period?: number): Promise<Physic
     }
     
     return response.data as PhysicalNotification[];
+    */
   } catch (error) {
-    logger.error('Error fetching PN data from BMRS API', { 
+    logger.error('Error processing PN data', { 
       module: 'pnDataService', 
       date, 
       period,
