@@ -5,16 +5,11 @@
  */
 
 import axios from "axios";
-import fs from "fs/promises";
 
+// Constants
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const BEATRICE_BMU_IDS = ['T_BEATO-1', 'T_BEATO-2', 'T_BEATO-3', 'T_BEATO-4'];
-const YEAR_MONTH = '2025-02'; // February 2025
-
-// Define a test period range - we'll check a specific day (shorter for testing purposes)
-const TEST_DAY = '2025-02-15'; // February 2025 - our target date
-const START_PERIOD = 1; // Start from the beginning of the day
-const END_PERIOD = 5; // Limited range to avoid rate limiting
+const TARGET_DATES = ["2025-02-15", "2025-02-01", "2025-02-28"]; // Beginning, middle, and end of February 2025
 
 interface ElexonBidOffer {
   settlementDate: string;
@@ -29,136 +24,118 @@ interface ElexonBidOffer {
   leadPartyName?: string;
 }
 
+// Different filter combinations to try
+interface FilterCombination {
+  name: string;
+  filter: (record: any) => boolean;
+}
+
+const filterCombinations: FilterCombination[] = [
+  {
+    name: "Standard filter (Beatrice + soFlag=true + volume<0)",
+    filter: (record) => BEATRICE_BMU_IDS.includes(record.id) && record.volume < 0 && record.soFlag === true
+  },
+  {
+    name: "Beatrice + volume<0 (any soFlag)",
+    filter: (record) => BEATRICE_BMU_IDS.includes(record.id) && record.volume < 0
+  },
+  {
+    name: "Any Beatrice BMU records (any volume, any flag)",
+    filter: (record) => BEATRICE_BMU_IDS.includes(record.id)
+  }
+];
+
 async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function fetchBidsOffers(date: string, period: number): Promise<ElexonBidOffer[]> {
   try {
-    console.log(`Fetching data for ${date} Period ${period}...`);
+    console.log(`Fetching data for ${date}, period ${period}...`);
     
-    // Use the same endpoints as in our production elexon.ts service
     const [bidsResponse, offersResponse] = await Promise.all([
       axios.get(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`, {
         headers: { 'Accept': 'application/json' },
-        timeout: 30000 // 30 second timeout
+        timeout: 30000
       }),
       axios.get(`${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`, {
         headers: { 'Accept': 'application/json' },
-        timeout: 30000 // 30 second timeout
+        timeout: 30000
       })
-    ]).catch(error => {
-      console.error(`[${date} P${period}] Error fetching data:`, error.message);
-      return [{ data: { data: [] } }, { data: { data: [] } }];
-    });
+    ]);
     
-    // Add a small delay to avoid rate limiting
-    await delay(500);
+    const bids = bidsResponse.data?.data || [];
+    const offers = offersResponse.data?.data || [];
     
-    if (!bidsResponse.data?.data || !offersResponse.data?.data) {
-      console.error(`[${date} P${period}] Invalid API response format`);
-      return [];
-    }
-    
-    const validBids = bidsResponse.data.data.filter((record: any) => 
-      record.volume < 0 && record.soFlag && BEATRICE_BMU_IDS.includes(record.id)
-    );
-    
-    const validOffers = offersResponse.data.data.filter((record: any) => 
-      record.volume < 0 && record.soFlag && BEATRICE_BMU_IDS.includes(record.id)
-    );
-    
-    const allRecords = [...validBids, ...validOffers];
-    
-    if (allRecords.length > 0) {
-      console.log(`[${date} P${period}] Found ${allRecords.length} records`);
-    }
-    
-    return allRecords;
+    return [...bids, ...offers];
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      console.error(`API error for ${date} P${period}:`, error.response?.data || error.message);
-      return [];
+      console.error(`API error: ${error.response?.data?.message || error.message}`);
+    } else {
+      console.error(`Error: ${error}`);
     }
-    console.error(`Unexpected error for ${date} P${period}:`, error);
     return [];
   }
 }
 
 async function checkElexon() {
-  console.log(`Checking Elexon API for Beatrice Offshore Windfarm Ltd BMUs for ${TEST_DAY}`);
+  console.log(`\n=== CHECKING ELEXON API FOR BEATRICE DATA (February 2025) ===\n`);
   
-  let dailyResults: {
-    [farmId: string]: {
-      totalVolume: number;
-      totalPayment: number;
-      records: number;
-    }
-  } = {};
+  // More complete set of periods to check
+  const periods = [1, 12, 24, 36, 48];
+  const results = new Map<string, number>();
   
-  // Initialize results structure
-  for (const farmId of BEATRICE_BMU_IDS) {
-    dailyResults[farmId] = {
-      totalVolume: 0,
-      totalPayment: 0,
-      records: 0
-    };
-  }
+  // Initialize results
+  filterCombinations.forEach(combo => {
+    results.set(combo.name, 0);
+  });
   
-  let overallTotal = {
-    totalVolume: 0,
-    totalPayment: 0,
-    records: 0
-  };
-  
-  for (let period = START_PERIOD; period <= END_PERIOD; period++) {
-    try {
-      const records = await fetchBidsOffers(TEST_DAY, period);
+  // Also check a known good date
+  const knownGoodDate = "2024-12-01";
+  const datesAndPeriods = [
+    ...TARGET_DATES.map(date => ({ date, periods })),
+    { date: knownGoodDate, periods: [1, 2] } // Fewer periods for known good date
+  ];
+
+  for (const { date, periods } of datesAndPeriods) {
+    console.log(`\nChecking date: ${date}`);
+    
+    for (const period of periods) {
+      const data = await fetchBidsOffers(date, period);
       
-      if (records.length > 0) {
-        console.log(`[${TEST_DAY} P${period}] Found ${records.length} records`);
+      console.log(`Retrieved ${data.length} total records for period ${period}`);
+      
+      // Apply each filter combination
+      for (const combo of filterCombinations) {
+        const filteredData = data.filter(combo.filter);
+        const count = filteredData.length;
         
-        for (const record of records) {
-          const volume = Math.abs(record.volume);
-          const payment = volume * record.originalPrice;
-          
-          dailyResults[record.id].totalVolume += volume;
-          dailyResults[record.id].totalPayment += payment;
-          dailyResults[record.id].records += 1;
-          
-          overallTotal.totalVolume += volume;
-          overallTotal.totalPayment += payment;
-          overallTotal.records += 1;
-          
-          console.log(`  ${record.id}: ${volume.toFixed(2)} MWh, £${payment.toFixed(2)}`);
+        // Update the result count
+        results.set(combo.name, (results.get(combo.name) || 0) + count);
+        
+        // Print details for any found records
+        if (count > 0) {
+          console.log(`  [${combo.name}] Found ${count} records for period ${period}:`);
+          filteredData.forEach(record => {
+            console.log(`    - BMU: ${record.id}, Volume: ${record.volume}, soFlag: ${record.soFlag}, Price: ${record.originalPrice}`);
+          });
         }
       }
-    } catch (error) {
-      console.error(`Error processing period ${period}:`, error);
+      
+      // Add a short delay between API calls
+      await delay(500);
     }
   }
   
-  // Display results
-  console.log('\nCurtailment by Farm:');
-  console.log('-------------------');
-  for (const farmId of BEATRICE_BMU_IDS) {
-    const farm = dailyResults[farmId];
-    console.log(`${farmId}: ${farm.totalVolume.toFixed(2)} MWh, £${farm.totalPayment.toFixed(2)} (${farm.records} records)`);
-  }
+  // Summary
+  console.log("\n=== SUMMARY ===");
+  console.log(`Target dates: ${TARGET_DATES.join(", ")}`);
+  console.log(`Reference date: ${knownGoodDate}\n`);
   
-  console.log('\nOverall Total for Beatrice Offshore Windfarm Ltd:');
-  console.log('---------------------------------------------');
-  console.log(`Total Volume: ${overallTotal.totalVolume.toFixed(2)} MWh`);
-  console.log(`Total Payment: £${overallTotal.totalPayment.toFixed(2)}`);
-  console.log(`Total Records: ${overallTotal.records}`);
-  
-  if (overallTotal.records === 0) {
-    console.log('\nNo curtailment records found for this date. This could mean:');
-    console.log('1. There was no curtailment for Beatrice Offshore Windfarm Ltd on this day.');
-    console.log('2. The data is not yet available in the Elexon API.');
-    console.log('3. There might be an issue with the API connection or parameters.');
-  }
+  filterCombinations.forEach(combo => {
+    console.log(`${combo.name}: ${results.get(combo.name)} records found`);
+  });
 }
 
 // Run the check
-checkElexon();
+checkElexon().catch(console.error);
