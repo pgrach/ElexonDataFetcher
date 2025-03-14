@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
-import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import axios from 'axios';
-import { format } from 'date-fns';
+import { useState, useEffect } from "react";
+import { format } from "date-fns";
+import axios from "axios";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { AlertCircle } from "lucide-react";
 
 interface CurtailmentPercentageChartProps {
   date: Date;
@@ -42,208 +44,222 @@ interface SingleFarmCurtailmentData {
 }
 
 export default function CurtailmentPercentageChart({ date, leadPartyName, farmId }: CurtailmentPercentageChartProps) {
-  const [data, setData] = useState<any[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewType, setViewType] = useState<'farm' | 'period'>(farmId ? 'period' : 'farm');
-  const [title, setTitle] = useState<string>('Curtailment Percentage');
-  
+  const [data, setData] = useState<any[]>([]);
+  const [chartTitle, setChartTitle] = useState<string>("Curtailment Percentage");
+  const [chartDescription, setChartDescription] = useState<string>("");
+
   useEffect(() => {
-    const fetchData = async () => {
+    async function fetchCurtailmentData() {
       setLoading(true);
       setError(null);
       
       try {
-        const formattedDate = format(date, 'yyyy-MM-dd');
-        let response;
-        let chartData: any[] = [];
+        const formattedDate = format(date, "yyyy-MM-dd");
         
+        // If farm ID is provided, fetch specific farm data
         if (farmId) {
-          // Fetch data for a specific farm
-          response = await axios.get<SingleFarmCurtailmentData>(
-            `/api/production/curtailment-percentage/farm/${farmId}/${formattedDate}`
+          const encodedFarmId = encodeURIComponent(farmId);
+          const { data } = await axios.get<SingleFarmCurtailmentData>(
+            `/api/production/curtailment-percentage/farm/${encodedFarmId}/${formattedDate}`
           );
           
-          // For single farm view, we'll show period-by-period data
-          setTitle(`${response.data.farmId} Curtailment by Period`);
+          setChartTitle(`${farmId} Curtailment Analysis`);
+          setChartDescription(`${data.curtailmentPercentage.toFixed(1)}% of potential generation curtailed on ${formattedDate}`);
           
-          if (viewType === 'period') {
-            // Transform period data for the chart
-            chartData = response.data.detailedPeriods.map(period => ({
-              name: `P${period.period}`,
-              potentialGeneration: period.potentialGeneration,
-              curtailedVolume: period.curtailedVolume,
-              curtailmentPercentage: period.curtailmentPercentage
-            }));
-          } else {
-            // Single data point for farm view
-            chartData = [{
-              name: response.data.farmId,
-              potentialGeneration: response.data.totalPotentialGeneration,
-              curtailedVolume: response.data.totalCurtailedVolume,
-              curtailmentPercentage: response.data.curtailmentPercentage
-            }];
-          }
-        } else if (leadPartyName) {
-          // Fetch data for all farms of a lead party
-          response = await axios.get<LeadPartyCurtailmentData>(
-            `/api/production/curtailment-percentage/lead-party/${encodeURIComponent(leadPartyName)}/${formattedDate}`
-          );
-          
-          setTitle(`${response.data.leadPartyName} Farms Curtailment`);
-          
-          // Transform farm data for the chart
-          chartData = response.data.farms.map(farm => ({
-            name: farm.farmId,
-            potentialGeneration: farm.totalPotentialGeneration,
-            curtailedVolume: farm.totalCurtailedVolume,
-            curtailmentPercentage: farm.curtailmentPercentage
+          // Transform period data for chart
+          const chartData = data.detailedPeriods.map(period => ({
+            name: `Period ${period.period}`,
+            potentialMWh: Number(period.potentialGeneration.toFixed(1)),
+            curtailedMWh: Number(period.curtailedVolume.toFixed(1)),
+            percentage: Number(period.curtailmentPercentage.toFixed(1))
           }));
           
-          // Add the overall total as the last bar
-          chartData.push({
-            name: 'Total',
-            potentialGeneration: response.data.totalPotentialGeneration,
-            curtailedVolume: response.data.totalCurtailedVolume,
-            curtailmentPercentage: response.data.overallCurtailmentPercentage,
-            isTotal: true
-          });
+          setData(chartData);
+        } 
+        // If lead party name is provided, fetch lead party data
+        else if (leadPartyName && leadPartyName !== "All Lead Parties") {
+          const encodedLeadParty = encodeURIComponent(leadPartyName);
+          const { data } = await axios.get<LeadPartyCurtailmentData>(
+            `/api/production/curtailment-percentage/lead-party/${encodedLeadParty}/${formattedDate}`
+          );
+          
+          setChartTitle(`${leadPartyName} Curtailment Analysis`);
+          setChartDescription(`${data.overallCurtailmentPercentage.toFixed(1)}% of potential generation curtailed on ${formattedDate}`);
+          
+          // Transform farm data for chart
+          const chartData = data.farms.map(farm => ({
+            name: farm.farmId,
+            potentialMWh: Number(farm.totalPotentialGeneration.toFixed(1)),
+            curtailedMWh: Number(farm.totalCurtailedVolume.toFixed(1)),
+            percentage: Number(farm.curtailmentPercentage.toFixed(1))
+          }));
+          
+          setData(chartData);
+        } 
+        // If neither farmId nor leadPartyName (or "All Lead Parties"), show aggregate data by lead party
+        else {
+          // Fetch all lead parties with curtailment data for the specified date
+          const { data: leadParties } = await axios.get(
+            `/api/production/curtailed-lead-parties`, {
+              params: { date: formattedDate }
+            }
+          );
+          
+          const aggregateData = await Promise.all(
+            leadParties.map(async (party: { leadPartyName: string }) => {
+              const encodedLeadParty = encodeURIComponent(party.leadPartyName);
+              const { data } = await axios.get<LeadPartyCurtailmentData>(
+                `/api/production/curtailment-percentage/lead-party/${encodedLeadParty}/${formattedDate}`
+              );
+              
+              return {
+                name: party.leadPartyName,
+                potentialMWh: Number(data.totalPotentialGeneration.toFixed(1)),
+                curtailedMWh: Number(data.totalCurtailedVolume.toFixed(1)),
+                percentage: Number(data.overallCurtailmentPercentage.toFixed(1))
+              };
+            })
+          );
+          
+          setChartTitle("All Lead Parties Curtailment Analysis");
+          setChartDescription(`Curtailment percentages by lead party on ${formattedDate}`);
+          
+          setData(aggregateData);
+        }
+      } catch (err) {
+        console.error("Error fetching curtailment data:", err);
+        
+        // Handle specific error cases
+        if (axios.isAxiosError(err) && err.response?.status === 404) {
+          setError("No curtailment data found for this selection");
         } else {
-          throw new Error('Either farmId or leadPartyName must be provided');
+          setError("Failed to load curtailment data");
         }
         
-        setData(chartData);
-      } catch (err) {
-        console.error('Error fetching curtailment data:', err);
-        setError('Failed to load curtailment data. Please try again later.');
+        setData([]);
       } finally {
         setLoading(false);
       }
-    };
+    }
     
-    fetchData();
-  }, [date, leadPartyName, farmId, viewType]);
+    fetchCurtailmentData();
+  }, [date, leadPartyName, farmId]);
   
-  // Custom tooltip to show all relevant data
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const getBarColors = (count: number) => {
+    const baseColors = [
+      "#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#A28CFF", 
+      "#FF6B6B", "#4ECDC4", "#45ADA8", "#547980", "#594F4F"
+    ];
+    
+    // If we need more colors than in the base array, generate them
+    if (count <= baseColors.length) {
+      return baseColors.slice(0, count);
+    } else {
+      const colors = [...baseColors];
+      for (let i = baseColors.length; i < count; i++) {
+        // Generate random colors for additional items
+        const r = Math.floor(Math.random() * 200) + 55; // 55-255 for better visibility
+        const g = Math.floor(Math.random() * 200) + 55;
+        const b = Math.floor(Math.random() * 200) + 55;
+        colors.push(`rgb(${r}, ${g}, ${b})`);
+      }
+      return colors;
+    }
+  };
+  
+  const renderCustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
-      const item = payload[0].payload;
       return (
-        <div className="bg-background border rounded-md p-3 shadow-md">
-          <p className="font-semibold">{label}</p>
-          <p>Potential Generation: {item.potentialGeneration.toFixed(2)} MWh</p>
-          <p>Curtailed Volume: {item.curtailedVolume.toFixed(2)} MWh</p>
-          <p className="font-bold">Curtailment: {item.curtailmentPercentage.toFixed(2)}%</p>
+        <div className="bg-card text-card-foreground p-3 border shadow-sm rounded-md">
+          <p className="font-medium">{label}</p>
+          <p className="text-sm">
+            <span className="font-medium">Potential:</span> {payload[0].value} MWh
+          </p>
+          <p className="text-sm">
+            <span className="font-medium">Curtailed:</span> {payload[1].value} MWh
+          </p>
+          <p className="text-sm">
+            <span className="font-medium">Percentage:</span> {payload[2].value}%
+          </p>
         </div>
       );
     }
+    
     return null;
   };
   
-  const toggleViewType = () => {
-    if (farmId) {
-      setViewType(viewType === 'farm' ? 'period' : 'farm');
-    }
-  };
-  
-  if (loading) {
-    return (
-      <Card className="w-full h-[400px] flex items-center justify-center">
-        <CardContent>
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-800 mx-auto"></div>
-            <p className="mt-2">Loading curtailment data...</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-  
-  if (error) {
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Error</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center text-red-500">
-            <p>{error}</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const colors = getBarColors(data?.length || 0);
   
   return (
-    <Card className="w-full">
+    <Card className="w-full h-full">
       <CardHeader>
-        <div className="flex justify-between items-center">
-          <div>
-            <CardTitle>{title}</CardTitle>
-            <CardDescription>
-              {format(date, 'MMMM d, yyyy')}
-            </CardDescription>
-          </div>
-          {farmId && (
-            <button 
-              onClick={toggleViewType}
-              className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm"
-            >
-              {viewType === 'period' ? 'Show Farm Total' : 'Show By Period'}
-            </button>
-          )}
-        </div>
+        <CardTitle className="flex justify-between items-center">
+          {chartTitle}
+          {loading && <Badge variant="outline">Loading...</Badge>}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{chartDescription}</p>
       </CardHeader>
       <CardContent>
-        <div className="h-[350px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              width={500}
-              height={300}
-              data={data}
-              margin={{
-                top: 5,
-                right: 30,
-                left: 20,
-                bottom: 25,
-              }}
-            >
-              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-              <XAxis 
-                dataKey="name" 
-                angle={-45} 
-                textAnchor="end" 
-                height={60} 
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis 
-                label={{ 
-                  value: 'Curtailment %', 
-                  angle: -90, 
-                  position: 'insideLeft',
-                  style: { textAnchor: 'middle' },
-                }}
-                domain={[0, 100]}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
-              <Bar 
-                dataKey="curtailmentPercentage" 
-                name="Curtailment %" 
-                fill="#8884d8"
-              >
-                {data?.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={entry.isTotal ? '#ff7e67' : '#8884d8'} 
-                    stroke={entry.isTotal ? '#ff5e57' : '#7771d8'}
-                    strokeWidth={entry.isTotal ? 2 : 1}
+        {error ? (
+          <div className="flex flex-col items-center justify-center h-80 text-center">
+            <AlertCircle className="h-10 w-10 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">{error}</p>
+          </div>
+        ) : (
+          <div className="h-80">
+            {!loading && data && data.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={data}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 65 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                  <XAxis 
+                    dataKey="name" 
+                    angle={-45} 
+                    textAnchor="end" 
+                    tick={{ fontSize: 10 }}
+                    height={60} 
                   />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+                  <YAxis yAxisId="left" label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft' }} />
+                  <YAxis yAxisId="right" orientation="right" label={{ value: 'Percentage (%)', angle: -90, position: 'insideRight' }} />
+                  <Tooltip content={renderCustomTooltip} />
+                  <Legend />
+                  <Bar 
+                    yAxisId="left"
+                    name="Potential Generation" 
+                    dataKey="potentialMWh" 
+                    fill="#8884d8" 
+                    opacity={0.7}
+                  />
+                  <Bar 
+                    yAxisId="left"
+                    name="Curtailed Energy" 
+                    dataKey="curtailedMWh" 
+                    fill="#82ca9d" 
+                    opacity={0.9}
+                  />
+                  <Bar 
+                    yAxisId="right"
+                    name="Curtailment %" 
+                    dataKey="percentage" 
+                    fill="#ff7300"
+                  >
+                    {data.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : !loading ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <p className="text-muted-foreground">No data to display</p>
+              </div>
+            ) : null}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

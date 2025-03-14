@@ -8,11 +8,13 @@ import TimeframeSelector from "@/components/timeframe-selector";
 import CurtailmentChart from "@/components/curtailment-chart";
 import FarmComparisonChart from "@/components/farm-comparison-chart";
 import FarmOpportunityComparisonChart from "@/components/farm-opportunity-comparison-chart";
+import CurtailmentPercentageChart from "@/components/curtailment-percentage-chart";
 import BitcoinPotentialTable from "@/components/bitcoin-potential-table";
 import MinerModelSelector from "@/components/miner-model-selector";
 import { DatePicker } from "@/components/date-picker";
 import SummaryCards from "@/components/summary-cards";
 import FarmSelector from "@/components/farm-selector";
+import LeadPartySelector from "@/components/lead-party-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function DashboardOverview() {
@@ -26,6 +28,7 @@ export default function DashboardOverview() {
   const [selectedMinerModel, setSelectedMinerModel] = useState("S19J_PRO");
   const [selectedFarm, setSelectedFarm] = useState("all"); // 'all' represents all farms
   const [timeframe, setTimeframe] = useState("daily");
+  const [selectedCurtailmentLeadParty, setSelectedCurtailmentLeadParty] = useState("All Lead Parties");
 
   // Derived values
   const formattedDate = format(date, "yyyy-MM-dd");
@@ -96,8 +99,9 @@ export default function DashboardOverview() {
         
         {/* Tabs for different analyses */}
         <Tabs defaultValue="charts" className="mt-10">
-          <TabsList className="grid grid-cols-2 mb-8">
+          <TabsList className="grid grid-cols-3 mb-8">
             <TabsTrigger value="charts">Charts & Visualizations</TabsTrigger>
+            <TabsTrigger value="curtailment">Curtailment Analysis</TabsTrigger>
             <TabsTrigger value="data">Data Tables</TabsTrigger>
           </TabsList>
           
@@ -127,6 +131,32 @@ export default function DashboardOverview() {
                 farmId={selectedFarm}
               />
             )}
+          </TabsContent>
+          
+          <TabsContent value="curtailment" className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 items-end">
+              <div className="col-span-1 md:col-span-2">
+                <h2 className="text-2xl font-bold mb-2">Wind Farm Curtailment Percentage Analysis</h2>
+                <p className="text-muted-foreground">
+                  Compare physical notifications (PN) data with actual curtailment volumes to analyze wasted wind farm capacity.
+                </p>
+              </div>
+              <div>
+                <LeadPartySelector
+                  value={selectedCurtailmentLeadParty}
+                  onValueChange={setSelectedCurtailmentLeadParty}
+                  date={date}
+                />
+              </div>
+            </div>
+            
+            {/* Curtailment Percentage Chart */}
+            <CurtailmentPercentageChart 
+              date={date}
+              leadPartyName={selectedCurtailmentLeadParty === "All Lead Parties" ? undefined : selectedCurtailmentLeadParty}
+              farmId={undefined}
+            />
+            
           </TabsContent>
           
           <TabsContent value="data">

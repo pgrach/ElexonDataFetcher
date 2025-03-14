@@ -138,4 +138,12 @@ router.get('/curtailment-percentage/lead-party/:leadPartyName/:date', async (req
   }
 });
 
+/**
+ * Get lead parties with curtailment data for a specific date
+ * 
+ * @route GET /api/production/curtailed-lead-parties
+ * @param {string} date.query.required - The settlement date in YYYY-MM-DD format
+ */
+router.get('/curtailed-lead-parties', getCurtailedLeadPartiesByDate);
+
 export default router;
