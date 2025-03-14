@@ -14,6 +14,7 @@ import {
   calculateFarmCurtailmentPercentage,
   calculateLeadPartyCurtailmentPercentage
 } from '../services/pnDataService';
+import { getCurtailedLeadPartiesByDate } from '../controllers/production';
 
 const router = express.Router();
 
