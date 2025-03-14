@@ -9,6 +9,7 @@ import CurtailmentChart from "@/components/curtailment-chart";
 import FarmComparisonChart from "@/components/farm-comparison-chart";
 import FarmOpportunityComparisonChart from "@/components/farm-opportunity-comparison-chart";
 import CurtailmentPercentageChart from "@/components/curtailment-percentage-chart";
+import LeadPartyCurtailmentChart from "@/components/lead-party-curtailment-chart";
 import BitcoinPotentialTable from "@/components/bitcoin-potential-table";
 import MinerModelSelector from "@/components/miner-model-selector";
 import { DatePicker } from "@/components/date-picker";
@@ -132,7 +133,13 @@ export default function DashboardOverview() {
           </TabsContent>
           
           <TabsContent value="curtailment" className="space-y-8">
-            {/* Curtailment Percentage Charts */}
+            {/* Lead Party Curtailment Chart (Shows overall curtailment by lead party) */}
+            <LeadPartyCurtailmentChart
+              timeframe={timeframe === "daily" ? "daily" : timeframe === "monthly" ? "monthly" : "yearly"}
+              date={date}
+            />
+            
+            {/* Individual BMU Curtailment Charts (For reference) */}
             <CurtailmentPercentageChart
               timeframe={timeframe === "daily" ? "daily" : timeframe === "monthly" ? "monthly" : "yearly"}
               date={date}
