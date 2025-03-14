@@ -259,7 +259,7 @@ export async function calculateFarmCurtailmentPercentage(farmId: string, date: s
       date,
       error: error instanceof Error ? error.message : String(error)
     });
-    throw error;
+    throw new Error(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -348,7 +348,7 @@ export async function calculateLeadPartyCurtailmentPercentage(leadPartyName: str
       date,
       error: error instanceof Error ? error.message : String(error)
     });
-    throw error;
+    throw new Error(error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -378,6 +378,6 @@ export async function getPNDataForPeriod(date: string, period: number, farmId?: 
       farmId,
       error: error instanceof Error ? error.message : String(error)
     });
-    throw error;
+    throw new Error(error instanceof Error ? error.message : String(error));
   }
 }

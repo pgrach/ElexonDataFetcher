@@ -59,7 +59,7 @@ router.get('/pn-data/:date/:period', async (req: Request, res: Response) => {
     });
     
     res.status(error instanceof ValidationError ? 400 : 500).json({
-      error: error instanceof Error ? error.message : 'Internal server error',
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 });
@@ -94,7 +94,7 @@ router.get('/curtailment-percentage/farm/:farmId/:date', async (req: Request, re
     });
     
     res.status(error instanceof ValidationError ? 400 : 500).json({
-      error: error instanceof Error ? error.message : 'Internal server error',
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 });
@@ -132,7 +132,7 @@ router.get('/curtailment-percentage/lead-party/:leadPartyName/:date', async (req
     });
     
     res.status(error instanceof ValidationError ? 400 : 500).json({
-      error: error instanceof Error ? error.message : 'Internal server error',
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 });
