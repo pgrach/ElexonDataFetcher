@@ -1,0 +1,37 @@
+[
+  {
+    "elexonBmUnit": "T_SGRWO-3",
+    "leadPartyName": "Viking Energy Wind Farm LLP",
+    "fuelType": "WIND"
+  },
+  {
+    "elexonBmUnit": "T_SGRWO-4",
+    "leadPartyName": "Viking Energy Wind Farm LLP",
+    "fuelType": "WIND"
+  },
+  {
+    "elexonBmUnit": "T_SGRWO-6",
+    "leadPartyName": "Viking Energy Wind Farm LLP",
+    "fuelType": "WIND"
+  },
+  {
+    "elexonBmUnit": "T_SGLEO-1",
+    "leadPartyName": "Moray East Offshore Wind Farm",
+    "fuelType": "WIND"
+  },
+  {
+    "elexonBmUnit": "T_SGLEO-2",
+    "leadPartyName": "Moray East Offshore Wind Farm",
+    "fuelType": "WIND"
+  },
+  {
+    "elexonBmUnit": "T_STWBW-1",
+    "leadPartyName": "Beatrice Offshore Windfarm",
+    "fuelType": "WIND"
+  },
+  {
+    "elexonBmUnit": "T_SGWFD-1",
+    "leadPartyName": "Whitelee Wind Farm",
+    "fuelType": "WIND"
+  }
+]
