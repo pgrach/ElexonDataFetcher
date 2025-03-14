@@ -8,8 +8,6 @@ import TimeframeSelector from "@/components/timeframe-selector";
 import CurtailmentChart from "@/components/curtailment-chart";
 import FarmComparisonChart from "@/components/farm-comparison-chart";
 import FarmOpportunityComparisonChart from "@/components/farm-opportunity-comparison-chart";
-import CurtailmentPercentageChart from "@/components/curtailment-percentage-chart";
-import LeadPartyCurtailmentChart from "@/components/lead-party-curtailment-chart";
 import BitcoinPotentialTable from "@/components/bitcoin-potential-table";
 import MinerModelSelector from "@/components/miner-model-selector";
 import { DatePicker } from "@/components/date-picker";
@@ -98,9 +96,8 @@ export default function DashboardOverview() {
         
         {/* Tabs for different analyses */}
         <Tabs defaultValue="charts" className="mt-10">
-          <TabsList className="grid grid-cols-3 mb-8">
+          <TabsList className="grid grid-cols-2 mb-8">
             <TabsTrigger value="charts">Charts & Visualizations</TabsTrigger>
-            <TabsTrigger value="curtailment">Curtailment Analytics</TabsTrigger>
             <TabsTrigger value="data">Data Tables</TabsTrigger>
           </TabsList>
           
@@ -128,24 +125,6 @@ export default function DashboardOverview() {
                 date={date}
                 minerModel={selectedMinerModel}
                 farmId={selectedFarm}
-              />
-            )}
-          </TabsContent>
-          
-          <TabsContent value="curtailment" className="space-y-8">
-            {/* Lead Party Curtailment Chart (Shows overall curtailment by lead party) */}
-            <LeadPartyCurtailmentChart
-              timeframe={timeframe === "daily" ? "daily" : timeframe === "monthly" ? "monthly" : "yearly"}
-              date={date}
-            />
-            
-            {/* Individual BMU Curtailment Charts (For reference) */}
-            {selectedFarm !== "all" && (
-              <CurtailmentPercentageChart
-                timeframe={timeframe === "daily" ? "daily" : timeframe === "monthly" ? "monthly" : "yearly"}
-                date={date}
-                leadParty={selectedLeadParty}
-                farmId={selectedFarm !== "all" ? selectedFarm : undefined}
               />
             )}
           </TabsContent>
