@@ -92,17 +92,27 @@ async function monitorProgress() {
   
   // Batch recommendations
   const BATCH_SIZE = 5;
-  const recommendedBatches = [];
+  
+  interface BatchRecommendation {
+    batchNumber: number;
+    batchSize: number;
+    startIndex: number;
+    command: string;
+  }
+  
+  const recommendedBatches: BatchRecommendation[] = [];
   
   for (let i = 0; i < pendingBMUs.length; i += BATCH_SIZE) {
     const batch = pendingBMUs.slice(i, i + BATCH_SIZE);
-    const startIndex = allBmuIds.indexOf(batch[0]);
-    recommendedBatches.push({
-      batchNumber: Math.floor(i / BATCH_SIZE) + 1,
-      batchSize: batch.length,
-      startIndex,
-      command: `npx tsx fetch_pn_data_batch.ts ${yearMonth} ${startIndex} ${BATCH_SIZE}`
-    });
+    if (batch.length > 0) {
+      const startIndex = allBmuIds.indexOf(batch[0]);
+      recommendedBatches.push({
+        batchNumber: Math.floor(i / BATCH_SIZE) + 1,
+        batchSize: batch.length,
+        startIndex,
+        command: `npx tsx fetch_pn_data_batch.ts ${yearMonth} ${startIndex} ${BATCH_SIZE}`
+      });
+    }
   }
   
   // Display recommendations

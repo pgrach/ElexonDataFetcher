@@ -4,7 +4,7 @@
  * This script creates the physical_notifications table in the database.
  */
 
-import { db } from "@db";
+import { db } from "./db";
 import { sql } from "drizzle-orm";
 
 async function createPhysicalNotificationsTable() {

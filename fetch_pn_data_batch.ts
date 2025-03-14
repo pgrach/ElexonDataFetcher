@@ -14,8 +14,8 @@
  *   npx tsx fetch_pn_data_batch.ts 2025-02 20 10
  */
 
-import { db } from "@db";
-import { physicalNotifications } from "@db/schema";
+import { db } from "./db";
+import { physicalNotifications } from "./db/schema";
 import { getUniqueBmuIds, processPNDataBatch, updatePNLeadPartyNames } from "./server/services/pnData";
 import { sql } from "drizzle-orm";
 

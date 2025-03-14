@@ -12,8 +12,8 @@
  *   npx tsx fetch_pn_data.ts 2025-02
  */
 
-import { db } from "@db";
-import { physicalNotifications } from "@db/schema";
+import { db } from "./db";
+import { physicalNotifications } from "./db/schema";
 import { processMonthData, updatePNLeadPartyNames } from "./server/services/pnData";
 import { eq, sql } from "drizzle-orm";
 
