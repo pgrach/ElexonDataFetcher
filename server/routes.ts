@@ -4,6 +4,7 @@ import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadPartie
 import { processDailyCurtailment } from "./services/curtailment";
 import curtailmentRoutes from "./routes/curtailmentRoutes";
 import optimizedMiningRoutes from "./routes/optimizedMiningRoutes";
+import productionRoutes from "./routes/productionRoutes";
 
 export function registerRoutes(app: Express): Server {
   // Get lead parties endpoint
@@ -35,6 +36,9 @@ export function registerRoutes(app: Express): Server {
   
   // Register optimized mining potential routes - uses direct table queries
   app.use('/api/mining-potential', optimizedMiningRoutes);
+  
+  // Register production data routes for PN data and curtailment percentages
+  app.use('/api/production', productionRoutes);
 
   // Re-ingest data endpoint
   app.post("/api/ingest/:date", async (req, res) => {
