@@ -79,6 +79,20 @@ export const ingestionProgress = pgTable("ingestion_progress", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
+export const physicalNotifications = pgTable("physical_notifications", {
+  id: serial("id").primaryKey(),
+  settlementDate: date("settlement_date").notNull(),
+  settlementPeriod: integer("settlement_period").notNull(),
+  timeFrom: timestamp("time_from").notNull(),
+  timeTo: timestamp("time_to").notNull(),
+  levelFrom: numeric("level_from").notNull(),  // MW
+  levelTo: numeric("level_to").notNull(),      // MW
+  nationalGridBmUnit: text("national_grid_bm_unit"),
+  bmUnit: text("bm_unit").notNull(),
+  leadPartyName: text("lead_party_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // These materialized views have been replaced with direct query optimizations
 // Keeping declarations for backward compatibility with existing code
 // but these tables are no longer used in the application
@@ -134,6 +148,8 @@ export const insertYearlySummarySchema = createInsertSchema(yearlySummaries);
 export const selectYearlySummarySchema = createSelectSchema(yearlySummaries);
 export const insertIngestionProgressSchema = createInsertSchema(ingestionProgress);
 export const selectIngestionProgressSchema = createSelectSchema(ingestionProgress);
+export const insertPhysicalNotificationSchema = createInsertSchema(physicalNotifications);
+export const selectPhysicalNotificationSchema = createSelectSchema(physicalNotifications);
 
 export const insertHistoricalBitcoinCalculationSchema = createInsertSchema(historicalBitcoinCalculations);
 export const selectHistoricalBitcoinCalculationSchema = createSelectSchema(historicalBitcoinCalculations);
