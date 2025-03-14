@@ -165,6 +165,12 @@ export default function CurtailmentPercentageChart({
                 </div>
               </div>
             </div>
+            <div className="mt-6 mb-2">
+              <h3 className="text-lg font-medium">BMU-Level Curtailment Breakdown</h3>
+              <p className="text-sm text-muted-foreground">
+                Each bar represents a separate Balancing Mechanism Unit (BMU) reader within the wind farm
+              </p>
+            </div>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -177,6 +183,7 @@ export default function CurtailmentPercentageChart({
                     angle={-45} 
                     textAnchor="end" 
                     height={70}
+                    label={{ value: "BMU Readers", position: "insideBottom", offset: -10 }}
                   />
                   <YAxis
                     label={{ value: "Curtailment %", angle: -90, position: "insideLeft" }}
@@ -186,6 +193,7 @@ export default function CurtailmentPercentageChart({
                     formatter={(value, name) => {
                       if (name === "curtailmentPercentage") return [`${value}%`, "Curtailment"];
                       if (name === "curtailedEnergy") return [`${value} MWh`, "Curtailed Energy"];
+                      if (name === "capacity") return [`${value} MW`, "Capacity"];
                       return [value, name];
                     }}
                   />
@@ -206,11 +214,11 @@ export default function CurtailmentPercentageChart({
         </Card>
       )}
 
-      {/* Top Farms Curtailment Percentage Chart */}
+      {/* Top BMUs Curtailment Percentage Chart */}
       {topFarmsData && (
         <Card>
           <CardHeader>
-            <CardTitle>Top 10 Curtailed Wind Farms</CardTitle>
+            <CardTitle>Top 10 Curtailed BMUs</CardTitle>
             <CardDescription>
               {timeframe === "daily" 
                 ? `For ${format(date, "MMMM d, yyyy")}`
@@ -221,6 +229,11 @@ export default function CurtailmentPercentageChart({
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="mb-2">
+              <p className="text-sm text-muted-foreground">
+                Showing individual Balancing Mechanism Units (BMUs) with highest curtailment percentages across all wind farms
+              </p>
+            </div>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -233,6 +246,7 @@ export default function CurtailmentPercentageChart({
                     angle={-45} 
                     textAnchor="end" 
                     height={70}
+                    label={{ value: "BMU ID", position: "insideBottom", offset: -10 }}
                   />
                   <YAxis
                     label={{ value: "Curtailment %", angle: -90, position: "insideLeft" }}
@@ -246,6 +260,7 @@ export default function CurtailmentPercentageChart({
                       if (name === "capacity") return [`${value} MW`, "Capacity"];
                       return [value, name];
                     }}
+                    labelFormatter={(value) => `BMU: ${value}`}
                   />
                   <Legend />
                   <Bar 
