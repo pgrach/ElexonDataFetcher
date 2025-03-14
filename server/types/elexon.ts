@@ -11,7 +11,24 @@ export interface ElexonBidOffer {
   leadPartyName?: string;
 }
 
+export interface ElexonPhysicalNotification {
+  dataset: string;
+  settlementDate: string;
+  settlementPeriod: number;
+  timeFrom: string;
+  timeTo: string;
+  levelFrom: number;
+  levelTo: number;
+  nationalGridBmUnit: string;
+  bmUnit: string;
+}
+
 export interface ElexonResponse {
   data: ElexonBidOffer[];
   error?: string;
+}
+
+export interface ElexonPNResponse {
+  error?: string;
+  data?: ElexonPhysicalNotification[];
 }
