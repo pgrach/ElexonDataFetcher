@@ -140,12 +140,14 @@ export default function DashboardOverview() {
             />
             
             {/* Individual BMU Curtailment Charts (For reference) */}
-            <CurtailmentPercentageChart
-              timeframe={timeframe === "daily" ? "daily" : timeframe === "monthly" ? "monthly" : "yearly"}
-              date={date}
-              leadParty={selectedLeadParty || "Viking Energy Wind Farm LLP"}
-              farmId={selectedFarm !== "all" ? selectedFarm : undefined}
-            />
+            {selectedFarm !== "all" && (
+              <CurtailmentPercentageChart
+                timeframe={timeframe === "daily" ? "daily" : timeframe === "monthly" ? "monthly" : "yearly"}
+                date={date}
+                leadParty={selectedLeadParty}
+                farmId={selectedFarm !== "all" ? selectedFarm : undefined}
+              />
+            )}
           </TabsContent>
           
           <TabsContent value="data">
