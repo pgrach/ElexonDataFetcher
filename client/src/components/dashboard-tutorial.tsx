@@ -15,42 +15,30 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 
 export default function DashboardTutorial() {
-  const [viewMode, setViewMode] = useState<'closed' | 'minimized' | 'full'>('full');
+  const [isVisible, setIsVisible] = useState(true);
   
-  // Check if this is the user's first visit
+  // Check if user has hidden the tutorial before
   useEffect(() => {
-    const tutorialPreference = localStorage.getItem('dashboardTutorialPreference');
-    if (tutorialPreference === 'hidden') {
-      setViewMode('closed');
-    } else if (tutorialPreference === 'minimized') {
-      setViewMode('minimized');
+    const tutorialHidden = localStorage.getItem('dashboardTutorialHidden') === 'true';
+    if (tutorialHidden) {
+      setIsVisible(false);
     }
   }, []);
   
-  const closeTutorial = () => {
-    setViewMode('closed');
-    localStorage.setItem('dashboardTutorialPreference', 'hidden');
+  const toggleVisibility = () => {
+    const newState = !isVisible;
+    setIsVisible(newState);
+    localStorage.setItem('dashboardTutorialHidden', newState ? 'false' : 'true');
   };
   
-  const minimizeTutorial = () => {
-    setViewMode('minimized');
-    localStorage.setItem('dashboardTutorialPreference', 'minimized');
-  };
-  
-  const expandTutorial = () => {
-    setViewMode('full');
-    localStorage.setItem('dashboardTutorialPreference', 'full');
-  };
-  
-  // Return null if the tutorial is closed
-  if (viewMode === 'closed') {
-    // Show a small button to bring the tutorial back
+  // Return a button to show the tutorial if it's hidden
+  if (!isVisible) {
     return (
       <div className="mb-6 flex justify-end">
         <Button 
           variant="outline" 
           size="sm" 
-          onClick={expandTutorial}
+          onClick={toggleVisibility}
           className="flex items-center gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10"
         >
           <Gauge className="h-4 w-4 text-primary" />
@@ -60,42 +48,18 @@ export default function DashboardTutorial() {
     );
   }
   
-  // Return minimized version if selected
-  if (viewMode === 'minimized') {
-    return (
-      <div className="mb-6 flex justify-center">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={expandTutorial}
-          className="flex items-center gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10"
-        >
-          <Gauge className="h-4 w-4 text-primary" />
-          <span>Show Dashboard Guide</span>
-        </Button>
-      </div>
-    );
-  }
-  
   // Full tutorial
   return (
     <Card className="mb-8 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent relative overflow-hidden">
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+      <div className="absolute top-3 right-3 z-10">
         <Button 
           variant="ghost" 
           size="sm" 
-          onClick={minimizeTutorial}
-          className="h-8 px-2 text-xs"
+          onClick={toggleVisibility}
+          className="h-8 px-3 text-xs flex items-center gap-1"
         >
-          Minimize
-        </Button>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={closeTutorial}
-          className="h-8 w-8"
-        >
-          <X className="h-4 w-4" />
+          <span>Hide Guide</span>
+          <X className="h-4 w-4 ml-1" />
         </Button>
       </div>
       
