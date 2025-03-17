@@ -119,10 +119,30 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
           <Skeleton className="h-[300px] w-full" />
         ) : chartData.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-[300px] border border-dashed border-blue-200 rounded-md bg-blue-50/30">
-            <svg className="h-12 w-12 text-blue-400 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-4.5-8.5" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 8.5l4 4 4-4" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12.5v-2" />
+            <svg className="h-16 w-16 text-blue-400 mb-2" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              {/* Tower */}
+              <rect x="47" y="50" width="6" height="40" fill="currentColor" />
+              
+              {/* Base */}
+              <rect x="40" y="90" width="20" height="5" rx="2" fill="currentColor" />
+              
+              {/* Turbine head */}
+              <circle cx="50" cy="50" r="5" fill="currentColor" />
+              
+              {/* Rotating blades - with animation */}
+              <g style={{ transformOrigin: "50px 50px", animation: "spin 8s linear infinite" }}>
+                <path d="M50 50 L80 20 L85 25 L55 55 Z" fill="currentColor" />
+                <path d="M50 50 L20 20 L15 25 L45 55 Z" fill="currentColor" />
+                <path d="M50 50 L50 10 L45 5 L45 45 Z" fill="currentColor" />
+              </g>
+              
+              {/* Animation keyframes - added via style */}
+              <style>{`
+                @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}</style>
             </svg>
             <h3 className="text-lg font-medium text-blue-500">No Wind Farms Curtailed</h3>
             <p className="text-sm text-blue-400 max-w-md text-center mt-2 px-4">
