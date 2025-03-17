@@ -143,12 +143,39 @@ export default function CurtailmentComparisonCard({
           </div>
         ) : hasNoCurtailmentData ? (
           // Special state for when no curtailment occurred
-          <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-md">
-            <h3 className="font-semibold mb-2">No Curtailment Events Today</h3>
-            <p className="text-sm mb-3">
+          <div className="bg-blue-50/30 border border-dashed border-blue-200 p-4 rounded-md flex flex-col items-center">
+            <div className="flex justify-center mb-2">
+              <svg className="h-12 w-12 text-blue-400" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                {/* Tower */}
+                <rect x="47" y="50" width="6" height="40" fill="currentColor" />
+                
+                {/* Base */}
+                <rect x="40" y="90" width="20" height="5" rx="2" fill="currentColor" />
+                
+                {/* Turbine head */}
+                <circle cx="50" cy="50" r="5" fill="currentColor" />
+                
+                {/* Rotating blades - with animation */}
+                <g style={{ transformOrigin: "50px 50px", animation: "spin 10s linear infinite" }}>
+                  <path d="M50 50 L80 20 L85 25 L55 55 Z" fill="currentColor" />
+                  <path d="M50 50 L20 20 L15 25 L45 55 Z" fill="currentColor" />
+                  <path d="M50 50 L50 10 L45 5 L45 45 Z" fill="currentColor" />
+                </g>
+                
+                {/* Animation keyframes - added via style */}
+                <style>{`
+                  @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                  }
+                `}</style>
+              </svg>
+            </div>
+            <h3 className="font-semibold text-lg text-blue-500 mb-2">No Curtailment Events Today</h3>
+            <p className="text-sm text-blue-400 text-center mb-3">
               No wind farms were curtailed on this date, meaning all available wind energy was utilized by the grid.
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground text-center">
               Try selecting a different date to see curtailment events and potential Bitcoin mining comparisons.
             </p>
           </div>
