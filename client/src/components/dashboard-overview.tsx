@@ -12,7 +12,7 @@ import CurtailmentPercentageChart from "@/components/curtailment-percentage-char
 import BitcoinPotentialTable from "@/components/bitcoin-potential-table";
 import MinerModelSelector from "@/components/miner-model-selector";
 import { DatePicker } from "@/components/date-picker";
-import SummaryCards from "@/components/summary-cards";
+import SummaryCards from "@/components/summary-cards-new";
 import FarmSelector from "@/components/farm-selector";
 import LeadPartySelector from "@/components/lead-party-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
