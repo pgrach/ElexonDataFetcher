@@ -30,7 +30,7 @@ export default function DashboardOverview() {
   const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
   const [selectedMinerModel, setSelectedMinerModel] = useState("S19J_PRO");
   const [selectedFarm, setSelectedFarm] = useState("all"); // 'all' represents all farms
-  const [timeframe, setTimeframe] = useState("daily");
+  const [timeframe, setTimeframe] = useState("monthly"); // Default to monthly view for better initial user experience
   const [selectedCurtailmentLeadParty, setSelectedCurtailmentLeadParty] = useState("All Lead Parties");
 
   // Derived values
