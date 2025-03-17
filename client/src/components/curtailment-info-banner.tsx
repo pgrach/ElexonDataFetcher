@@ -34,16 +34,21 @@ export default function CurtailmentInfoBanner() {
           <AlertTitle className="text-lg font-bold flex items-center">
             Wind Farm Curtailment: Paying for Energy Never Produced
           </AlertTitle>
-          <AlertDescription className="text-sm mt-1">
-            <p className="mb-2">
-              <strong>Curtailment payments</strong> are made to wind farms when they're asked to reduce output, even though 
-              no electricity is actually delivered. These payments are ultimately funded by consumers through 
-              their energy bills.
-            </p>
-            <p className="font-semibold">
-              This dashboard explores whether mining Bitcoin with this wasted energy could be 
-              more economically beneficial than the current system.
-            </p>
+          <AlertDescription className="text-sm mt-2">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1 flex items-start gap-2">
+                <span className="bg-red-100 text-red-800 font-bold rounded-full w-6 h-6 flex items-center justify-center mt-0.5">1</span>
+                <p>Wind farms get paid to <strong>stop producing</strong> during grid constraints</p>
+              </div>
+              <div className="flex-1 flex items-start gap-2">
+                <span className="bg-red-100 text-red-800 font-bold rounded-full w-6 h-6 flex items-center justify-center mt-0.5">2</span>
+                <p>Consumers pay for this unused energy through their bills</p>
+              </div>
+              <div className="flex-1 flex items-start gap-2">
+                <span className="bg-red-100 text-red-800 font-bold rounded-full w-6 h-6 flex items-center justify-center mt-0.5">3</span>
+                <p>Could Bitcoin mining be a more economical alternative?</p>
+              </div>
+            </div>
           </AlertDescription>
         </div>
         <Button variant="ghost" size="icon" onClick={hideBanner} className="absolute top-2 right-2">

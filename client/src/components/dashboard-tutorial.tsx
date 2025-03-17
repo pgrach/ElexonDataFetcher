@@ -52,46 +52,77 @@ export default function DashboardTutorial() {
       
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex flex-col gap-2 p-3 rounded-md bg-background/80">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold">1. Select Time Period</h3>
+          <div className="flex flex-col gap-2 p-4 rounded-md bg-background shadow-sm border border-primary/10 relative">
+            <div className="bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center absolute -top-3 -left-3">1</div>
+            <div className="flex items-center gap-2 mb-1">
+              <Calendar className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold">Select Time Period</h3>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Choose daily, monthly, or yearly view using the timeframe selector, then select a specific date.
-            </p>
+            <div className="text-sm text-muted-foreground flex flex-col gap-2">
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-primary"></span>
+                <span>Choose daily, monthly, or yearly</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-primary"></span>
+                <span>Select a specific date</span>
+              </div>
+            </div>
           </div>
           
-          <div className="flex flex-col gap-2 p-3 rounded-md bg-background/80">
-            <div className="flex items-center gap-2">
-              <Bitcoin className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold">2. Choose Miner Model</h3>
+          <div className="flex flex-col gap-2 p-4 rounded-md bg-background shadow-sm border border-primary/10 relative">
+            <div className="bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center absolute -top-3 -left-3">2</div>
+            <div className="flex items-center gap-2 mb-1">
+              <Bitcoin className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold">Choose Miner Model</h3>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Select a Bitcoin miner model to see how different hardware affects potential mining returns.
-            </p>
+            <div className="text-sm text-muted-foreground flex flex-col gap-2">
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-primary"></span>
+                <span>Each model has different efficiency</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-primary"></span>
+                <span>Compare hardware performance</span>
+              </div>
+            </div>
           </div>
           
-          <div className="flex flex-col gap-2 p-3 rounded-md bg-background/80">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold">3. Filter by Wind Farm</h3>
+          <div className="flex flex-col gap-2 p-4 rounded-md bg-background shadow-sm border border-primary/10 relative">
+            <div className="bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center absolute -top-3 -left-3">3</div>
+            <div className="flex items-center gap-2 mb-1">
+              <Building2 className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold">Filter by Wind Farm</h3>
             </div>
-            <p className="text-sm text-muted-foreground">
-              View all farms or filter by a specific lead party to focus on particular wind farm data.
-            </p>
+            <div className="text-sm text-muted-foreground flex flex-col gap-2">
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-primary"></span>
+                <span>View all or specific farms</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-primary"></span>
+                <span>Group by lead party companies</span>
+              </div>
+            </div>
           </div>
         </div>
         
-        <div className="mt-4 p-3 rounded-md bg-primary/10 border border-primary/20">
-          <h3 className="font-semibold flex items-center gap-2 mb-2">
-            <DollarSign className="h-4 w-4 text-primary" />
-            <span>Key Comparison: Curtailment Payments vs. Bitcoin Mining Value</span>
+        <div className="mt-6 p-4 rounded-md bg-primary/10 border border-primary/20 shadow-sm">
+          <h3 className="font-semibold flex items-center gap-2 mb-3">
+            <DollarSign className="h-5 w-5 text-primary" />
+            <span>What This Dashboard Shows</span>
           </h3>
-          <p className="text-sm">
-            This dashboard helps you compare what wind farms are <strong>currently paid to not produce electricity</strong> (curtailment payments) 
-            versus what they <strong>could earn by mining Bitcoin</strong> with that same unused energy.
-          </p>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="bg-destructive/20 text-destructive font-bold rounded-full w-6 h-6 flex items-center justify-center">£</span>
+              <span className="text-sm">Subsidies paid</span>
+            </div>
+            <div className="text-muted-foreground">vs</div>
+            <div className="flex items-center gap-2">
+              <span className="bg-amber-100 text-amber-800 font-bold rounded-full w-6 h-6 flex items-center justify-center">₿</span>
+              <span className="text-sm">Potential Bitcoin value</span>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
