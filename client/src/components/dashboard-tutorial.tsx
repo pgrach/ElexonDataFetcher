@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 
 export default function DashboardTutorial() {
-  const [showTutorial, setShowTutorial] = useState(true);
   const [viewMode, setViewMode] = useState<'closed' | 'minimized' | 'full'>('full');
   
   // Check if this is the user's first visit
@@ -44,20 +43,37 @@ export default function DashboardTutorial() {
   };
   
   // Return null if the tutorial is closed
-  if (viewMode === 'closed') return null;
+  if (viewMode === 'closed') {
+    // Show a small button to bring the tutorial back
+    return (
+      <div className="mb-6 flex justify-end">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={expandTutorial}
+          className="flex items-center gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10"
+        >
+          <Gauge className="h-4 w-4 text-primary" />
+          <span>Show Guide</span>
+        </Button>
+      </div>
+    );
+  }
   
   // Return minimized version if selected
   if (viewMode === 'minimized') {
     return (
-      <Button 
-        variant="outline" 
-        size="sm" 
-        onClick={expandTutorial}
-        className="mb-6 flex items-center gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10"
-      >
-        <Gauge className="h-4 w-4 text-primary" />
-        <span>Show Dashboard Guide</span>
-      </Button>
+      <div className="mb-6 flex justify-center">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={expandTutorial}
+          className="flex items-center gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10"
+        >
+          <Gauge className="h-4 w-4 text-primary" />
+          <span>Show Dashboard Guide</span>
+        </Button>
+      </div>
     );
   }
   
