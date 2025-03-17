@@ -172,33 +172,11 @@ export default function CurtailmentComparisonCard({
                 xmlns="http://www.w3.org/2000/svg"
               >
                 {/* Tower */}
-                <rect
-                  x="47"
-                  y="55"
-                  width="6"
-                  height="35"
-                  fill="currentColor"
-                  rx="1"
-                />
-                <rect
-                  x="40"
-                  y="90"
-                  width="20"
-                  height="5"
-                  rx="2"
-                  fill="currentColor"
-                />
+                <rect x="47" y="55" width="6" height="35" fill="currentColor" rx="1" />
+                <rect x="40" y="90" width="20" height="5" rx="2" fill="currentColor" />
 
                 {/* Nacelle (turbine housing) */}
-                <rect
-                  x="42"
-                  y="48"
-                  width="16"
-                  height="4"
-                  rx="2"
-                  fill="currentColor"
-                  transform="rotate(5, 50, 50)"
-                />
+                <rect x="42" y="48" width="16" height="4" rx="2" fill="currentColor" transform="rotate(5, 50, 50)" />
 
                 {/* Hub */}
                 <circle cx="50" cy="50" r="3" fill="currentColor" />
