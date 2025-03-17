@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format, isValid } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { FilterBar } from "@/components/ui/filter-bar";
@@ -30,7 +30,10 @@ export default function DashboardOverview() {
   const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
   const [selectedMinerModel, setSelectedMinerModel] = useState("S19J_PRO");
   const [selectedFarm, setSelectedFarm] = useState("all"); // 'all' represents all farms
-  const [timeframe, setTimeframe] = useState("monthly"); // Default to monthly view for better initial user experience
+  
+  // Initially set to monthly, but we'll update this based on data availability
+  const [timeframe, setTimeframe] = useState("monthly");
+  
   const [selectedCurtailmentLeadParty, setSelectedCurtailmentLeadParty] = useState("All Lead Parties");
 
   // Derived values
@@ -50,6 +53,29 @@ export default function DashboardOverview() {
     // Default to false (no data) until we know otherwise
     placeholderData: false
   });
+  
+  // Check if daily data is available on initial load, then set timeframe accordingly
+  useEffect(() => {
+    // Only run this effect once on initial component mount
+    const checkDailyData = async () => {
+      try {
+        const response = await fetch(`/api/summary/daily/${formattedDate}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (Number(data.totalCurtailedEnergy) > 0) {
+            // We have daily data, set to daily view
+            setTimeframe("daily");
+          }
+          // Otherwise keep the default "monthly" view
+        }
+      } catch (error) {
+        console.error("Error checking daily data:", error);
+        // On error, keep monthly view
+      }
+    };
+    
+    checkDailyData();
+  }, [formattedDate]); // Only run when component mounts and if date changes
   
   // Only hide charts when it's a daily view AND there's no data
   // For monthly and yearly views, always show charts as they typically have data
