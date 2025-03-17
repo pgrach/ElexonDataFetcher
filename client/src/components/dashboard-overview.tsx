@@ -16,6 +16,9 @@ import SummaryCards from "@/components/summary-cards";
 import FarmSelector from "@/components/farm-selector";
 import LeadPartySelector from "@/components/lead-party-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CurtailmentInfoBanner from "@/components/curtailment-info-banner";
+import DashboardTutorial from "@/components/dashboard-tutorial";
+import CurtailmentComparisonCard from "@/components/curtailment-comparison-card";
 
 export default function DashboardOverview() {
   // State
@@ -89,6 +92,10 @@ export default function DashboardOverview() {
       <div className="container mx-auto py-8">
         <h1 className="text-4xl font-bold mb-8">CurtailCoin Dashboard</h1>
         
+        {/* Educational components */}
+        <CurtailmentInfoBanner />
+        <DashboardTutorial />
+        
         {/* Summary cards */}
         <SummaryCards 
           timeframe={timeframe}
@@ -96,6 +103,16 @@ export default function DashboardOverview() {
           minerModel={selectedMinerModel}
           farmId={farmIdToUse}
         />
+        
+        {/* Value comparison card - highlights curtailment payment issue */}
+        <div className="mb-8 mt-4">
+          <CurtailmentComparisonCard
+            timeframe={timeframe}
+            date={date}
+            minerModel={selectedMinerModel}
+            farmId={farmIdToUse}
+          />
+        </div>
         
         {/* Tabs for different analyses */}
         <Tabs defaultValue="charts" className="mt-10">
