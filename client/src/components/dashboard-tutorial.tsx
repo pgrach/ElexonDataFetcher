@@ -107,10 +107,10 @@ export default function DashboardTutorial() {
       </CardHeader>
       
       <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
           {/* Step 1 */}
-          <div className="flex flex-col gap-3 p-4 rounded-md bg-background/95 shadow-sm border border-primary/10 relative overflow-hidden">
-            <div className="bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center absolute -top-3 -left-3">1</div>
+          <div className="flex flex-col gap-3 p-4 pt-5 mt-4 rounded-md bg-background/95 shadow-sm border border-primary/10 relative">
+            <div className="bg-primary shadow-md text-primary-foreground rounded-full w-8 h-8 flex items-center justify-center absolute -top-4 left-4 font-semibold">1</div>
             
             {/* Icon and title with visual emphasis */}
             <div className="flex items-center gap-2 mb-1">
@@ -134,8 +134,8 @@ export default function DashboardTutorial() {
           </div>
           
           {/* Step 2 */}
-          <div className="flex flex-col gap-3 p-4 rounded-md bg-background/95 shadow-sm border border-primary/10 relative overflow-hidden">
-            <div className="bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center absolute -top-3 -left-3">2</div>
+          <div className="flex flex-col gap-3 p-4 pt-5 mt-4 rounded-md bg-background/95 shadow-sm border border-primary/10 relative">
+            <div className="bg-primary shadow-md text-primary-foreground rounded-full w-8 h-8 flex items-center justify-center absolute -top-4 left-4 font-semibold">2</div>
             
             <div className="flex items-center gap-2 mb-1">
               <div className="bg-primary/10 p-2 rounded-full">
@@ -157,8 +157,8 @@ export default function DashboardTutorial() {
           </div>
           
           {/* Step 3 */}
-          <div className="flex flex-col gap-3 p-4 rounded-md bg-background/95 shadow-sm border border-primary/10 relative overflow-hidden">
-            <div className="bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center absolute -top-3 -left-3">3</div>
+          <div className="flex flex-col gap-3 p-4 pt-5 mt-4 rounded-md bg-background/95 shadow-sm border border-primary/10 relative">
+            <div className="bg-primary shadow-md text-primary-foreground rounded-full w-8 h-8 flex items-center justify-center absolute -top-4 left-4 font-semibold">3</div>
             
             <div className="flex items-center gap-2 mb-1">
               <div className="bg-primary/10 p-2 rounded-full">
