@@ -15,112 +15,179 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 
 export default function DashboardTutorial() {
-  const [showTutorial, setShowTutorial] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(true);
+  const [viewMode, setViewMode] = useState<'closed' | 'minimized' | 'full'>('full');
   
   // Check if this is the user's first visit
   useEffect(() => {
-    const tutorialSeen = localStorage.getItem('dashboardTutorialSeen');
-    if (!tutorialSeen) {
-      setShowTutorial(true);
+    const tutorialPreference = localStorage.getItem('dashboardTutorialPreference');
+    if (tutorialPreference === 'hidden') {
+      setViewMode('closed');
+    } else if (tutorialPreference === 'minimized') {
+      setViewMode('minimized');
     }
   }, []);
   
   const closeTutorial = () => {
-    setShowTutorial(false);
-    localStorage.setItem('dashboardTutorialSeen', 'true');
+    setViewMode('closed');
+    localStorage.setItem('dashboardTutorialPreference', 'hidden');
   };
   
-  if (!showTutorial) return null;
+  const minimizeTutorial = () => {
+    setViewMode('minimized');
+    localStorage.setItem('dashboardTutorialPreference', 'minimized');
+  };
   
-  return (
-    <Card className="mb-8 border-primary/20 bg-muted/30 relative">
+  const expandTutorial = () => {
+    setViewMode('full');
+    localStorage.setItem('dashboardTutorialPreference', 'full');
+  };
+  
+  // Return null if the tutorial is closed
+  if (viewMode === 'closed') return null;
+  
+  // Return minimized version if selected
+  if (viewMode === 'minimized') {
+    return (
       <Button 
-        variant="ghost" 
-        size="icon" 
-        onClick={closeTutorial}
-        className="absolute top-2 right-2 z-10"
+        variant="outline" 
+        size="sm" 
+        onClick={expandTutorial}
+        className="mb-6 flex items-center gap-2 border-primary/40 bg-primary/5 hover:bg-primary/10"
       >
-        <X className="h-4 w-4" />
+        <Gauge className="h-4 w-4 text-primary" />
+        <span>Show Dashboard Guide</span>
       </Button>
+    );
+  }
+  
+  // Full tutorial
+  return (
+    <Card className="mb-8 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent relative overflow-hidden">
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={minimizeTutorial}
+          className="h-8 px-2 text-xs"
+        >
+          Minimize
+        </Button>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={closeTutorial}
+          className="h-8 w-8"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
       
-      <CardHeader>
+      <CardHeader className="pb-2">
         <CardTitle className="text-lg flex items-center gap-2">
           <Gauge className="h-5 w-5 text-primary" />
-          How to Use This Dashboard
+          Quick Start Guide
         </CardTitle>
       </CardHeader>
       
       <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex flex-col gap-2 p-4 rounded-md bg-background shadow-sm border border-primary/10 relative">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          {/* Step 1 */}
+          <div className="flex flex-col gap-3 p-4 rounded-md bg-background/95 shadow-sm border border-primary/10 relative overflow-hidden">
             <div className="bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center absolute -top-3 -left-3">1</div>
+            
+            {/* Icon and title with visual emphasis */}
             <div className="flex items-center gap-2 mb-1">
-              <Calendar className="h-5 w-5 text-primary" />
+              <div className="bg-primary/10 p-2 rounded-full">
+                <Calendar className="h-5 w-5 text-primary" />
+              </div>
               <h3 className="font-semibold">Select Time Period</h3>
             </div>
-            <div className="text-sm text-muted-foreground flex flex-col gap-2">
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-primary"></span>
-                <span>Choose daily, monthly, or yearly</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-primary"></span>
-                <span>Select a specific date</span>
-              </div>
-            </div>
+            
+            {/* Bullet points with improved visual design */}
+            <ul className="text-sm space-y-2 pl-0 list-none">
+              <li className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-primary flex-shrink-0" />
+                <span>Choose daily, monthly, or yearly view</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
+                <span>Select specific dates to explore</span>
+              </li>
+            </ul>
           </div>
           
-          <div className="flex flex-col gap-2 p-4 rounded-md bg-background shadow-sm border border-primary/10 relative">
+          {/* Step 2 */}
+          <div className="flex flex-col gap-3 p-4 rounded-md bg-background/95 shadow-sm border border-primary/10 relative overflow-hidden">
             <div className="bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center absolute -top-3 -left-3">2</div>
+            
             <div className="flex items-center gap-2 mb-1">
-              <Bitcoin className="h-5 w-5 text-primary" />
+              <div className="bg-primary/10 p-2 rounded-full">
+                <Bitcoin className="h-5 w-5 text-primary" />
+              </div>
               <h3 className="font-semibold">Choose Miner Model</h3>
             </div>
-            <div className="text-sm text-muted-foreground flex flex-col gap-2">
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-primary"></span>
-                <span>Each model has different efficiency</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-primary"></span>
-                <span>Compare hardware performance</span>
-              </div>
-            </div>
+            
+            <ul className="text-sm space-y-2 pl-0 list-none">
+              <li className="flex items-center gap-2">
+                <Gauge className="h-4 w-4 text-primary flex-shrink-0" />
+                <span>Compare mining hardware efficiency</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-primary flex-shrink-0" />
+                <span>See value differences between models</span>
+              </li>
+            </ul>
           </div>
           
-          <div className="flex flex-col gap-2 p-4 rounded-md bg-background shadow-sm border border-primary/10 relative">
+          {/* Step 3 */}
+          <div className="flex flex-col gap-3 p-4 rounded-md bg-background/95 shadow-sm border border-primary/10 relative overflow-hidden">
             <div className="bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center absolute -top-3 -left-3">3</div>
+            
             <div className="flex items-center gap-2 mb-1">
-              <Building2 className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold">Filter by Wind Farm</h3>
-            </div>
-            <div className="text-sm text-muted-foreground flex flex-col gap-2">
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-primary"></span>
-                <span>View all or specific farms</span>
+              <div className="bg-primary/10 p-2 rounded-full">
+                <Building2 className="h-5 w-5 text-primary" />
               </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-primary"></span>
-                <span>Group by lead party companies</span>
-              </div>
+              <h3 className="font-semibold">Filter Wind Farms</h3>
             </div>
+            
+            <ul className="text-sm space-y-2 pl-0 list-none">
+              <li className="flex items-center gap-2">
+                <Wind className="h-4 w-4 text-primary flex-shrink-0" />
+                <span>View all farms or individual sites</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
+                <span>Filter by lead party companies</span>
+              </li>
+            </ul>
           </div>
         </div>
         
-        <div className="mt-6 p-4 rounded-md bg-primary/10 border border-primary/20 shadow-sm">
-          <h3 className="font-semibold flex items-center gap-2 mb-3">
-            <DollarSign className="h-5 w-5 text-primary" />
-            <span>What This Dashboard Shows</span>
+        {/* Dashboard explanation with more visual styling */}
+        <div className="p-4 rounded-md bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+          <h3 className="font-semibold flex items-center gap-2 mb-3 text-primary/90">
+            <DollarSign className="h-5 w-5" />
+            <span>Compare Energy Alternatives</span>
           </h3>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="bg-destructive/20 text-destructive font-bold rounded-full w-6 h-6 flex items-center justify-center">£</span>
-              <span className="text-sm">Subsidies paid</span>
+          
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+            <div className="flex items-center gap-2 p-2 bg-white/80 rounded-md">
+              <span className="bg-destructive/20 text-destructive font-bold rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">£</span>
+              <div>
+                <div className="font-medium text-sm">Current System</div>
+                <div className="text-xs text-muted-foreground">Subsidies for curtailment</div>
+              </div>
             </div>
-            <div className="text-muted-foreground">vs</div>
-            <div className="flex items-center gap-2">
-              <span className="bg-amber-100 text-amber-800 font-bold rounded-full w-6 h-6 flex items-center justify-center">₿</span>
-              <span className="text-sm">Potential Bitcoin value</span>
+            
+            <div className="hidden sm:block text-lg font-bold text-primary/70">vs</div>
+            
+            <div className="flex items-center gap-2 p-2 bg-white/80 rounded-md">
+              <span className="bg-amber-100 text-amber-800 font-bold rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0">₿</span>
+              <div>
+                <div className="font-medium text-sm">Alternative</div>
+                <div className="text-xs text-muted-foreground">Bitcoin from wasted energy</div>
+              </div>
             </div>
           </div>
         </div>
