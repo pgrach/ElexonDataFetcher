@@ -275,24 +275,28 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
           <div className="flex flex-col items-center justify-center h-[300px] border border-dashed border-blue-200 rounded-md bg-blue-50/30">
             <svg className="h-16 w-16 text-blue-400 mb-2" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
               {/* Tower */}
-              <rect x="47" y="50" width="6" height="40" fill="currentColor" />
-              
-              {/* Base */}
+              <rect x="47" y="55" width="6" height="35" fill="currentColor" rx="1" />
               <rect x="40" y="90" width="20" height="5" rx="2" fill="currentColor" />
-              
-              {/* Turbine head */}
-              <circle cx="50" cy="50" r="5" fill="currentColor" />
-              
+
+              {/* Nacelle (turbine housing) */}
+              <rect x="42" y="48" width="16" height="4" rx="2" fill="currentColor" transform="rotate(5, 50, 50)" />
+
+              {/* Hub */}
+              <circle cx="50" cy="50" r="3" fill="currentColor" />
+
               {/* Rotating blades - with animation */}
-              <g style={{ transformOrigin: "50px 50px", animation: "spin 8s linear infinite" }}>
-                <path d="M50 50 L80 20 L85 25 L55 55 Z" fill="currentColor" />
-                <path d="M50 50 L20 20 L15 25 L45 55 Z" fill="currentColor" />
-                <path d="M50 50 L50 10 L45 5 L45 45 Z" fill="currentColor" />
+              <g style={{ transformOrigin: "50px 50px", animation: "windTurbineSpin 8s linear infinite" }}>
+                {/* Blade 1 - pointing right with taper and curve */}
+                <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" />
+                {/* Blade 2 - rotated 120 degrees */}
+                <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(120, 50, 50)" />
+                {/* Blade 3 - rotated 240 degrees */}
+                <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(240, 50, 50)" />
               </g>
-              
+
               {/* Animation keyframes - added via style */}
               <style>{`
-                @keyframes spin {
+                @keyframes windTurbineSpin {
                   0% { transform: rotate(0deg); }
                   100% { transform: rotate(360deg); }
                 }
@@ -307,20 +311,32 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
           <div className="flex flex-col items-center justify-center h-[300px] border border-dashed border-blue-200 rounded-md bg-blue-50/30">
             <svg className="h-16 w-16 text-blue-400 mb-2" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
               {/* Tower */}
-              <rect x="47" y="50" width="6" height="40" fill="currentColor" />
-              
-              {/* Base */}
+              <rect x="47" y="55" width="6" height="35" fill="currentColor" rx="1" />
               <rect x="40" y="90" width="20" height="5" rx="2" fill="currentColor" />
-              
-              {/* Turbine head */}
-              <circle cx="50" cy="50" r="5" fill="currentColor" />
-              
+
+              {/* Nacelle (turbine housing) */}
+              <rect x="42" y="48" width="16" height="4" rx="2" fill="currentColor" transform="rotate(5, 50, 50)" />
+
+              {/* Hub */}
+              <circle cx="50" cy="50" r="3" fill="currentColor" />
+
               {/* Rotating blades - with animation */}
-              <g style={{ transformOrigin: "50px 50px", animation: "spin 12s linear infinite" }}>
-                <path d="M50 50 L80 20 L85 25 L55 55 Z" fill="currentColor" />
-                <path d="M50 50 L20 20 L15 25 L45 55 Z" fill="currentColor" />
-                <path d="M50 50 L50 10 L45 5 L45 45 Z" fill="currentColor" />
+              <g style={{ transformOrigin: "50px 50px", animation: "windTurbineSpin 8s linear infinite" }}>
+                {/* Blade 1 - pointing right with taper and curve */}
+                <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" />
+                {/* Blade 2 - rotated 120 degrees */}
+                <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(120, 50, 50)" />
+                {/* Blade 3 - rotated 240 degrees */}
+                <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(240, 50, 50)" />
               </g>
+              
+              {/* Animation keyframes - added via style */}
+              <style>{`
+                @keyframes windTurbineSpin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}</style>
             </svg>
             <h3 className="text-lg font-medium text-blue-500">No Monthly Curtailment Data</h3>
             <p className="text-sm text-blue-400 max-w-md text-center mt-2 px-4">

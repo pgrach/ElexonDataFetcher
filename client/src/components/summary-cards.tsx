@@ -142,57 +142,23 @@ export default function SummaryCards({
                   xmlns="http://www.w3.org/2000/svg"
                 >
                   {/* Tower */}
-                  <rect
-                    x="48"
-                    y="52"
-                    width="4"
-                    height="38"
-                    fill="currentColor"
-                  />
-                  <path 
-                    d="M46 90 L54 90 L56 95 L44 95 Z" 
-                    fill="currentColor"
-                  />
-                  
+                  <rect x="47" y="55" width="6" height="35" fill="currentColor" rx="1" />
+                  <rect x="40" y="90" width="20" height="5" rx="2" fill="currentColor" />
+
                   {/* Nacelle (turbine housing) */}
-                  <rect
-                    x="45"
-                    y="48"
-                    width="10"
-                    height="5"
-                    rx="1"
-                    fill="currentColor"
-                  />
-                  
+                  <rect x="42" y="48" width="16" height="4" rx="2" fill="currentColor" transform="rotate(5, 50, 50)" />
+
                   {/* Hub */}
-                  <circle cx="50" cy="50" r="2.5" fill="currentColor" />
-                  
-                  {/* Three blades with proper wind turbine shape */}
-                  <g
-                    style={{
-                      transformOrigin: "50px 50px",
-                      animation: "windTurbineSpin 8s linear infinite",
-                    }}
-                  >
-                    {/* Blade 1 - pointing right */}
-                    <path
-                      d="M50 50 L90 45 Q92 42 88 40 L52 48 Z"
-                      fill="currentColor"
-                    />
-                    
-                    {/* Blade 2 - pointing bottom left */}
-                    <path
-                      d="M50 50 L30 85 Q26 87 25 83 L47 53 Z"
-                      fill="currentColor"
-                      transform="rotate(120, 50, 50)"
-                    />
-                    
-                    {/* Blade 3 - pointing top left */}
-                    <path
-                      d="M50 50 L30 85 Q26 87 25 83 L47 53 Z"
-                      fill="currentColor"
-                      transform="rotate(240, 50, 50)"
-                    />
+                  <circle cx="50" cy="50" r="3" fill="currentColor" />
+
+                  {/* Rotating blades - with animation */}
+                  <g style={{ transformOrigin: "50px 50px", animation: "windTurbineSpin 8s linear infinite" }}>
+                    {/* Blade 1 - pointing right with taper and curve */}
+                    <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" />
+                    {/* Blade 2 - rotated 120 degrees */}
+                    <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(120, 50, 50)" />
+                    {/* Blade 3 - rotated 240 degrees */}
+                    <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(240, 50, 50)" />
                   </g>
 
                   {/* Animation keyframes - added via style */}
