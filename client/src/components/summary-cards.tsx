@@ -3,7 +3,7 @@
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Battery, Bitcoin, Calendar, Building } from "lucide-react";
+import { Wind, Battery, Bitcoin, Calendar, Building, ArrowRightLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface SummaryCardsProps {
@@ -114,7 +114,7 @@ export default function SummaryCards({
         : format(date, "PP");
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
       {/* Energy Curtailed Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -322,6 +322,117 @@ export default function SummaryCards({
           ) : (
             <p className="text-xs text-muted-foreground mt-1">
               Using {minerModel.replace("_", " ")} miners
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Value Ratio Card */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">
+            Value Ratio
+          </CardTitle>
+          <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          {isBitcoinLoading || isSummaryLoading ? (
+            <Skeleton className="h-8 w-32 mb-1" />
+          ) : (
+            <>
+              <div className="text-2xl font-bold text-green-500">
+                {Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) || 
+                 Number.isNaN(Number(summaryData.totalPayment)) ||
+                 Number(summaryData.totalPayment) === 0
+                  ? "0.00x"
+                  : `${(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment)).toFixed(2)}x`}
+              </div>
+              <div className="flex items-center space-x-1 mt-1">
+                <div className="text-xs text-muted-foreground">
+                  Bitcoin value vs subsidies ratio
+                </div>
+              </div>
+            </>
+          )}
+          {Number(summaryData.totalCurtailedEnergy) === 0 ? (
+            <div className="flex items-center mt-1 space-x-2">
+              <div className="relative h-6 w-6 text-green-500">
+                <svg
+                  viewBox="0 0 100 100"
+                  className="absolute inset-0"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  {/* Ratio icon with animation */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="currentColor"
+                    opacity="0.2"
+                  />
+                  <g
+                    style={{
+                      transformOrigin: "center",
+                      animation: "flip 3s ease-in-out infinite",
+                    }}
+                  >
+                    {/* Bitcoin symbol on left */}
+                    <text
+                      x="30"
+                      y="50"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="currentColor"
+                      fontSize="18"
+                      fontWeight="bold"
+                    >
+                      ₿
+                    </text>
+                    
+                    {/* Pound symbol on right */}
+                    <text
+                      x="70"
+                      y="50"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="currentColor"
+                      fontSize="18"
+                      fontWeight="bold"
+                    >
+                      £
+                    </text>
+                    
+                    {/* Slash between symbols */}
+                    <text
+                      x="50"
+                      y="50"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="currentColor"
+                      fontSize="24"
+                      fontWeight="bold"
+                    >
+                      /
+                    </text>
+                  </g>
+
+                  {/* Animation keyframes - added via style */}
+                  <style>{`
+                    @keyframes flip {
+                      0% { transform: rotateY(0deg); }
+                      50% { transform: rotateY(180deg); }
+                      100% { transform: rotateY(360deg); }
+                    }
+                  `}</style>
+                </svg>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                No comparison data available
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground mt-1">
+              Mining potential vs curtailment payment
             </p>
           )}
         </CardContent>
