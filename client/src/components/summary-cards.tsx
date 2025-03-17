@@ -129,9 +129,9 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
                   
                   {/* Rotating blades - with animation */}
                   <g style={{ transformOrigin: "50px 50px", animation: "windTurbineSpin 8s linear infinite" }}>
-                    <path d="M50 50 L80 20 L85 25 L55 55 Z" fill="currentColor" />
-                    <path d="M50 50 L20 20 L15 25 L45 55 Z" fill="currentColor" />
-                    <path d="M50 50 L50 10 L45 5 L45 45 Z" fill="currentColor" />
+                    <path d="M50 50 L85 25 L75 15 L45 45 Z" fill="currentColor" />
+                    <path d="M50 50 L25 15 L15 25 L45 55 Z" fill="currentColor" />
+                    <path d="M50 50 L45 5 L35 10 L45 45 Z" fill="currentColor" />
                   </g>
                   
                   {/* Animation keyframes - added via style */}
