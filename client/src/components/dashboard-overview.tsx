@@ -35,6 +35,21 @@ export default function DashboardOverview() {
 
   // Derived values
   const formattedDate = format(date, "yyyy-MM-dd");
+  
+  // Check if there's data available - will be used to conditionally show/hide charts
+  const hasCurtailmentData = useQuery({
+    queryKey: [`/api/summary/daily/${formattedDate}`, "data-check"],
+    queryFn: async () => {
+      const response = await fetch(`/api/summary/daily/${formattedDate}`);
+      if (!response.ok) {
+        return false;
+      }
+      const data = await response.json();
+      return Number(data.totalCurtailedEnergy) > 0;
+    },
+    // Default to false (no data) until we know otherwise
+    placeholderData: false
+  });
 
   // Fetch lead parties for the filters
   const { data: curtailedLeadParties = [] } = useQuery<string[]>({
@@ -104,80 +119,83 @@ export default function DashboardOverview() {
           farmId={farmIdToUse}
         />
         
-        {/* Value comparison component removed - redundant with Value Ratio card */}
-        
-        {/* Tabs for different analyses */}
-        <Tabs defaultValue="charts" className="mt-10">
-          <TabsList className="grid grid-cols-3 mb-8">
-            <TabsTrigger value="charts">Charts & Visualizations</TabsTrigger>
-            <TabsTrigger value="curtailment">Curtailment Analysis</TabsTrigger>
-            <TabsTrigger value="data">Data Tables</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="charts" className="space-y-8">
-            {/* Curtailment Chart */}
-            <CurtailmentChart 
-              timeframe={timeframe}
-              date={date}
-              minerModel={selectedMinerModel}
-              farmId={farmIdToUse}
-            />
-            
-            {/* Show either Farm Comparison or Farm Opportunity Comparison based on farm selection */}
-            {selectedFarm === 'all' ? (
-              // When no specific farm is selected, show the general farm comparison
-              <FarmComparisonChart
-                timeframe={timeframe}
-                date={date}
-                minerModel={selectedMinerModel}
-              />
-            ) : (
-              // When a specific farm is selected, show the opportunity comparison
-              <FarmOpportunityComparisonChart
-                timeframe={timeframe}
-                date={date}
-                minerModel={selectedMinerModel}
-                farmId={selectedFarm}
-              />
-            )}
-          </TabsContent>
-          
-          <TabsContent value="curtailment" className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 items-end">
-              <div className="col-span-1 md:col-span-2">
-                <h2 className="text-2xl font-bold mb-2">Wind Farm Curtailment Percentage Analysis</h2>
-                <p className="text-muted-foreground">
-                  Compare physical notifications (PN) data with actual curtailment volumes to analyze wasted wind farm capacity.
-                </p>
-              </div>
-              <div>
-                <LeadPartySelector
-                  value={selectedCurtailmentLeadParty}
-                  onValueChange={setSelectedCurtailmentLeadParty}
+        {/* Only show tabs when data is available */}
+        {hasCurtailmentData.data && (
+          <>
+            {/* Tabs for different analyses */}
+            <Tabs defaultValue="charts" className="mt-10">
+              <TabsList className="grid grid-cols-3 mb-8">
+                <TabsTrigger value="charts">Charts & Visualizations</TabsTrigger>
+                <TabsTrigger value="curtailment">Curtailment Analysis</TabsTrigger>
+                <TabsTrigger value="data">Data Tables</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="charts" className="space-y-8">
+                {/* Curtailment Chart */}
+                <CurtailmentChart 
+                  timeframe={timeframe}
                   date={date}
+                  minerModel={selectedMinerModel}
+                  farmId={farmIdToUse}
                 />
-              </div>
-            </div>
-            
-            {/* Curtailment Percentage Chart */}
-            <CurtailmentPercentageChart 
-              date={date}
-              leadPartyName={selectedCurtailmentLeadParty === "All Lead Parties" ? undefined : selectedCurtailmentLeadParty}
-              farmId={undefined}
-            />
-            
-          </TabsContent>
-          
-          <TabsContent value="data">
-            {/* Bitcoin Potential Table */}
-            <BitcoinPotentialTable
-              timeframe={timeframe}
-              date={date}
-              minerModel={selectedMinerModel}
-              farmId={farmIdToUse}
-            />
-          </TabsContent>
-        </Tabs>
+                
+                {/* Show either Farm Comparison or Farm Opportunity Comparison based on farm selection */}
+                {selectedFarm === 'all' ? (
+                  // When no specific farm is selected, show the general farm comparison
+                  <FarmComparisonChart
+                    timeframe={timeframe}
+                    date={date}
+                    minerModel={selectedMinerModel}
+                  />
+                ) : (
+                  // When a specific farm is selected, show the opportunity comparison
+                  <FarmOpportunityComparisonChart
+                    timeframe={timeframe}
+                    date={date}
+                    minerModel={selectedMinerModel}
+                    farmId={selectedFarm}
+                  />
+                )}
+              </TabsContent>
+              
+              <TabsContent value="curtailment" className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 items-end">
+                  <div className="col-span-1 md:col-span-2">
+                    <h2 className="text-2xl font-bold mb-2">Wind Farm Curtailment Percentage Analysis</h2>
+                    <p className="text-muted-foreground">
+                      Compare physical notifications (PN) data with actual curtailment volumes to analyze wasted wind farm capacity.
+                    </p>
+                  </div>
+                  <div>
+                    <LeadPartySelector
+                      value={selectedCurtailmentLeadParty}
+                      onValueChange={setSelectedCurtailmentLeadParty}
+                      date={date}
+                    />
+                  </div>
+                </div>
+                
+                {/* Curtailment Percentage Chart */}
+                <CurtailmentPercentageChart 
+                  date={date}
+                  leadPartyName={selectedCurtailmentLeadParty === "All Lead Parties" ? undefined : selectedCurtailmentLeadParty}
+                  farmId={undefined}
+                />
+                
+              </TabsContent>
+              
+              <TabsContent value="data">
+                {/* Bitcoin Potential Table */}
+                <BitcoinPotentialTable
+                  timeframe={timeframe}
+                  date={date}
+                  minerModel={selectedMinerModel}
+                  farmId={farmIdToUse}
+                />
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
       </div>
     </div>
   );
