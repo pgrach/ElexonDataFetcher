@@ -114,12 +114,12 @@ export default function SummaryCards({
         : format(date, "PP");
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-      {/* Curtailed Energy Card */}
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+      {/* Energy Curtailed Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">
-            {farmId ? "Farm Curtailed Energy" : "Curtailed Energy"}
+            Energy Curtailed
           </CardTitle>
           <Wind className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
@@ -171,26 +171,22 @@ export default function SummaryCards({
                 </svg>
               </div>
               <p className="text-xs text-muted-foreground">
-                {farmId
-                  ? `No curtailment for ${timeframeLabel}`
-                  : `No curtailment events for ${timeframeLabel}`}
+                No curtailment events for {timeframeLabel}
               </p>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground mt-1">
-              {farmId
-                ? `Farm energy for ${timeframeLabel}`
-                : `Total energy for ${timeframeLabel}`}
+              Wasted energy that could be utilized
             </p>
           )}
         </CardContent>
       </Card>
 
-      {/* Payment Card */}
+      {/* Subsidies Paid Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">
-            {farmId ? "Farm Payment" : "Curtailment Payment"}
+            Subsidies Paid
           </CardTitle>
           <Battery className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
@@ -198,7 +194,7 @@ export default function SummaryCards({
           {isSummaryLoading ? (
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-red-500">
               {Number.isNaN(Number(summaryData.totalPayment))
                 ? "£0"
                 : `£${Math.round(Number(summaryData.totalPayment)).toLocaleString()}`}
@@ -246,26 +242,22 @@ export default function SummaryCards({
                 </svg>
               </div>
               <p className="text-xs text-muted-foreground">
-                {farmId
-                  ? `No payments for ${timeframeLabel}`
-                  : `No curtailment payments for ${timeframeLabel}`}
+                No curtailment payments for {timeframeLabel}
               </p>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground mt-1">
-              {farmId
-                ? `Payment for ${timeframeLabel}`
-                : `Total payment for ${timeframeLabel}`}
+              Consumer cost for idle wind farms
             </p>
           )}
         </CardContent>
       </Card>
 
-      {/* Bitcoin Mining Card */}
+      {/* Potential Bitcoin Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">
-            Bitcoin Mining Potential
+            Potential Bitcoin
           </CardTitle>
           <Bitcoin className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
@@ -273,11 +265,16 @@ export default function SummaryCards({
           {isBitcoinLoading ? (
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
-            <div className="text-2xl font-bold text-[#F7931A]">
-              {Number.isNaN(Number(bitcoinData.bitcoinMined))
-                ? "₿0.00"
-                : `₿${Number(bitcoinData.bitcoinMined).toFixed(2)}`}
-            </div>
+            <>
+              <div className="text-2xl font-bold text-[#F7931A]">
+                {Number.isNaN(Number(bitcoinData.bitcoinMined))
+                  ? "0 BTC"
+                  : `${Number(bitcoinData.bitcoinMined).toFixed(4)} BTC`}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                ≈ £{Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString("en-GB")}
+              </div>
+            </>
           )}
           {Number(summaryData.totalCurtailedEnergy) === 0 ? (
             <div className="flex items-center mt-1 space-x-2">
@@ -324,98 +321,7 @@ export default function SummaryCards({
             </div>
           ) : (
             <p className="text-xs text-muted-foreground mt-1">
-              With {minerModel.replace("_", " ")} miners
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Value Card */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Bitcoin Value</CardTitle>
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {isBitcoinLoading ? (
-            <Skeleton className="h-8 w-32 mb-1" />
-          ) : (
-            <div className="text-2xl font-bold text-[#F7931A]">
-              {Number.isNaN(Number(bitcoinData.valueAtCurrentPrice))
-                ? "£0"
-                : `£${Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString("en-GB")}`}
-            </div>
-          )}
-          {Number(summaryData.totalCurtailedEnergy) === 0 ? (
-            <div className="flex items-center mt-1 space-x-2">
-              <div className="relative h-6 w-6 text-[#F7931A]">
-                <svg
-                  viewBox="0 0 100 100"
-                  className="absolute inset-0"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  {/* GBP and BTC symbol combined with animation */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    fill="currentColor"
-                    opacity="0.2"
-                  />
-                  <g
-                    style={{
-                      transformOrigin: "center",
-                      animation: "rotate 6s linear infinite",
-                    }}
-                  >
-                    <path
-                      d="M65 30L35 70"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      strokeLinecap="round"
-                    />
-                    <text
-                      x="30"
-                      y="38"
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fill="currentColor"
-                      fontSize="25"
-                      fontWeight="bold"
-                    >
-                      £
-                    </text>
-                    <text
-                      x="70"
-                      y="62"
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fill="currentColor"
-                      fontSize="25"
-                      fontWeight="bold"
-                    >
-                      ₿
-                    </text>
-                  </g>
-
-                  {/* Animation keyframes - added via style */}
-                  <style>{`
-                    @keyframes rotate {
-                      0% { transform: rotate(0deg); }
-                      25% { transform: rotate(-5deg); }
-                      75% { transform: rotate(5deg); }
-                      100% { transform: rotate(0deg); }
-                    }
-                  `}</style>
-                </svg>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                No Bitcoin value without curtailment
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground mt-1">
-              Estimated value at current BTC price
+              Using {minerModel.replace("_", " ")} miners
             </p>
           )}
         </CardContent>
