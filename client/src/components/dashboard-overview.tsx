@@ -36,8 +36,8 @@ export default function DashboardOverview() {
   // Derived values
   const formattedDate = format(date, "yyyy-MM-dd");
   
-  // Check if there's data available - will be used to conditionally show/hide charts
-  const hasCurtailmentData = useQuery({
+  // Check if there's data available - will be used to conditionally show/hide charts for daily view
+  const dailyDataCheck = useQuery({
     queryKey: [`/api/summary/daily/${formattedDate}`, "data-check"],
     queryFn: async () => {
       const response = await fetch(`/api/summary/daily/${formattedDate}`);
@@ -50,6 +50,10 @@ export default function DashboardOverview() {
     // Default to false (no data) until we know otherwise
     placeholderData: false
   });
+  
+  // Only hide charts when it's a daily view AND there's no data
+  // For monthly and yearly views, always show charts as they typically have data
+  const shouldShowCharts = timeframe !== "daily" || dailyDataCheck.data;
 
   // Fetch lead parties for the filters
   const { data: curtailedLeadParties = [] } = useQuery<string[]>({
@@ -119,8 +123,8 @@ export default function DashboardOverview() {
           farmId={farmIdToUse}
         />
         
-        {/* Only show tabs when data is available */}
-        {hasCurtailmentData.data && (
+        {/* Only show tabs when there's data (or if we're in monthly/yearly view) */}
+        {shouldShowCharts && (
           <>
             {/* Tabs for different analyses */}
             <Tabs defaultValue="charts" className="mt-10">
