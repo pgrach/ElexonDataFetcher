@@ -18,7 +18,7 @@ import LeadPartySelector from "@/components/lead-party-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CurtailmentInfoBanner from "@/components/curtailment-info-banner";
 import DashboardTutorial from "@/components/dashboard-tutorial";
-import CurtailmentComparisonCard from "@/components/curtailment-comparison-card";
+// CurtailmentComparisonCard removed as it's redundant with the Value Ratio card
 
 export default function DashboardOverview() {
   // State
@@ -104,15 +104,7 @@ export default function DashboardOverview() {
           farmId={farmIdToUse}
         />
         
-        {/* Value comparison card - highlights curtailment payment issue */}
-        <div className="mb-8 mt-4">
-          <CurtailmentComparisonCard
-            timeframe={timeframe}
-            date={date}
-            minerModel={selectedMinerModel}
-            farmId={farmIdToUse}
-          />
-        </div>
+        {/* Value comparison component removed - redundant with Value Ratio card */}
         
         {/* Tabs for different analyses */}
         <Tabs defaultValue="charts" className="mt-10">
