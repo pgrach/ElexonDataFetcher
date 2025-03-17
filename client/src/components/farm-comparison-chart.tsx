@@ -118,8 +118,16 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
         {isLoading ? (
           <Skeleton className="h-[300px] w-full" />
         ) : chartData.length === 0 ? (
-          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-            No farm comparison data available for this {timeframe} period
+          <div className="flex flex-col items-center justify-center h-[300px] border border-dashed border-blue-200 rounded-md bg-blue-50/30">
+            <svg className="h-12 w-12 text-blue-400 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-4.5-8.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 8.5l4 4 4-4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12.5v-2" />
+            </svg>
+            <h3 className="text-lg font-medium text-blue-500">No Wind Farms Curtailed</h3>
+            <p className="text-sm text-blue-400 max-w-md text-center mt-2 px-4">
+              There were no wind farms curtailed during this {timeframe} period. Try selecting a different date to view farm comparison data.
+            </p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>

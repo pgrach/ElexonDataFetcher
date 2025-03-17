@@ -271,13 +271,25 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-[300px] w-full" />
-        ) : timeframe === "daily" && dailyChartData.length === 0 ? (
-          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-            No curtailment data available for this date
+        ) : timeframe === "daily" && (dailyChartData.length === 0 || dailyChartData.every((item: { curtailedEnergy: number }) => item.curtailedEnergy === 0)) ? (
+          <div className="flex flex-col items-center justify-center h-[300px] border border-dashed border-blue-200 rounded-md bg-blue-50/30">
+            <svg className="h-12 w-12 text-blue-400 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 className="text-lg font-medium text-blue-500">No Curtailment Events</h3>
+            <p className="text-sm text-blue-400 max-w-md text-center mt-2 px-4">
+              No wind farms were curtailed on this date. All available wind energy was successfully utilized by the grid.
+            </p>
           </div>
-        ) : timeframe === "monthly" && monthlyChartData.length === 0 ? (
-          <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-            No monthly data available for this year
+        ) : timeframe === "monthly" && (monthlyChartData.length === 0 || monthlyChartData.every((item: { curtailedEnergy: number }) => item.curtailedEnergy === 0)) ? (
+          <div className="flex flex-col items-center justify-center h-[300px] border border-dashed border-blue-200 rounded-md bg-blue-50/30">
+            <svg className="h-12 w-12 text-blue-400 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 className="text-lg font-medium text-blue-500">No Monthly Curtailment Data</h3>
+            <p className="text-sm text-blue-400 max-w-md text-center mt-2 px-4">
+              No curtailment events were recorded for the selected month in {currentYear}.
+            </p>
           </div>
         ) : timeframe === "daily" ? (
           <ResponsiveContainer width="100%" height={300}>
