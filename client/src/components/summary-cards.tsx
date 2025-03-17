@@ -13,24 +13,33 @@ interface SummaryCardsProps {
   farmId: string;
 }
 
-export default function SummaryCards({ timeframe, date, minerModel, farmId }: SummaryCardsProps) {
+export default function SummaryCards({
+  timeframe,
+  date,
+  minerModel,
+  farmId,
+}: SummaryCardsProps) {
   // Format dates based on timeframe
   const formattedDate = format(date, "yyyy-MM-dd");
   const yearMonth = format(date, "yyyy-MM");
   const year = format(date, "yyyy");
-  
+
   // Determine which summary to fetch based on timeframe
-  const summaryEndpoint = 
-    timeframe === "yearly" ? `/api/summary/yearly/${year}` :
-    timeframe === "monthly" ? `/api/summary/monthly/${yearMonth}` :
-    `/api/summary/daily/${formattedDate}`;
-  
+  const summaryEndpoint =
+    timeframe === "yearly"
+      ? `/api/summary/yearly/${year}`
+      : timeframe === "monthly"
+        ? `/api/summary/monthly/${yearMonth}`
+        : `/api/summary/daily/${formattedDate}`;
+
   // Determine which bitcoin potential to fetch based on timeframe
-  const bitcoinEndpoint = 
-    timeframe === "yearly" ? `/api/mining-potential/yearly/${year}` :
-    timeframe === "monthly" ? `/api/curtailment/monthly-mining-potential/${yearMonth}` :
-    `/api/curtailment/mining-potential`;
-  
+  const bitcoinEndpoint =
+    timeframe === "yearly"
+      ? `/api/mining-potential/yearly/${year}`
+      : timeframe === "monthly"
+        ? `/api/curtailment/monthly-mining-potential/${yearMonth}`
+        : `/api/curtailment/mining-potential`;
+
   // Fetch summary data
   const { data: summaryData = {}, isLoading: isSummaryLoading } = useQuery({
     queryKey: [summaryEndpoint, farmId],
@@ -39,7 +48,7 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
       if (farmId) {
         url.searchParams.set("leadParty", farmId);
       }
-      
+
       const response = await fetch(url);
       if (!response.ok) {
         if (response.status === 404) {
@@ -47,53 +56,63 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
         }
         throw new Error(`API Error: ${response.status}`);
       }
-      
+
       return response.json();
-    }
+    },
   });
-  
+
   // Fetch bitcoin data
   const { data: bitcoinData = {}, isLoading: isBitcoinLoading } = useQuery({
-    queryKey: [bitcoinEndpoint, minerModel, farmId, summaryData.totalCurtailedEnergy],
+    queryKey: [
+      bitcoinEndpoint,
+      minerModel,
+      farmId,
+      summaryData.totalCurtailedEnergy,
+    ],
     queryFn: async () => {
       const url = new URL(bitcoinEndpoint, window.location.origin);
       url.searchParams.set("minerModel", minerModel);
-      
+
       if (farmId) {
         url.searchParams.set("leadParty", farmId);
       }
-      
+
       // For daily view, we need to pass the energy value
       if (timeframe === "daily" && summaryData.totalCurtailedEnergy) {
         url.searchParams.set("date", formattedDate);
-        url.searchParams.set("energy", summaryData.totalCurtailedEnergy.toString());
+        url.searchParams.set(
+          "energy",
+          summaryData.totalCurtailedEnergy.toString(),
+        );
       }
-      
+
       const response = await fetch(url);
       if (!response.ok) {
         if (response.status === 404) {
-          return { 
-            bitcoinMined: 0, 
-            valueAtCurrentPrice: 0, 
-            difficulty: 0, 
+          return {
+            bitcoinMined: 0,
+            valueAtCurrentPrice: 0,
+            difficulty: 0,
             price: 0,
-            currentPrice: 0 
+            currentPrice: 0,
           };
         }
         throw new Error(`Failed to fetch mining potential`);
       }
-      
+
       return response.json();
     },
-    enabled: !!summaryData.totalCurtailedEnergy || timeframe !== "daily"
+    enabled: !!summaryData.totalCurtailedEnergy || timeframe !== "daily",
   });
-  
+
   // Helper for displaying timeframe-specific text
-  const timeframeLabel = 
-    timeframe === "yearly" ? format(date, "yyyy") :
-    timeframe === "monthly" ? format(date, "MMMM yyyy") :
-    format(date, "PP");
-  
+  const timeframeLabel =
+    timeframe === "yearly"
+      ? format(date, "yyyy")
+      : timeframe === "monthly"
+        ? format(date, "MMMM yyyy")
+        : format(date, "PP");
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
       {/* Curtailed Energy Card */}
@@ -109,31 +128,73 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold">
-              {Number.isNaN(Number(summaryData.totalCurtailedEnergy)) ? 
-                "0 MWh" : 
-                `${Math.round(Number(summaryData.totalCurtailedEnergy)).toLocaleString()} MWh`}
+              {Number.isNaN(Number(summaryData.totalCurtailedEnergy))
+                ? "0 MWh"
+                : `${Math.round(Number(summaryData.totalCurtailedEnergy)).toLocaleString()} MWh`}
             </div>
           )}
           {Number(summaryData.totalCurtailedEnergy) === 0 ? (
             <div className="flex items-center mt-1 space-x-2">
               <div className="relative h-6 w-6 text-blue-400">
-                <svg viewBox="0 0 100 100" className="absolute inset-0" xmlns="http://www.w3.org/2000/svg">
+                <svg
+                  viewBox="0 0 100 100"
+                  className="absolute inset-0"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
                   {/* Tower */}
-                  <rect x="47" y="50" width="6" height="40" fill="currentColor" />
+                  <rect
+                    x="48"
+                    y="52"
+                    width="4"
+                    height="38"
+                    fill="currentColor"
+                  />
+                  <path 
+                    d="M46 90 L54 90 L56 95 L44 95 Z" 
+                    fill="currentColor"
+                  />
                   
-                  {/* Base */}
-                  <rect x="40" y="90" width="20" height="5" rx="2" fill="currentColor" />
+                  {/* Nacelle (turbine housing) */}
+                  <rect
+                    x="45"
+                    y="48"
+                    width="10"
+                    height="5"
+                    rx="1"
+                    fill="currentColor"
+                  />
                   
-                  {/* Turbine head */}
-                  <circle cx="50" cy="50" r="5" fill="currentColor" />
+                  {/* Hub */}
+                  <circle cx="50" cy="50" r="2.5" fill="currentColor" />
                   
-                  {/* Rotating blades - with animation */}
-                  <g style={{ transformOrigin: "50px 50px", animation: "windTurbineSpin 8s linear infinite" }}>
-                    <path d="M50 50 L85 25 L75 15 L45 45 Z" fill="currentColor" />
-                    <path d="M50 50 L25 15 L15 25 L45 55 Z" fill="currentColor" />
-                    <path d="M50 50 L45 5 L35 10 L45 45 Z" fill="currentColor" />
+                  {/* Three blades with proper wind turbine shape */}
+                  <g
+                    style={{
+                      transformOrigin: "50px 50px",
+                      animation: "windTurbineSpin 8s linear infinite",
+                    }}
+                  >
+                    {/* Blade 1 - pointing right */}
+                    <path
+                      d="M50 50 L90 45 Q92 42 88 40 L52 48 Z"
+                      fill="currentColor"
+                    />
+                    
+                    {/* Blade 2 - pointing bottom left */}
+                    <path
+                      d="M50 50 L30 85 Q26 87 25 83 L47 53 Z"
+                      fill="currentColor"
+                      transform="rotate(120, 50, 50)"
+                    />
+                    
+                    {/* Blade 3 - pointing top left */}
+                    <path
+                      d="M50 50 L30 85 Q26 87 25 83 L47 53 Z"
+                      fill="currentColor"
+                      transform="rotate(240, 50, 50)"
+                    />
                   </g>
-                  
+
                   {/* Animation keyframes - added via style */}
                   <style>{`
                     @keyframes windTurbineSpin {
@@ -144,17 +205,21 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
                 </svg>
               </div>
               <p className="text-xs text-muted-foreground">
-                {farmId ? `No curtailment for ${timeframeLabel}` : `No curtailment events for ${timeframeLabel}`}
+                {farmId
+                  ? `No curtailment for ${timeframeLabel}`
+                  : `No curtailment events for ${timeframeLabel}`}
               </p>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground mt-1">
-              {farmId ? `Farm energy for ${timeframeLabel}` : `Total energy for ${timeframeLabel}`}
+              {farmId
+                ? `Farm energy for ${timeframeLabel}`
+                : `Total energy for ${timeframeLabel}`}
             </p>
           )}
         </CardContent>
       </Card>
-      
+
       {/* Payment Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -168,32 +233,42 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold">
-              {Number.isNaN(Number(summaryData.totalPayment)) ? 
-                "£0" : 
-                `£${Math.round(Number(summaryData.totalPayment)).toLocaleString()}`}
+              {Number.isNaN(Number(summaryData.totalPayment))
+                ? "£0"
+                : `£${Math.round(Number(summaryData.totalPayment)).toLocaleString()}`}
             </div>
           )}
           {Number(summaryData.totalPayment) === 0 ? (
             <div className="flex items-center mt-1 space-x-2">
               <div className="relative h-6 w-6 text-green-400">
-                <svg viewBox="0 0 100 100" className="absolute inset-0" xmlns="http://www.w3.org/2000/svg">
+                <svg
+                  viewBox="0 0 100 100"
+                  className="absolute inset-0"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
                   {/* Coin base */}
-                  <circle cx="50" cy="50" r="40" fill="currentColor" opacity="0.2" />
-                  
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="currentColor"
+                    opacity="0.2"
+                  />
+
                   {/* Pound symbol */}
-                  <text 
-                    x="50" 
-                    y="65" 
-                    textAnchor="middle" 
-                    dominantBaseline="middle" 
-                    fill="currentColor" 
+                  <text
+                    x="50"
+                    y="65"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill="currentColor"
                     fontSize="50"
                     fontWeight="bold"
                     style={{ animation: "pulse 2s ease-in-out infinite" }}
                   >
                     £
                   </text>
-                  
+
                   {/* Animation keyframes - added via style */}
                   <style>{`
                     @keyframes pulse {
@@ -205,17 +280,21 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
                 </svg>
               </div>
               <p className="text-xs text-muted-foreground">
-                {farmId ? `No payments for ${timeframeLabel}` : `No curtailment payments for ${timeframeLabel}`}
+                {farmId
+                  ? `No payments for ${timeframeLabel}`
+                  : `No curtailment payments for ${timeframeLabel}`}
               </p>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground mt-1">
-              {farmId ? `Payment for ${timeframeLabel}` : `Total payment for ${timeframeLabel}`}
+              {farmId
+                ? `Payment for ${timeframeLabel}`
+                : `Total payment for ${timeframeLabel}`}
             </p>
           )}
         </CardContent>
       </Card>
-      
+
       {/* Bitcoin Mining Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -229,21 +308,39 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold text-[#F7931A]">
-              {Number.isNaN(Number(bitcoinData.bitcoinMined)) ? 
-                "₿0.00" : 
-                `₿${Number(bitcoinData.bitcoinMined).toFixed(2)}`}
+              {Number.isNaN(Number(bitcoinData.bitcoinMined))
+                ? "₿0.00"
+                : `₿${Number(bitcoinData.bitcoinMined).toFixed(2)}`}
             </div>
           )}
           {Number(summaryData.totalCurtailedEnergy) === 0 ? (
             <div className="flex items-center mt-1 space-x-2">
               <div className="relative h-6 w-6 text-[#F7931A]">
-                <svg viewBox="0 0 100 100" className="absolute inset-0" xmlns="http://www.w3.org/2000/svg">
+                <svg
+                  viewBox="0 0 100 100"
+                  className="absolute inset-0"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
                   {/* Bitcoin symbol with animation */}
-                  <circle cx="50" cy="50" r="40" fill="currentColor" opacity="0.2" />
-                  <g style={{ transformOrigin: "center", animation: "float 3s ease-in-out infinite" }}>
-                    <path d="M64.4 47.4c1-7.4-4.6-11.4-12.3-14l2.4-9.8-6-1.5-2.4 9.6c-1.5-0.4-3.1-0.7-4.7-1L44 20.5l-6-1.5-2.4 9.8c-1.3-0.3-2.5-0.6-3.7-0.9l0 0-8.2-2.1-1.6 6.4c0 0 4.4 1 4.3 1.1 2.4 0.6 2.9 2.2 2.8 3.5l-2.8 11.2c0.2 0 0.4 0.1 0.6 0.2l-0.6-0.2L23 60.2c-0.3 0.8-1.2 2-3.1 1.5 0.1 0.1-4.3-1.1-4.3-1.1l-3 6.9 7.8 1.9c1.4 0.4 2.9 0.8 4.3 1.1l-2.5 10 6 1.5 2.4-9.8c1.6 0.4 3.2 0.8 4.7 1.2l-2.4 9.8 6 1.5 2.5-10c10.1 1.9 17.6 1.1 20.8-8 2.6-7.3-0.1-11.5-5.4-14.3C63.2 54.9 63.7 52.9 64.4 47.4zM48.3 63.6c-1.8 7.3-14.1 3.4-18.1 2.4L33 54.3c4 1 16.9 3.1 15.3 9.3zM50.1 47.3c-1.7 6.7-12 3.3-15.4 2.5l2.5-10.1C40.7 40.4 51.9 40.3 50.1 47.3z" fill="currentColor"/>
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="currentColor"
+                    opacity="0.2"
+                  />
+                  <g
+                    style={{
+                      transformOrigin: "center",
+                      animation: "float 3s ease-in-out infinite",
+                    }}
+                  >
+                    <path
+                      d="M64.4 47.4c1-7.4-4.6-11.4-12.3-14l2.4-9.8-6-1.5-2.4 9.6c-1.5-0.4-3.1-0.7-4.7-1L44 20.5l-6-1.5-2.4 9.8c-1.3-0.3-2.5-0.6-3.7-0.9l0 0-8.2-2.1-1.6 6.4c0 0 4.4 1 4.3 1.1 2.4 0.6 2.9 2.2 2.8 3.5l-2.8 11.2c0.2 0 0.4 0.1 0.6 0.2l-0.6-0.2L23 60.2c-0.3 0.8-1.2 2-3.1 1.5 0.1 0.1-4.3-1.1-4.3-1.1l-3 6.9 7.8 1.9c1.4 0.4 2.9 0.8 4.3 1.1l-2.5 10 6 1.5 2.4-9.8c1.6 0.4 3.2 0.8 4.7 1.2l-2.4 9.8 6 1.5 2.5-10c10.1 1.9 17.6 1.1 20.8-8 2.6-7.3-0.1-11.5-5.4-14.3C63.2 54.9 63.7 52.9 64.4 47.4zM48.3 63.6c-1.8 7.3-14.1 3.4-18.1 2.4L33 54.3c4 1 16.9 3.1 15.3 9.3zM50.1 47.3c-1.7 6.7-12 3.3-15.4 2.5l2.5-10.1C40.7 40.4 51.9 40.3 50.1 47.3z"
+                      fill="currentColor"
+                    />
                   </g>
-                  
+
                   {/* Animation keyframes - added via style */}
                   <style>{`
                     @keyframes float {
@@ -265,13 +362,11 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
           )}
         </CardContent>
       </Card>
-      
+
       {/* Value Card */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">
-            Bitcoin Value
-          </CardTitle>
+          <CardTitle className="text-sm font-medium">Bitcoin Value</CardTitle>
           <Calendar className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -279,43 +374,63 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold text-[#F7931A]">
-              {Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) ? 
-                "£0" : 
-                `£${Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString('en-GB')}`}
+              {Number.isNaN(Number(bitcoinData.valueAtCurrentPrice))
+                ? "£0"
+                : `£${Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString("en-GB")}`}
             </div>
           )}
           {Number(summaryData.totalCurtailedEnergy) === 0 ? (
             <div className="flex items-center mt-1 space-x-2">
               <div className="relative h-6 w-6 text-[#F7931A]">
-                <svg viewBox="0 0 100 100" className="absolute inset-0" xmlns="http://www.w3.org/2000/svg">
+                <svg
+                  viewBox="0 0 100 100"
+                  className="absolute inset-0"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
                   {/* GBP and BTC symbol combined with animation */}
-                  <circle cx="50" cy="50" r="40" fill="currentColor" opacity="0.2" />
-                  <g style={{ transformOrigin: "center", animation: "rotate 6s linear infinite" }}>
-                    <path d="M65 30L35 70" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-                    <text 
-                      x="30" 
-                      y="40" 
-                      textAnchor="middle" 
-                      dominantBaseline="middle" 
-                      fill="currentColor" 
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="currentColor"
+                    opacity="0.2"
+                  />
+                  <g
+                    style={{
+                      transformOrigin: "center",
+                      animation: "rotate 6s linear infinite",
+                    }}
+                  >
+                    <path
+                      d="M65 30L35 70"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                    />
+                    <text
+                      x="30"
+                      y="40"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="currentColor"
                       fontSize="25"
                       fontWeight="bold"
                     >
                       £
                     </text>
-                    <text 
-                      x="70" 
-                      y="65" 
-                      textAnchor="middle" 
-                      dominantBaseline="middle" 
-                      fill="currentColor" 
+                    <text
+                      x="70"
+                      y="65"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="currentColor"
                       fontSize="25"
                       fontWeight="bold"
                     >
                       ₿
                     </text>
                   </g>
-                  
+
                   {/* Animation keyframes - added via style */}
                   <style>{`
                     @keyframes rotate {
