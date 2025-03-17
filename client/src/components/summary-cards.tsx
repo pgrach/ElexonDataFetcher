@@ -349,7 +349,7 @@ export default function SummaryCards({
               </div>
               <div className="flex items-center space-x-1 mt-1">
                 <div className="text-xs text-muted-foreground">
-                  Bitcoin value vs subsidies ratio
+                  Higher ratio = better value from mining
                 </div>
               </div>
             </>
@@ -432,7 +432,7 @@ export default function SummaryCards({
             </div>
           ) : (
             <p className="text-xs text-muted-foreground mt-1">
-              Mining potential vs curtailment payment
+              Mining value compared to subsidies paid
             </p>
           )}
         </CardContent>
