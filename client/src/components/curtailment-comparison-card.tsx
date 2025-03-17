@@ -109,13 +109,23 @@ export default function CurtailmentComparisonCard({
     timeframe === "monthly" ? format(date, "MMMM yyyy") :
     format(date, "PP");
   
+  // Check if we have no data for this date
+  const hasNoCurtailmentData = 
+    !isSummaryLoading && 
+    !isBitcoinLoading && 
+    curtailmentPayment === 0 && 
+    bitcoinValue === 0;
+
   return (
-    <Card className={isBitcoinBetter ? "border-green-500/30" : 
-                      difference < 0 ? "border-red-500/30" : "border-primary/20"}>
+    <Card className={hasNoCurtailmentData ? "border-blue-500/30" :
+            isBitcoinBetter ? "border-green-500/30" : 
+            difference < 0 ? "border-red-500/30" : "border-primary/20"}>
       <CardHeader className="pb-2">
         <CardTitle className="text-lg flex items-center justify-between">
           <span>Payment vs. Mining Value Comparison</span>
-          {isBitcoinBetter ? (
+          {hasNoCurtailmentData ? (
+            <Minus className="h-5 w-5 text-blue-500" />
+          ) : isBitcoinBetter ? (
             <TrendingUp className="h-5 w-5 text-green-500" />
           ) : difference < 0 ? (
             <TrendingDown className="h-5 w-5 text-red-500" />
@@ -130,6 +140,17 @@ export default function CurtailmentComparisonCard({
           <div className="space-y-2">
             <Skeleton className="h-6 w-full" />
             <Skeleton className="h-24 w-full" />
+          </div>
+        ) : hasNoCurtailmentData ? (
+          // Special state for when no curtailment occurred
+          <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-md">
+            <h3 className="font-semibold mb-2">No Curtailment Events Today</h3>
+            <p className="text-sm mb-3">
+              No wind farms were curtailed on this date, meaning all available wind energy was utilized by the grid.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Try selecting a different date to see curtailment events and potential Bitcoin mining comparisons.
+            </p>
           </div>
         ) : (
           <>

@@ -109,11 +109,14 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold">
-              {Math.round(Number(summaryData.totalCurtailedEnergy)).toLocaleString()} MWh
+              {Number.isNaN(Number(summaryData.totalCurtailedEnergy)) ? 
+                "0 MWh" : 
+                `${Math.round(Number(summaryData.totalCurtailedEnergy)).toLocaleString()} MWh`}
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
             {farmId ? `Farm energy for ${timeframeLabel}` : `Total energy for ${timeframeLabel}`}
+            {Number(summaryData.totalCurtailedEnergy) === 0 && " - No curtailment"}
           </p>
         </CardContent>
       </Card>
@@ -131,11 +134,14 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold">
-              £{Math.round(Number(summaryData.totalPayment)).toLocaleString()}
+              {Number.isNaN(Number(summaryData.totalPayment)) ? 
+                "£0" : 
+                `£${Math.round(Number(summaryData.totalPayment)).toLocaleString()}`}
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
             {farmId ? `Payment for ${timeframeLabel}` : `Total payment for ${timeframeLabel}`}
+            {Number(summaryData.totalPayment) === 0 && " - No payments"}
           </p>
         </CardContent>
       </Card>
@@ -153,11 +159,14 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold text-[#F7931A]">
-              ₿{Number(bitcoinData.bitcoinMined).toFixed(2)}
+              {Number.isNaN(Number(bitcoinData.bitcoinMined)) ? 
+                "₿0.00" : 
+                `₿${Number(bitcoinData.bitcoinMined).toFixed(2)}`}
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
             With {minerModel.replace("_", " ")} miners
+            {Number(summaryData.totalCurtailedEnergy) === 0 && " - No curtailment"}
           </p>
         </CardContent>
       </Card>
@@ -175,11 +184,14 @@ export default function SummaryCards({ timeframe, date, minerModel, farmId }: Su
             <Skeleton className="h-8 w-32 mb-1" />
           ) : (
             <div className="text-2xl font-bold text-[#F7931A]">
-              £{Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString('en-GB')}
+              {Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) ? 
+                "£0" : 
+                `£${Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString('en-GB')}`}
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-1">
             Estimated value at current BTC price
+            {Number(summaryData.totalCurtailedEnergy) === 0 && " - No curtailment"}
           </p>
         </CardContent>
       </Card>
