@@ -3,7 +3,7 @@
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Battery, Bitcoin, Calendar, ArrowRightLeft } from "lucide-react";
+import { Wind, Bitcoin, Calendar, ArrowRightLeft, PoundSterling, Receipt } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatEnergy, formatGBP, formatBitcoin } from "@/lib/utils";
 
@@ -240,7 +240,7 @@ export default function SummaryCards({
                 <p className="text-xs text-muted-foreground">Consumer cost for curtailment</p>
               </div>
               <div className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center">
-                <Battery className="h-4 w-4 text-red-600" />
+                <PoundSterling className="h-4 w-4 text-red-600" />
               </div>
             </div>
             
