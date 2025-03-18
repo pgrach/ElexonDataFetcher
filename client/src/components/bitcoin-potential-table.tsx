@@ -267,11 +267,6 @@ export default function BitcoinPotentialTable({
           </div>
         ) : (
           <>
-            {/* Simple status text at the top */}
-            <div className="text-xs text-muted-foreground text-center mb-4">
-              Bitcoin mining data using {minerModel.replace("_", " ")} miners at £{formatGBP(Number(bitcoinData.currentPrice))}
-            </div>
-            
             {farmDataError ? (
               <div className="p-4 rounded-lg bg-destructive/10 text-destructive">
                 <p className="text-sm font-medium">Unable to fetch farm data</p>
@@ -388,6 +383,11 @@ export default function BitcoinPotentialTable({
                     ))}
                   </TableBody>
                 </Table>
+                
+                {/* Table footer with Bitcoin miner information */}
+                <div className="text-xs text-muted-foreground text-right mt-4 pt-2 border-t">
+                  {minerModel.replace("_", " ")} miners • BTC @ {Math.round(Number(bitcoinData.currentPrice)).toLocaleString()} GBP
+                </div>
               </div>
             )}
           </>
