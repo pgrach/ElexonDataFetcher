@@ -1,0 +1,272 @@
+/**
+ * Farm Data Table API Routes
+ * 
+ * This router provides endpoints for retrieving grouped farm data 
+ * for display in a sortable table format.
+ */
+
+import express, { Request, Response } from 'express';
+import { db } from "../../db";
+import { curtailmentRecords, historicalBitcoinCalculations } from "../../db/schema";
+import { sql, eq, and, desc, asc } from "drizzle-orm";
+import { format, parse } from "date-fns";
+import { priceCache } from '../utils/cache';
+
+const router = express.Router();
+
+// Interface for farm detail data
+interface FarmDetail {
+  farmId: string;
+  curtailedEnergy: number;
+  percentageOfTotal: number;
+  potentialBtc: number;
+  payment: number;
+}
+
+// Interface for grouped farm data
+interface GroupedFarm {
+  leadPartyName: string;
+  totalCurtailedEnergy: number;
+  totalPercentageOfTotal: number;
+  totalPotentialBtc: number;
+  totalPayment: number;
+  farms: FarmDetail[];
+}
+
+// Database response types
+interface LeadPartyRecord {
+  leadPartyName: string | null;
+  totalCurtailedEnergy: number | null;
+  totalPayment: number | null;
+}
+
+/**
+ * Get grouped farm data for the data table
+ */
+async function getGroupedFarmData(
+  timeframe: 'day' | 'month' | 'year',
+  value: string,
+  minerModel: string = 'S19J_PRO'
+): Promise<GroupedFarm[]> {
+  try {
+    console.log(`Getting grouped farm data for ${timeframe}: ${value}, model: ${minerModel}`);
+    
+    let dateCondition;
+    
+    if (timeframe === 'day') {
+      // For a specific day
+      dateCondition = eq(curtailmentRecords.settlementDate, value);
+    } else if (timeframe === 'month') {
+      // For a specific month (YYYY-MM)
+      const [year, month] = value.split('-').map(n => parseInt(n, 10));
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0); // Last day of month
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+      
+      dateCondition = sql`${curtailmentRecords.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
+    } else if (timeframe === 'year') {
+      // For a specific year
+      dateCondition = sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}) = ${parseInt(value, 10)}`;
+    } else {
+      throw new Error(`Invalid timeframe type: ${timeframe}`);
+    }
+    
+    // First, get the total curtailed energy for percentage calculation
+    const totalEnergyResult = await db
+      .select({
+        totalEnergy: sql<number>`SUM(ABS(${curtailmentRecords.volume}))`
+      })
+      .from(curtailmentRecords)
+      .where(dateCondition);
+    
+    const totalCurtailedEnergy = Number(totalEnergyResult[0]?.totalEnergy || 0);
+    
+    if (totalCurtailedEnergy <= 0) {
+      console.log(`No curtailment data found for ${timeframe}: ${value}`);
+      return [];
+    }
+    
+    // Get curtailment data by lead party name
+    const leadPartyData: LeadPartyRecord[] = await db
+      .select({
+        leadPartyName: curtailmentRecords.leadPartyName,
+        totalCurtailedEnergy: sql<number>`SUM(ABS(${curtailmentRecords.volume}))`,
+        totalPayment: sql<number>`SUM(ABS(${curtailmentRecords.payment}))`
+      })
+      .from(curtailmentRecords)
+      .where(and(
+        dateCondition,
+        // Ensure we have a lead party name
+        sql`${curtailmentRecords.leadPartyName} IS NOT NULL AND ${curtailmentRecords.leadPartyName} <> ''`
+      ))
+      .groupBy(curtailmentRecords.leadPartyName)
+      .orderBy(desc(sql<number>`SUM(ABS(${curtailmentRecords.volume}))`));
+    
+    // Get Bitcoin data by lead party name
+    const bitcoinData = await db
+      .select({
+        farmId: historicalBitcoinCalculations.farmId,
+        totalBitcoin: sql<number>`SUM(${historicalBitcoinCalculations.bitcoinMined})`
+      })
+      .from(historicalBitcoinCalculations)
+      .where(and(
+        dateCondition,
+        eq(historicalBitcoinCalculations.minerModel, minerModel)
+      ))
+      .groupBy(historicalBitcoinCalculations.farmId);
+    
+    // Create a lookup map for Bitcoin data
+    const bitcoinLookup = new Map<string, number>();
+    for (const record of bitcoinData) {
+      bitcoinLookup.set(record.farmId, Number(record.totalBitcoin || 0));
+    }
+    
+    // For each lead party, get the individual farm details
+    const result: GroupedFarm[] = await Promise.all(leadPartyData
+      .filter(party => party.leadPartyName !== null) // Filter out null lead party names
+      .map(async (party) => {
+        const leadPartyName = party.leadPartyName as string; // We know it's non-null after filtering
+        
+        // Get all farms for this lead party
+        const farmsData = await db
+          .select({
+            farmId: curtailmentRecords.farmId,
+            curtailedEnergy: sql<number>`SUM(ABS(${curtailmentRecords.volume}))`,
+            payment: sql<number>`SUM(ABS(${curtailmentRecords.payment}))`
+          })
+          .from(curtailmentRecords)
+          .where(and(
+            dateCondition,
+            // Use SQL for comparison to ensure proper handling of nulls
+            sql`${curtailmentRecords.leadPartyName} = ${leadPartyName}`
+          ))
+          .groupBy(curtailmentRecords.farmId)
+          .orderBy(desc(sql<number>`SUM(ABS(${curtailmentRecords.volume}))`));
+        
+        // Calculate the total Bitcoin mined for this lead party
+        let totalBitcoin = 0;
+        
+        // Map individual farm data
+        const farms: FarmDetail[] = farmsData.map(farm => {
+          const energy = Number(farm.curtailedEnergy || 0);
+          const percentageOfTotal = (energy / totalCurtailedEnergy) * 100;
+          const bitcoin = bitcoinLookup.get(farm.farmId) || 0;
+          
+          // Add to lead party total
+          totalBitcoin += bitcoin;
+          
+          return {
+            farmId: farm.farmId,
+            curtailedEnergy: energy,
+            percentageOfTotal: percentageOfTotal,
+            potentialBtc: bitcoin,
+            payment: Number(farm.payment || 0)
+          };
+        });
+        
+        // Calculate lead party totals
+        const totalEnergy = Number(party.totalCurtailedEnergy || 0);
+        const totalPercentage = (totalEnergy / totalCurtailedEnergy) * 100;
+        const totalPayment = Number(party.totalPayment || 0);
+        
+        return {
+          leadPartyName,
+          totalCurtailedEnergy: totalEnergy,
+          totalPercentageOfTotal: totalPercentage,
+          totalPotentialBtc: totalBitcoin,
+          totalPayment: totalPayment,
+          farms: farms
+        };
+    }));
+    
+    return result;
+  } catch (error) {
+    console.error(`Error getting grouped farm data for ${timeframe}: ${value}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get grouped farm data for display in a table
+ * 
+ * @route GET /api/farm-tables/grouped-data
+ * @param {string} timeframe.query - The timeframe to use ('day', 'month', 'year')
+ * @param {string} value.query - The date value to use (format depends on timeframe)
+ * @param {string} minerModel.query - Optional miner model to use for Bitcoin calculations
+ */
+router.get('/grouped-data', async (req: Request, res: Response) => {
+  try {
+    // Get query parameters
+    const timeframe = (req.query.timeframe as 'day' | 'month' | 'year') || 'day';
+    let value = req.query.value as string;
+    const minerModel = req.query.minerModel as string || 'S19J_PRO';
+    
+    // If no value is provided, use current date/month/year based on timeframe
+    if (!value) {
+      const now = new Date();
+      value = format(
+        now, 
+        timeframe === 'day' ? 'yyyy-MM-dd' : 
+        timeframe === 'month' ? 'yyyy-MM' : 'yyyy'
+      );
+    }
+    
+    // Validate timeframe
+    if (!['day', 'month', 'year'].includes(timeframe)) {
+      return res.status(400).json({
+        error: 'Invalid timeframe',
+        message: 'Timeframe must be one of: day, month, year'
+      });
+    }
+    
+    // Validate value format based on timeframe
+    const formatValid = 
+      (timeframe === 'day' && value.match(/^\d{4}-\d{2}-\d{2}$/)) ||
+      (timeframe === 'month' && value.match(/^\d{4}-\d{2}$/)) ||
+      (timeframe === 'year' && value.match(/^\d{4}$/));
+      
+    if (!formatValid) {
+      return res.status(400).json({
+        error: 'Invalid value format',
+        message: `For timeframe '${timeframe}', value must be in format: ${
+          timeframe === 'day' ? 'YYYY-MM-DD' : 
+          timeframe === 'month' ? 'YYYY-MM' : 'YYYY'
+        }`
+      });
+    }
+    
+    // Get the farm data
+    const farms = await getGroupedFarmData(timeframe, value, minerModel);
+    
+    // Get current Bitcoin price for value calculation
+    let currentPrice: number;
+    
+    // Try to get price from cache first
+    if (priceCache.has('current')) {
+      currentPrice = priceCache.get('current') as number;
+    } else {
+      // Use a reasonable default if not available
+      currentPrice = 65000;
+    }
+    
+    // Return response with price info
+    res.json({
+      farms,
+      meta: {
+        currentPrice,
+        date: value,
+        timeframe,
+        minerModel
+      }
+    });
+  } catch (error) {
+    console.error('Error in grouped farm data endpoint:', error);
+    res.status(500).json({
+      error: 'Failed to fetch grouped farm data',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+export default router;
