@@ -2,417 +2,319 @@
 
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList, ReferenceLine, ReferenceArea } from "recharts";
-import { Skeleton } from "@/components/ui/skeleton";
+import axios from "axios";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { EnhancedChartTooltip } from "./enhanced-chart-tooltip";
 
-interface CurtailmentChartProps {
+interface ImprovedCurtailmentChartProps {
   timeframe: string;
   date: Date;
   minerModel: string;
   farmId: string;
 }
 
-// SVG Bitcoin logo for chart label with improved visibility
-const BitcoinIcon = ({ x, y, value }: { x: number, y: number, value: number }) => {
-  // Skip rendering if value is too small
-  if (value < 0.01) return null;
-  
-  return (
-    <g transform={`translate(${x},${y - 22})`}>
-      {/* Background glow for better visibility */}
-      <circle cx="10" cy="10" r="14" fill="#F7931A" opacity={0.2} />
-      
-      {/* Bitcoin circle */}
-      <circle cx="10" cy="10" r="10" fill="#F7931A" />
-      
-      {/* Bitcoin B symbol */}
-      <path 
-        d="M14.25,8.65c0.18-1.22-0.75-1.87-2.02-2.31l0.41-1.66l-1.01-0.25l-0.4,1.61c-0.27-0.07-0.54-0.13-0.81-0.19l0.4-1.62L9.81,4l-0.41,1.66c-0.22-0.05-0.44-0.1-0.65-0.15l0,0L7.43,5.2L7.15,6.3c0,0,0.75,0.17,0.73,0.18C8.34,6.62,8.43,6.81,8.4,6.96L7.93,8.91c0.02,0.01,0.05,0.01,0.08,0.03l-0.08-0.02L7.24,11.9c-0.05,0.11-0.17,0.28-0.45,0.22c0.01,0.02-0.73-0.18-0.73-0.18l-0.5,1.15l1.85,0.46c0.34,0.09,0.68,0.18,1.01,0.26l-0.42,1.68l1.01,0.25l0.41-1.66c0.28,0.08,0.55,0.15,0.81,0.21l-0.41,1.65l1.01,0.25l0.42-1.67c1.74,0.33,3.05,0.2,3.6-1.38c0.44-1.27,0.02-2.01-0.93-2.49C13.89,10.25,14.13,9.53,14.25,8.65z M12.19,11.79c-0.31,1.27-2.43,0.58-3.12,0.41l0.56-2.23C10.32,10.13,12.52,10.46,12.19,11.79z M12.5,8.63c-0.29,1.15-2.05,0.57-2.63,0.42l0.5-2.02C10.96,7.18,12.8,7.42,12.5,8.63z"
-        fill="white" 
-      />
-      
-      {/* Value background for better readability */}
-      <rect 
-        x="-15" 
-        y="25" 
-        width="50" 
-        height="22" 
-        rx="4"
-        fill="#FFFFFF" 
-        opacity="0.9"
-      />
-      
-      {/* Value text below the icon with improved spacing and visibility */}
-      <text 
-        x="10" 
-        y="38" 
-        textAnchor="middle" 
-        fontSize="12" 
-        fontWeight="bold" 
-        fill="#F7931A"
-      >
-        {value.toFixed(2)}
-      </text>
-    </g>
-  );
-};
-
-// Enhanced tooltip for better readability
-const CustomDailyTooltip = ({ active, payload, label }: any) => {
+// Custom tooltip component with improved readability
+const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
-    const energyValue = Number(payload[0].value).toLocaleString(undefined, { 
-      maximumFractionDigits: 2 
-    });
-    const bitcoinValue = Number(payload[1].value).toFixed(4);
-
     return (
-      <div className="bg-white p-3 shadow-md border border-gray-200 rounded-md">
-        <p className="text-base font-semibold border-b pb-1 mb-2">{`Hour: ${label}`}</p>
-        <div className="text-sm space-y-1">
-          <p><span className="inline-block w-4 h-2 bg-primary mr-2 rounded-sm"></span>
-            <span className="font-medium">Energy:</span> {energyValue} MWh
-          </p>
-          <p><span className="inline-block w-4 h-2 bg-[#F7931A] mr-2 rounded-sm"></span>
-            <span className="font-medium">Bitcoin:</span> ₿{bitcoinValue}
-          </p>
+      <div className="bg-white p-3 shadow-lg border border-gray-200 rounded-md">
+        <p className="text-base font-semibold text-gray-800 mb-1.5 border-b border-gray-100 pb-1.5">
+          {label}
+        </p>
+        
+        <div className="text-sm space-y-2">
+          {payload.map((entry: any, index: number) => {
+            let formattedValue = entry.value;
+            const dataKey = entry.dataKey;
+            
+            if (dataKey === "curtailedEnergy") {
+              formattedValue = `${Number(entry.value).toLocaleString()} MWh`;
+            } else if (dataKey === "bitcoinMined") {
+              formattedValue = `₿${Number(entry.value).toFixed(2)}`;
+            }
+            
+            return (
+              <div key={`tooltip-${index}`} className="flex items-center">
+                <span 
+                  className="inline-block w-3 h-3 mr-2 rounded-sm" 
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="font-medium mr-2 text-gray-700">
+                  {dataKey === "curtailedEnergy" ? "Curtailed Energy:" : "Bitcoin Potential:"}
+                </span>
+                <span className="text-gray-800">
+                  {formattedValue}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
   }
+  
   return null;
 };
 
-// Enhanced tooltip for monthly data
-const CustomMonthlyTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    const energyValue = Number(payload[0].value).toLocaleString(undefined, { 
-      maximumFractionDigits: 0 
-    });
-    const bitcoinValue = Number(payload[1].value).toFixed(2);
-
-    return (
-      <div className="bg-white p-3 shadow-md border border-gray-200 rounded-md">
-        <p className="text-base font-semibold border-b pb-1 mb-2">{`Month: ${label}`}</p>
-        <div className="text-sm space-y-1">
-          <p><span className="inline-block w-4 h-2 bg-primary mr-2 rounded-sm"></span>
-            <span className="font-medium">Energy:</span> {energyValue} MWh
-          </p>
-          <p><span className="inline-block w-4 h-2 bg-[#F7931A] mr-2 rounded-sm"></span>
-            <span className="font-medium">Bitcoin:</span> ₿{bitcoinValue}
-          </p>
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
-
-// Enhanced Legend component
-const EnhancedLegend = ({ payload }: any) => {
-  return (
-    <ul className="flex justify-center gap-6 pt-4 pb-2">
-      {payload.map((entry: any, index: number) => (
-        <li key={`item-${index}`} className="flex items-center">
-          <span 
-            className="inline-block w-4 h-4 mr-2 rounded" 
-            style={{ 
-              backgroundColor: entry.color,
-              border: "1px solid rgba(0,0,0,0.1)"
-            }}
-          />
-          <span className="text-sm font-medium">
-            {entry.value === "curtailedEnergy" ? "Curtailed Energy (MWh)" : 
-             entry.value === "bitcoinPotential" ? "Potential Bitcoin (₿)" :
-             entry.value === "bitcoinMined" ? "Bitcoin Mined (₿)" : entry.value}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-};
-
-export default function ImprovedCurtailmentChart({ timeframe, date, minerModel, farmId }: CurtailmentChartProps) {
-  // [KEEP THE SAME DATA FETCHING CODE]
-  // NOTE: This is a demonstration component to show improved visualization
-  // The actual implementation would use the same data fetching logic as curtailment-chart.tsx
-
-  // Placeholder data for demonstration
-  // In real implementation, this would be replaced with the actual data fetching logic
+export default function ImprovedCurtailmentChart({ 
+  timeframe, 
+  date, 
+  minerModel, 
+  farmId 
+}: ImprovedCurtailmentChartProps) {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   
-  // Example data for hourly view - replace with actual data fetching in real implementation
-  const dailyChartData = [
-    { hour: "00:00", curtailedEnergy: 120, bitcoinPotential: 0.25 },
-    { hour: "01:00", curtailedEnergy: 180, bitcoinPotential: 0.37 },
-    { hour: "02:00", curtailedEnergy: 220, bitcoinPotential: 0.45 },
-    { hour: "03:00", curtailedEnergy: 250, bitcoinPotential: 0.52 },
-    { hour: "04:00", curtailedEnergy: 290, bitcoinPotential: 0.60 },
-    { hour: "05:00", curtailedEnergy: 350, bitcoinPotential: 0.72 },
-    { hour: "06:00", curtailedEnergy: 320, bitcoinPotential: 0.66 },
-    { hour: "07:00", curtailedEnergy: 280, bitcoinPotential: 0.58 },
-    { hour: "08:00", curtailedEnergy: 250, bitcoinPotential: 0.52 },
-    { hour: "09:00", curtailedEnergy: 200, bitcoinPotential: 0.41 },
-    { hour: "10:00", curtailedEnergy: 180, bitcoinPotential: 0.37 },
-    { hour: "11:00", curtailedEnergy: 150, bitcoinPotential: 0.31 }
-  ];
-
-  // Example data for monthly view - replace with actual data fetching in real implementation
-  const monthlyChartData = [
-    { month: "Jan", curtailedEnergy: 54000, bitcoinMined: 42.5 },
-    { month: "Feb", curtailedEnergy: 114000, bitcoinMined: 21.7 },
-    { month: "Mar", curtailedEnergy: 55600, bitcoinMined: 39.5 },
-    { month: "Apr", curtailedEnergy: 0, bitcoinMined: 0 },
-    { month: "May", curtailedEnergy: 0, bitcoinMined: 0 },
-    { month: "Jun", curtailedEnergy: 0, bitcoinMined: 0 },
-    { month: "Jul", curtailedEnergy: 0, bitcoinMined: 0 },
-    { month: "Aug", curtailedEnergy: 0, bitcoinMined: 0 },
-    { month: "Sept", curtailedEnergy: 0, bitcoinMined: 0 },
-    { month: "Oct", curtailedEnergy: 0, bitcoinMined: 0 },
-    { month: "Nov", curtailedEnergy: 0, bitcoinMined: 0 },
-    { month: "Dec", curtailedEnergy: 0, bitcoinMined: 0 }
-  ];
-
-  // Get max Bitcoin value for right Y-axis scaling
-  const maxDailyBitcoin = Math.max(...dailyChartData.map(d => d.bitcoinPotential || 0), 0.1);
-  const maxMonthlyBitcoin = Math.max(...monthlyChartData.map(d => d.bitcoinMined || 0), 0.1);
-  const selectedMonth = "Mar"; // This would be determined dynamically in the real implementation
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        // Adjust endpoint based on timeframe
+        let endpoint = "";
+        let params: any = { minerModel };
+        
+        if (farmId) {
+          params.farmId = farmId;
+        }
+        
+        if (timeframe === "yearly") {
+          endpoint = `/api/curtailment/yearly-mining-potential/${format(date, "yyyy")}`;
+        } else if (timeframe === "monthly") {
+          // For monthly view, we need to get all months for the year
+          endpoint = `/api/curtailment/monthly-breakdown/${format(date, "yyyy")}`;
+          setSelectedMonth(format(date, "MMM")); // Highlight selected month
+        } else {
+          // Daily view
+          endpoint = `/api/curtailment/daily-mining-potential/${format(date, "yyyy-MM-dd")}`;
+        }
+        
+        const response = await axios.get(endpoint, { params });
+        
+        // Process data based on timeframe
+        let processedData = [];
+        
+        if (timeframe === "yearly") {
+          // Yearly breakdown by month
+          processedData = response.data.monthlyBreakdown || [];
+        } else if (timeframe === "monthly") {
+          // Monthly breakdown - transform data for chart
+          const months = response.data || [];
+          processedData = months.map((item: any) => ({
+            month: format(new Date(item.month + "-01"), "MMM"),
+            curtailedEnergy: item.curtailedEnergy,
+            bitcoinMined: item.bitcoinMined
+          }));
+        } else {
+          // Daily breakdown by hour
+          processedData = response.data.hourlyBreakdown || [];
+          processedData = processedData.map((item: any) => ({
+            hour: `${item.hour}:00`,
+            curtailedEnergy: item.curtailedEnergy,
+            bitcoinMined: item.bitcoinMined
+          }));
+        }
+        
+        console.log("Processed chart data:", processedData);
+        setData(processedData);
+      } catch (err: any) {
+        console.error("Error fetching chart data:", err);
+        setError("Failed to load chart data. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [timeframe, date, minerModel, farmId]);
   
-  // Get card title based on timeframe
-  const getCardTitle = () => {
-    switch(timeframe) {
-      case "daily": return "Hourly Energy & Bitcoin Breakdown";
-      case "monthly": return "Monthly Curtailment & Bitcoin Breakdown";
-      case "yearly": return "Yearly Breakdown";
-      default: return "Energy & Bitcoin Breakdown";
+  // Determine chart labels based on timeframe
+  const chartTitle = timeframe === "yearly" 
+    ? "Yearly Breakdown by Month" 
+    : timeframe === "monthly" 
+      ? "Monthly Breakdown" 
+      : "Daily Breakdown by Hour";
+      
+  // Determine x-axis label
+  const xAxisLabel = timeframe === "yearly" || timeframe === "monthly" 
+    ? "Month" 
+    : "Hour";
+    
+  // Title describing the current view
+  const viewDescription = timeframe === "yearly"
+    ? `${format(date, "yyyy")} Monthly Breakdown`
+    : timeframe === "monthly"
+      ? `${format(date, "MMMM yyyy")} Breakdown`
+      : `${format(date, "PP")} Hourly Breakdown`;
+      
+  // Custom bar background for highlighting the current month in monthly view
+  const getBarBackground = (entry: any) => {
+    if (timeframe === "monthly" && selectedMonth && entry.month === selectedMonth) {
+      return "rgba(59, 130, 246, 0.1)"; // Light blue background
     }
+    return "transparent";
   };
-
+  
   return (
     <Card className="shadow-md border-gray-200">
       <CardHeader className="border-b border-gray-100 bg-gray-50/50">
-        <CardTitle className="text-lg font-medium text-gray-800">{getCardTitle()}</CardTitle>
+        <CardTitle className="text-lg font-medium text-gray-800">{chartTitle}</CardTitle>
+        <CardDescription className="text-xs text-gray-500">
+          {viewDescription}{farmId ? ` for farm ${farmId}` : ""}. 
+          Using {minerModel} miner model.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="pt-6">
-        {timeframe === "daily" ? (
-          <ResponsiveContainer width="100%" height={340}>
-            <BarChart
-              data={dailyChartData}
-              margin={{ top: 20, right: 40, left: 20, bottom: 30 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-              <XAxis 
-                dataKey="hour" 
-                tick={{ fontSize: 12, fill: "#666" }}
-                tickFormatter={(value) => value.split(":")[0] + ":00"}
-                axisLine={{ stroke: '#ccc' }}
-                tickLine={{ stroke: '#ccc' }}
-                padding={{ left: 10, right: 10 }}
-                label={{ 
-                  value: 'Hour of Day', 
-                  position: 'insideBottom', 
-                  offset: -15,
-                  fill: '#666',
-                  fontSize: 12,
-                  fontWeight: 500
-                }}
-              />
-              {/* Left Y axis for energy */}
-              <YAxis 
-                yAxisId="left"
-                orientation="left"
-                tick={{ fontSize: 12, fill: "#666" }} 
-                axisLine={{ stroke: '#ccc' }}
-                tickLine={{ stroke: '#ccc' }}
-                label={{ 
-                  value: 'Curtailed Energy (MWh)', 
-                  angle: -90, 
-                  position: 'insideLeft',
-                  style: { 
-                    textAnchor: 'middle',
-                    fill: '#666',
-                    fontSize: 12,
-                    fontWeight: 500
-                  },
-                  offset: 0
-                }}
-              />
-              {/* Right Y axis for Bitcoin */}
-              <YAxis 
-                yAxisId="right"
-                orientation="right"
-                domain={[0, Math.ceil(maxDailyBitcoin * 1.2 * 10) / 10]}
-                tick={{ fontSize: 12, fill: "#666" }}
-                axisLine={{ stroke: '#ccc' }}
-                tickLine={{ stroke: '#ccc' }}
-                tickFormatter={(value) => value.toFixed(2)}
-                label={{ 
-                  value: 'Potential Bitcoin (₿)', 
-                  angle: 90, 
-                  position: 'insideRight',
-                  style: { 
-                    textAnchor: 'middle',
-                    fill: '#F7931A',
-                    fontSize: 12,
-                    fontWeight: 500
-                  },
-                  offset: 0
-                }}
-              />
-              <Tooltip content={<CustomDailyTooltip />} />
-              
-              {/* Custom enhanced legend */}
-              <Legend content={<EnhancedLegend />} />
-              
-              {/* Bars for curtailed energy */}
-              <Bar 
-                yAxisId="left"
-                dataKey="curtailedEnergy" 
-                fill="var(--primary)"
-                radius={[4, 4, 0, 0]}
-                name="Curtailed Energy (MWh)"
-              />
-              
-              {/* Line for Bitcoin potential */}
-              <Bar
-                yAxisId="right"
-                dataKey="bitcoinPotential"
-                fill="#F7931A"
-                radius={[4, 4, 0, 0]}
-                name="Potential Bitcoin (₿)"
-                minPointSize={2}
-                barSize={20}
+      <CardContent className="p-6">
+        {loading ? (
+          <div className="h-72 w-full flex items-center justify-center bg-gray-50 rounded-md">
+            <p className="text-gray-500">Loading chart data...</p>
+          </div>
+        ) : error ? (
+          <div className="h-72 w-full flex items-center justify-center bg-red-50 rounded-md border border-red-100">
+            <p className="text-red-600">{error}</p>
+          </div>
+        ) : data.length === 0 ? (
+          <div className="h-72 w-full flex items-center justify-center bg-gray-50 rounded-md">
+            <p className="text-gray-500">No data available for this period.</p>
+          </div>
+        ) : (
+          <div className="h-80 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={data}
+                margin={{ top: 20, right: 30, left: 20, bottom: 45 }}
               >
-                {/* Custom Bitcoin labels */}
-                <LabelList 
-                  dataKey="bitcoinPotential" 
-                  position="top" 
-                  content={BitcoinIcon} 
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis 
+                  dataKey={timeframe === "yearly" || timeframe === "monthly" ? "month" : "hour"} 
+                  tick={{ fontSize: 12, fill: '#4b5563' }}
+                  tickLine={{ stroke: '#d1d5db' }}
+                  axisLine={{ stroke: '#d1d5db' }}
+                  label={{ 
+                    value: xAxisLabel, 
+                    position: 'insideBottom', 
+                    offset: -10,
+                    fill: '#4b5563',
+                    fontSize: 14,
+                    fontWeight: 500,
+                  }}
+                  height={60}
                 />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        ) : timeframe === "monthly" ? (
-          <ResponsiveContainer width="100%" height={340}>
-            <BarChart
-              data={monthlyChartData}
-              margin={{ top: 20, right: 40, left: 20, bottom: 30 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-              <XAxis 
-                dataKey="month" 
-                tick={{ fontSize: 12, fill: "#666" }}
-                axisLine={{ stroke: '#ccc' }}
-                tickLine={{ stroke: '#ccc' }}
-                padding={{ left: 10, right: 10 }}
-                label={{
-                  value: 'Month (2025)',
-                  position: 'insideBottom',
-                  offset: -15,
-                  fill: '#666',
-                  fontSize: 12,
-                  fontWeight: 500
-                }}
-              />
-              {/* Left Y axis for energy */}
-              <YAxis 
-                yAxisId="left"
-                orientation="left"
-                tick={{ fontSize: 12, fill: "#666" }}
-                axisLine={{ stroke: '#ccc' }}
-                tickLine={{ stroke: '#ccc' }}
-                tickFormatter={(value) => value >= 1000 ? `${(value/1000).toFixed(0)}k` : value}
-                label={{ 
-                  value: 'Curtailed Energy (MWh)', 
-                  angle: -90, 
-                  position: 'insideLeft',
-                  style: { 
-                    textAnchor: 'middle',
-                    fill: '#666',
-                    fontSize: 12,
-                    fontWeight: 500
-                  },
-                  offset: 5
-                }}
-              />
-              {/* Right Y axis for Bitcoin */}
-              <YAxis 
-                yAxisId="right"
-                orientation="right"
-                domain={[0, Math.ceil(maxMonthlyBitcoin * 1.2)]}
-                tick={{ fontSize: 12, fill: "#666" }}
-                axisLine={{ stroke: '#ccc' }}
-                tickLine={{ stroke: '#ccc' }}
-                tickFormatter={(value) => value.toFixed(0)}
-                label={{ 
-                  value: 'Bitcoin Mined (₿)', 
-                  angle: 90, 
-                  position: 'insideRight',
-                  style: { 
-                    textAnchor: 'middle',
-                    fill: '#F7931A',
-                    fontSize: 12,
-                    fontWeight: 500
-                  },
-                  offset: 5
-                }}
-              />
-              <Tooltip content={<CustomMonthlyTooltip />} />
-              
-              {/* Custom enhanced legend */}
-              <Legend content={<EnhancedLegend />} />
-              
-              {/* Reference area for highlighting the selected month */}
-              {selectedMonth && (
-                <ReferenceArea 
-                  x1={selectedMonth} 
-                  x2={selectedMonth} 
-                  fill="#f0f9ff" 
-                  fillOpacity={0.6} 
-                  stroke="#3b82f6"
-                  strokeWidth={1}
-                  strokeOpacity={0.5}
+                <YAxis 
+                  yAxisId="left"
+                  tick={{ fontSize: 12, fill: '#4b5563' }}
+                  tickFormatter={(value) => {
+                    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+                    if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
+                    return value.toString();
+                  }}
+                  label={{ 
+                    value: 'Curtailed Energy (MWh)', 
+                    angle: -90, 
+                    position: 'insideLeft',
+                    fill: '#3b82f6',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    dx: -15
+                  }}
+                  width={80}
                 />
-              )}
-              
-              {/* Bars for curtailed energy */}
-              <Bar 
-                yAxisId="left"
-                dataKey="curtailedEnergy" 
-                fill="var(--primary)"
-                radius={[4, 4, 0, 0]}
-                name="Curtailed Energy (MWh)"
-              />
-              
-              {/* Bars for Bitcoin mined */}
-              <Bar
-                yAxisId="right"
-                dataKey="bitcoinMined"
-                fill="#F7931A"
-                radius={[4, 4, 0, 0]}
-                name="Bitcoin Mined (₿)"
-                barSize={20}
-              >
-                {/* Custom Bitcoin labels */}
-                <LabelList 
-                  dataKey="bitcoinMined" 
-                  position="top" 
-                  content={BitcoinIcon} 
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 12, fill: '#4b5563' }}
+                  tickFormatter={(value) => {
+                    if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+                    if (value >= 100) return value.toFixed(0);
+                    return value.toFixed(1);
+                  }}
+                  label={{ 
+                    value: 'Bitcoin Potential (₿)', 
+                    angle: 90, 
+                    position: 'insideRight',
+                    fill: '#f59e0b',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    dx: 15
+                  }}
+                  width={80}
                 />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        ) : null}
+                <Tooltip content={<EnhancedChartTooltip />} />
+                <Legend 
+                  formatter={(value) => {
+                    if (value === "curtailedEnergy") return "Curtailed Energy (MWh)";
+                    if (value === "bitcoinMined") return "Potential Bitcoin (₿)";
+                    return value;
+                  }}
+                  iconType="circle"
+                  iconSize={10}
+                  wrapperStyle={{
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    paddingTop: '10px',
+                    paddingBottom: '5px'
+                  }}
+                />
+                {/* Add background highlight for selected month using a different approach */}
+                {timeframe === "monthly" && selectedMonth && (
+                  <CartesianGrid
+                    horizontal={false}
+                    verticalPoints={data
+                      .filter(entry => entry.month === selectedMonth)
+                      .map(entry => {
+                        const monthIndex = data.findIndex(d => d.month === entry.month);
+                        return monthIndex;
+                      })}
+                    stroke="#3b82f620"
+                    strokeWidth={30}
+                  />
+                )}
+                <Bar
+                  yAxisId="left"
+                  dataKey="curtailedEnergy"
+                  name="Curtailed Energy (MWh)"
+                  fill="#3b82f6"
+                  radius={[4, 4, 0, 0]}
+                  barSize={timeframe === "daily" ? 15 : 30}
+                />
+                <Bar
+                  yAxisId="right"
+                  dataKey="bitcoinMined"
+                  name="Potential Bitcoin (₿)"
+                  fill="#f59e0b"
+                  radius={[4, 4, 0, 0]}
+                  barSize={timeframe === "daily" ? 15 : 30}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
         
-        {/* Note section below chart for additional context */}
+        {/* Chart footer with additional information */}
         <div className="mt-4 pt-3 border-t border-gray-100 text-sm text-gray-500">
           <p className="flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            {timeframe === "daily" 
-              ? "Each bar shows hourly curtailed energy and potential Bitcoin that could have been mined."
-              : "Chart shows monthly curtailed energy and potential Bitcoin mining opportunity."}
+            {timeframe === "monthly" && selectedMonth ? 
+              `${selectedMonth} is highlighted. ` : 
+              ""
+            }
+            Chart shows {timeframe === "yearly" ? "monthly" : timeframe === "monthly" ? "monthly" : "hourly"} curtailed energy and potential Bitcoin.
           </p>
         </div>
       </CardContent>
