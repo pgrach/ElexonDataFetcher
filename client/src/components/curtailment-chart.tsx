@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList, ReferenceLine, ReferenceArea } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatEnergy, formatGBP, formatBitcoin } from "@/lib/utils";
 
 interface CurtailmentChartProps {
   timeframe: string;
@@ -391,11 +392,11 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                     const bitcoinItem = payload.find(p => p.name === "Bitcoin Potential (₿)");
                     
                     const energyValue = energyItem && typeof energyItem.value === 'number' 
-                      ? Math.round(energyItem.value).toLocaleString() 
-                      : "0";
+                      ? formatEnergy(energyItem.value)
+                      : "0 MWh";
                     const bitcoinValue = bitcoinItem && typeof bitcoinItem.value === 'number' 
-                      ? Number(bitcoinItem.value).toFixed(2) 
-                      : "0.00";
+                      ? formatBitcoin(bitcoinItem.value)
+                      : "0.00 BTC";
                     
                     return (
                       <div className="custom-tooltip" style={{ 
