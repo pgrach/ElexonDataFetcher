@@ -249,6 +249,78 @@ export default function BitcoinPotentialTable({
   // Overall loading state
   const isLoading = isSummaryLoading || isBitcoinLoading || isFarmDataLoading;
   
+  // Render each farm row and its sub-rows
+  const renderFarmRows = () => {
+    return sortedFarms.map((farm) => {
+      // First render the main row
+      const mainRow = (
+        <TableRow 
+          key={`lead-${farm.leadPartyName}`}
+          className="cursor-pointer hover:bg-muted/50"
+          onClick={() => toggleFarmExpansion(farm.leadPartyName)}
+        >
+          <TableCell className="px-1 sm:px-2">
+            {expandedFarms.has(farm.leadPartyName) ? (
+              <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />
+            ) : (
+              <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
+            )}
+          </TableCell>
+          <TableCell className="font-medium text-xs sm:text-sm">{farm.leadPartyName}</TableCell>
+          <TableCell className="text-right text-xs sm:text-sm">
+            {farm.totalPercentageOfTotal.toFixed(1)}%
+          </TableCell>
+          <TableCell className="text-right text-xs sm:text-sm">
+            {formatEnergy(farm.totalCurtailedEnergy)}
+          </TableCell>
+          <TableCell className="text-right text-orange-500 text-xs sm:text-sm">
+            {formatGBP(farm.totalPayment)}
+          </TableCell>
+          <TableCell className="text-right text-xs sm:text-sm">
+            <div>{formatBitcoin(farm.totalPotentialBtc)}</div>
+            {farmData?.meta?.currentPrice && (
+              <div className="text-[10px] sm:text-xs text-green-500">
+                {formatGBP(farm.totalPotentialBtc * farmData.meta.currentPrice)}
+              </div>
+            )}
+          </TableCell>
+        </TableRow>
+      );
+      
+      // If expanded, render sub-rows
+      const subRows = expandedFarms.has(farm.leadPartyName) 
+        ? farm.farms.map((subFarm) => (
+            <TableRow key={`farm-${farm.leadPartyName}-${subFarm.farmId}`} className="bg-muted/30">
+              <TableCell className="px-1 sm:px-2" />
+              <TableCell className="text-xs sm:text-sm text-muted-foreground pl-4 sm:pl-8">
+                {subFarm.farmId}
+              </TableCell>
+              <TableCell className="text-xs sm:text-sm text-muted-foreground text-right">
+                {subFarm.percentageOfTotal.toFixed(1)}%
+              </TableCell>
+              <TableCell className="text-xs sm:text-sm text-muted-foreground text-right">
+                {formatEnergy(subFarm.curtailedEnergy)}
+              </TableCell>
+              <TableCell className="text-xs sm:text-sm text-orange-500/70 text-right">
+                {formatGBP(subFarm.payment)}
+              </TableCell>
+              <TableCell className="text-xs sm:text-sm text-muted-foreground text-right">
+                <div>{formatBitcoin(subFarm.potentialBtc)}</div>
+                {farmData?.meta?.currentPrice && (
+                  <div className="text-[10px] sm:text-xs text-green-500">
+                    {formatGBP(subFarm.potentialBtc * farmData.meta.currentPrice)}
+                  </div>
+                )}
+              </TableCell>
+            </TableRow>
+          ))
+        : null;
+      
+      // Return both main row and sub-rows
+      return [mainRow, subRows];
+    });
+  };
+  
   return (
     <Card>
       <CardHeader>
@@ -318,65 +390,7 @@ export default function BitcoinPotentialTable({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedFarms.map((farm) => (
-                      <React.Fragment key={farm.leadPartyName}>
-                        <TableRow 
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => toggleFarmExpansion(farm.leadPartyName)}
-                        >
-                          <TableCell className="px-1 sm:px-2">
-                            {expandedFarms.has(farm.leadPartyName) ? (
-                              <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4" />
-                            ) : (
-                              <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
-                            )}
-                          </TableCell>
-                          <TableCell className="font-medium text-xs sm:text-sm">{farm.leadPartyName}</TableCell>
-                          <TableCell className="text-right text-xs sm:text-sm">
-                            {farm.totalPercentageOfTotal.toFixed(1)}%
-                          </TableCell>
-                          <TableCell className="text-right text-xs sm:text-sm">
-                            {formatEnergy(farm.totalCurtailedEnergy)}
-                          </TableCell>
-                          <TableCell className="text-right text-orange-500 text-xs sm:text-sm">
-                            {formatGBP(farm.totalPayment)}
-                          </TableCell>
-                          <TableCell className="text-right text-xs sm:text-sm">
-                            <div>{formatBitcoin(farm.totalPotentialBtc)}</div>
-                            {farmData?.meta?.currentPrice && (
-                              <div className="text-[10px] sm:text-xs text-green-500">
-                                {formatGBP(farm.totalPotentialBtc * farmData.meta.currentPrice)}
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                        {expandedFarms.has(farm.leadPartyName) && farm.farms.map((subFarm) => (
-                          <TableRow key={`${farm.leadPartyName}-${subFarm.farmId}`} className="bg-muted/30">
-                            <TableCell className="px-1 sm:px-2" />
-                            <TableCell className="text-xs sm:text-sm text-muted-foreground pl-4 sm:pl-8">
-                              {subFarm.farmId}
-                            </TableCell>
-                            <TableCell className="text-xs sm:text-sm text-muted-foreground text-right">
-                              {subFarm.percentageOfTotal.toFixed(1)}%
-                            </TableCell>
-                            <TableCell className="text-xs sm:text-sm text-muted-foreground text-right">
-                              {formatEnergy(subFarm.curtailedEnergy)}
-                            </TableCell>
-                            <TableCell className="text-xs sm:text-sm text-orange-500/70 text-right">
-                              {formatGBP(subFarm.payment)}
-                            </TableCell>
-                            <TableCell className="text-xs sm:text-sm text-muted-foreground text-right">
-                              <div>{formatBitcoin(subFarm.potentialBtc)}</div>
-                              {farmData?.meta?.currentPrice && (
-                                <div className="text-[10px] sm:text-xs text-green-500">
-                                  {formatGBP(subFarm.potentialBtc * farmData.meta.currentPrice)}
-                                </div>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </React.Fragment>
-                    ))}
+                    {renderFarmRows()}
                   </TableBody>
                 </Table>
                 
