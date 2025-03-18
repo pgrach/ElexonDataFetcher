@@ -41,7 +41,7 @@ const BitcoinIcon = ({ x, y, value }: { x: number, y: number, value: number }) =
         fill="#F7931A"
         style={{ textShadow: '0px 0px 2px white' }}
       >
-        {value.toFixed(2)}
+        {formatBitcoin(value).replace(" BTC", "")}
       </text>
     </g>
   );
@@ -125,7 +125,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
             console.log(`Bitcoin data for ${yearMonth}:`, bitcoinData);
           }
           
-          console.log(`API values for ${yearMonth}: Energy=${curtailedEnergy.toLocaleString()} MWh, Bitcoin=${bitcoinMined.toFixed(4)}`);
+          console.log(`API values for ${yearMonth}: Energy=${formatEnergy(curtailedEnergy)}, Bitcoin=${formatBitcoin(bitcoinMined)}`);
           
           monthlyDataArray.push({
             month: yearMonth,
@@ -381,7 +381,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                   position: 'insideRight',
                   style: { textAnchor: 'middle', fill: '#F7931A' }
                 }}
-                tickFormatter={(value) => value.toFixed(1)}
+                tickFormatter={(value) => formatBitcoin(value).replace(" BTC", "")}
                 stroke="#F7931A"
               />
               <Tooltip 
@@ -406,8 +406,8 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                         borderRadius: '4px'
                       }}>
                         <p className="label" style={{ margin: '0 0 5px', fontWeight: 'bold' }}>{`Hour: ${label}`}</p>
-                        <p style={{ margin: '0', color: '#333' }}>{`Curtailed Energy: ${energyValue} MWh`}</p>
-                        <p style={{ margin: '0', color: '#F7931A' }}>{`Bitcoin Potential: ₿${bitcoinValue}`}</p>
+                        <p style={{ margin: '0', color: '#333' }}>{`Curtailed Energy: ${energyValue}`}</p>
+                        <p style={{ margin: '0', color: '#F7931A' }}>{`Bitcoin Potential: ${bitcoinValue}`}</p>
                       </div>
                     );
                   }
@@ -513,7 +513,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                   position: 'insideRight',
                   style: { textAnchor: 'middle', fill: '#F7931A' }
                 }}
-                tickFormatter={(value) => value.toFixed(1)}
+                tickFormatter={(value) => formatBitcoin(value).replace(" BTC", "")}
                 stroke="#F7931A"
               />
               <Tooltip 
@@ -524,11 +524,11 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                     const bitcoinItem = payload.find(p => p.name === "Bitcoin Mined (₿)");
                     
                     const energyValue = energyItem && typeof energyItem.value === 'number' 
-                      ? Math.round(energyItem.value).toLocaleString() 
-                      : "0";
+                      ? formatEnergy(energyItem.value)
+                      : "0 MWh";
                     const bitcoinValue = bitcoinItem && typeof bitcoinItem.value === 'number' 
-                      ? Number(bitcoinItem.value).toFixed(2) 
-                      : "0.00";
+                      ? formatBitcoin(bitcoinItem.value)
+                      : "0.00 BTC";
                     
                     return (
                       <div className="custom-tooltip" style={{ 
@@ -538,8 +538,8 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                         borderRadius: '4px'
                       }}>
                         <p className="label" style={{ margin: '0 0 5px', fontWeight: 'bold' }}>{`Month: ${label}`}</p>
-                        <p style={{ margin: '0', color: '#333' }}>{`Curtailed Energy: ${energyValue} MWh`}</p>
-                        <p style={{ margin: '0', color: '#F7931A' }}>{`Bitcoin Mined: ₿${bitcoinValue}`}</p>
+                        <p style={{ margin: '0', color: '#333' }}>{`Curtailed Energy: ${energyValue}`}</p>
+                        <p style={{ margin: '0', color: '#F7931A' }}>{`Bitcoin Mined: ${bitcoinValue}`}</p>
                       </div>
                     );
                   }
