@@ -10,6 +10,7 @@ import FarmComparisonChart from "@/components/farm-comparison-chart";
 import FarmOpportunityComparisonChart from "@/components/farm-opportunity-comparison-chart";
 import CurtailmentPercentageChart from "@/components/curtailment-percentage-chart";
 import BitcoinPotentialTable from "@/components/bitcoin-potential-table";
+import { FarmDataTable } from "@/components/farm-data-table";
 import MinerModelSelector from "@/components/miner-model-selector";
 import { DatePicker } from "@/components/date-picker";
 import SummaryCards from "@/components/summary-cards-new";
@@ -214,13 +215,29 @@ export default function DashboardOverview() {
                 
               </TabsContent>
               
-              <TabsContent value="data">
+              <TabsContent value="data" className="space-y-8">
                 {/* Bitcoin Potential Table */}
                 <BitcoinPotentialTable
                   timeframe={timeframe}
                   date={date}
                   minerModel={selectedMinerModel}
                   farmId={farmIdToUse}
+                />
+                
+                {/* Farm Data Table */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 items-end">
+                  <div className="col-span-1 md:col-span-3">
+                    <h2 className="text-2xl font-bold mb-2">Curtailed Wind Farm Data Tables</h2>
+                    <p className="text-muted-foreground">
+                      Detailed information about wind farms and their respective curtailment metrics in a sortable, expandable table format.
+                    </p>
+                  </div>
+                </div>
+                
+                <FarmDataTable
+                  timeframe={timeframe as 'day' | 'month' | 'year'}
+                  date={date}
+                  minerModel={selectedMinerModel}
                 />
               </TabsContent>
             </Tabs>
