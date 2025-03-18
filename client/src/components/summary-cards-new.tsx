@@ -212,7 +212,7 @@ export default function SummaryCards({
                   : `${Math.round(Number(summaryData.totalCurtailedEnergy)).toLocaleString()} MWh`}
               </div>
             )}
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm font-medium text-gray-700 mt-1">
               Wasted energy that could be utilized
             </p>
           </CardContent>
@@ -236,7 +236,7 @@ export default function SummaryCards({
                   : `£${Math.round(Number(summaryData.totalPayment)).toLocaleString()}`}
               </div>
             )}
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm font-medium text-gray-700 mt-1">
               Consumer cost for idle wind farms
             </p>
           </CardContent>
@@ -260,12 +260,12 @@ export default function SummaryCards({
                     ? "0 BTC"
                     : `${Number(bitcoinData.bitcoinMined).toFixed(4)} BTC`}
                 </div>
-                <div className="text-base text-muted-foreground mt-1">
+                <div className="text-base font-medium text-gray-700 mt-1">
                   ≈ £{Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString("en-GB")}
                 </div>
               </>
             )}
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm font-medium text-gray-700 mt-1">
               Using {minerModel.replace("_", " ")} miners
             </p>
           </CardContent>
@@ -292,7 +292,7 @@ export default function SummaryCards({
                     : `${(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment)).toFixed(2)}x`}
                 </div>
                 <div className="flex items-center space-x-1 mt-1">
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-sm font-medium text-gray-700">
                     Higher ratio = better value from mining
                   </div>
                 </div>

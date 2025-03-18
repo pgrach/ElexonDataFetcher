@@ -24,7 +24,26 @@
   
   /* Chart labels and axis text */
   .recharts-text {
-    @apply text-base;
+    @apply text-base font-medium;
+  }
+  
+  /* Chart labels, ticks and axis values */
+  .recharts-cartesian-axis-tick-value,
+  .recharts-label,
+  .recharts-text-label,
+  .recharts-legend-item-text {
+    @apply text-base font-medium;
+  }
+  
+  /* Chart legends */
+  .recharts-legend-item-text {
+    @apply text-base font-semibold;
+  }
+  
+  /* Chart data labels and annotations */
+  .recharts-label-list text,
+  .recharts-reference-line-label {
+    @apply text-base font-bold;
   }
   
   /* Ensure card content is readable */
