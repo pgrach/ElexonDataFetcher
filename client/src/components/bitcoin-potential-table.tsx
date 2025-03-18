@@ -347,55 +347,57 @@ export default function BitcoinPotentialTable({
             ) : !sortedFarms || sortedFarms.length === 0 ? (
               <p className="text-center text-muted-foreground py-4">No farm data available for the selected period.</p>
             ) : (
-              <div className="max-h-[500px] overflow-y-auto">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-background z-10">
-                    <TableRow>
-                      <TableHead className="w-8 px-1 sm:px-2" />
-                      <TableHead className="w-[30%] min-w-[120px]">
-                        <SortButton 
-                          label="Wind Farm" 
-                          sortKey="leadPartyName" 
-                          tooltip="The name of the wind farm operator. Click to expand and see individual turbine units."
-                        />
-                      </TableHead>
-                      <TableHead className="w-[15%] text-right min-w-[60px]">
-                        <SortButton 
-                          label="% Total" 
-                          sortKey="totalPercentageOfTotal" 
-                          tooltip="Percentage of total curtailed energy from all wind farms for the selected period"
-                        />
-                      </TableHead>
-                      <TableHead className="w-[20%] text-right min-w-[80px]">
-                        <SortButton 
-                          label="MWh" 
-                          sortKey="totalCurtailedEnergy" 
-                          tooltip="Total megawatt hours of curtailed energy (energy that could have been generated but was restricted)"
-                        />
-                      </TableHead>
-                      <TableHead className="w-[20%] text-right min-w-[80px]">
-                        <SortButton 
-                          label="Cost" 
-                          sortKey="totalPayment" 
-                          tooltip="Total payment received by the wind farm for curtailing their energy generation"
-                        />
-                      </TableHead>
-                      <TableHead className="w-[15%] text-right min-w-[70px]">
-                        <SortButton 
-                          label="BTC" 
-                          sortKey="totalPotentialBtc" 
-                          tooltip="Potential Bitcoin that could have been mined using the curtailed energy (shown with GBP value below)"
-                        />
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {renderFarmRows()}
-                  </TableBody>
-                </Table>
+              <div className="space-y-4">
+                <div className="max-h-[500px] overflow-y-auto border rounded-md">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background z-10">
+                      <TableRow>
+                        <TableHead className="w-8 px-1 sm:px-2" />
+                        <TableHead className="w-[30%] min-w-[120px]">
+                          <SortButton 
+                            label="Wind Farm" 
+                            sortKey="leadPartyName" 
+                            tooltip="The name of the wind farm operator. Click to expand and see individual turbine units."
+                          />
+                        </TableHead>
+                        <TableHead className="w-[15%] text-right min-w-[60px]">
+                          <SortButton 
+                            label="% Total" 
+                            sortKey="totalPercentageOfTotal" 
+                            tooltip="Percentage of total curtailed energy from all wind farms for the selected period"
+                          />
+                        </TableHead>
+                        <TableHead className="w-[20%] text-right min-w-[80px]">
+                          <SortButton 
+                            label="MWh" 
+                            sortKey="totalCurtailedEnergy" 
+                            tooltip="Total megawatt hours of curtailed energy (energy that could have been generated but was restricted)"
+                          />
+                        </TableHead>
+                        <TableHead className="w-[20%] text-right min-w-[80px]">
+                          <SortButton 
+                            label="Cost" 
+                            sortKey="totalPayment" 
+                            tooltip="Total payment received by the wind farm for curtailing their energy generation"
+                          />
+                        </TableHead>
+                        <TableHead className="w-[15%] text-right min-w-[70px]">
+                          <SortButton 
+                            label="BTC" 
+                            sortKey="totalPotentialBtc" 
+                            tooltip="Potential Bitcoin that could have been mined using the curtailed energy (shown with GBP value below)"
+                          />
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {renderFarmRows()}
+                    </TableBody>
+                  </Table>
+                </div>
                 
-                {/* Bitcoin miner information below the table */}
-                <div className="text-sm mt-4 pt-2 border-t text-right font-medium text-primary">
+                {/* Bitcoin miner information below the table, outside scrollable area */}
+                <div className="text-sm pt-2 text-right font-medium text-primary">
                   {minerModel.replace("_", " ")} miners @ {Math.round(Number(bitcoinData.currentPrice)).toLocaleString()} GBP
                 </div>
               </div>
