@@ -311,33 +311,66 @@ export default function SummaryCards({
                 <h3 className="text-sm font-medium text-muted-foreground">Value Ratio</h3>
                 <p className="text-xs text-muted-foreground">Bitcoin value vs. subsidy cost</p>
               </div>
-              <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center">
-                <ArrowRightLeft className="h-4 w-4 text-green-600" />
-              </div>
+              {(() => {
+                // Calculate ratio for icon
+                const valueRatio = Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) || 
+                  Number.isNaN(Number(summaryData.totalPayment)) ||
+                  Number(summaryData.totalPayment) === 0
+                    ? 0
+                    : Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment);
+                
+                // Use green for ratios >= 1.0 and slate for < 1.0
+                const bgColor = valueRatio >= 1.0 ? "bg-green-100" : "bg-slate-100";
+                const iconColor = valueRatio >= 1.0 ? "text-green-600" : "text-slate-600";
+
+                return (
+                  <div className={`w-7 h-7 rounded-full ${bgColor} flex items-center justify-center`}>
+                    <ArrowRightLeft className={`h-4 w-4 ${iconColor}`} />
+                  </div>
+                );
+              })()}
             </div>
             
             {isBitcoinLoading || isSummaryLoading ? (
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
               <div className="mt-4">
-                <div className="text-2xl font-bold text-green-600">
-                  {Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) || 
-                   Number.isNaN(Number(summaryData.totalPayment)) ||
-                   Number(summaryData.totalPayment) === 0
-                    ? "0.00×"
-                    : `${(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment)).toFixed(2)}×`}
-                </div>
-                <div className="flex items-center mt-1">
-                  <span className="inline-block mr-1 text-green-600">•</span>
-                  <span className="text-xs text-muted-foreground">High value from mining</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Bitcoin value is {Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) || 
-                   Number.isNaN(Number(summaryData.totalPayment)) ||
-                   Number(summaryData.totalPayment) === 0
-                    ? "0.00"
-                    : (Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment)).toFixed(2)}× the subsidy payment
-                </p>
+                {(() => {
+                  // Calculate ratio for reuse
+                  const valueRatio = Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) || 
+                    Number.isNaN(Number(summaryData.totalPayment)) ||
+                    Number(summaryData.totalPayment) === 0
+                      ? 0
+                      : Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment);
+                  
+                  // Determine color and message based on ratio
+                  const isHighValue = valueRatio >= 1.0;
+                  const textColor = isHighValue ? "text-green-600" : "text-slate-500";
+                  const dotColor = isHighValue ? "text-green-600" : "text-slate-500";
+                  const message = isHighValue 
+                    ? "High value from mining" 
+                    : "Subsidies exceed mining value";
+                  
+                  return (
+                    <>
+                      <div className={`text-2xl font-bold ${textColor}`}>
+                        {valueRatio === 0 ? "0.00×" : `${valueRatio.toFixed(2)}×`}
+                      </div>
+                      <div className="flex items-center mt-1">
+                        <span className={`inline-block mr-1 ${dotColor}`}>•</span>
+                        <span className="text-xs text-muted-foreground">{message}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {valueRatio === 0 
+                          ? "No comparison data available" 
+                          : isHighValue
+                            ? `Bitcoin value is ${valueRatio.toFixed(2)}× the subsidy payment`
+                            : `Subsidy payments exceed Bitcoin value by ${(1/valueRatio).toFixed(2)}×`
+                        }
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
             )}
           </div>
