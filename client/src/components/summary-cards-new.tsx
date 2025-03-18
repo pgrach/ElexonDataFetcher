@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Battery, Bitcoin, Calendar, ArrowRightLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatEnergy, formatGBP, formatBitcoin } from "@/lib/utils";
 
 interface SummaryCardsProps {
   timeframe: string;
@@ -209,7 +210,7 @@ export default function SummaryCards({
               <div className="text-2xl font-bold">
                 {Number.isNaN(Number(summaryData.totalCurtailedEnergy))
                   ? "0 MWh"
-                  : `${Math.round(Number(summaryData.totalCurtailedEnergy)).toLocaleString()} MWh`}
+                  : formatEnergy(Number(summaryData.totalCurtailedEnergy))}
               </div>
             )}
             <p className="text-xs text-muted-foreground mt-1">
@@ -233,7 +234,7 @@ export default function SummaryCards({
               <div className="text-2xl font-bold text-red-500">
                 {Number.isNaN(Number(summaryData.totalPayment))
                   ? "£0"
-                  : `£${Math.round(Number(summaryData.totalPayment)).toLocaleString()}`}
+                  : formatGBP(Number(summaryData.totalPayment))}
               </div>
             )}
             <p className="text-xs text-muted-foreground mt-1">
@@ -258,10 +259,10 @@ export default function SummaryCards({
                 <div className="text-2xl font-bold text-[#F7931A]">
                   {Number.isNaN(Number(bitcoinData.bitcoinMined))
                     ? "0 BTC"
-                    : `${Number(bitcoinData.bitcoinMined).toFixed(4)} BTC`}
+                    : formatBitcoin(Number(bitcoinData.bitcoinMined))}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  ≈ £{Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString("en-GB")}
+                  ≈ {formatGBP(Number(bitcoinData.valueAtCurrentPrice))}
                 </div>
               </>
             )}
