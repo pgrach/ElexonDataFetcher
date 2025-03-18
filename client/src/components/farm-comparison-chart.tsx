@@ -1,222 +1,199 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import axios from "axios";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  LabelList,
-} from "recharts";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { EnhancedChartTooltip } from "./enhanced-chart-tooltip";
+import { useQuery } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from "recharts";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PoundSterling } from "lucide-react";
 
 interface FarmComparisonChartProps {
+  timeframe: string;
   date: Date;
   minerModel: string;
-  timeframe: string;
-  leadParty?: string;
-  limit?: number;
 }
 
-interface FarmData {
+interface TopFarmData {
   name: string;
+  farmId: string;
   curtailedEnergy: number;
+  curtailmentPayment: number;
   bitcoinMined: number;
-  totalPayment: number;
-  valueAtCurrentPrice: number;
+  bitcoinValue: number;
 }
 
-export default function FarmComparisonChart({ 
-  date, 
-  minerModel, 
-  timeframe,
-  leadParty,
-  limit = 5
-}: FarmComparisonChartProps) {
-  const [data, setData] = useState<FarmData[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+export default function FarmComparisonChart({ timeframe, date, minerModel }: FarmComparisonChartProps) {
+  const formattedDate = format(date, "yyyy-MM-dd");
+  const yearMonth = format(date, "yyyy-MM");
+  const year = format(date, "yyyy");
   
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
+  // Determine period and value based on timeframe
+  const period = 
+    timeframe === "yearly" ? "year" : 
+    timeframe === "monthly" ? "month" : "day";
+  
+  const value = 
+    timeframe === "yearly" ? year : 
+    timeframe === "monthly" ? yearMonth : formattedDate;
+  
+  // Fetch data from our new top-farms endpoint
+  const { data: farmsData = [], isLoading } = useQuery<TopFarmData[]>({
+    queryKey: ['/api/mining-potential/top-farms', period, value, minerModel],
+    queryFn: async () => {
+      const url = new URL('/api/mining-potential/top-farms', window.location.origin);
+      url.searchParams.append('period', period);
+      url.searchParams.append('value', value);
+      url.searchParams.append('minerModel', minerModel);
+      url.searchParams.append('limit', '5');
       
-      try {
-        let period, value;
-        
-        if (timeframe === "yearly") {
-          period = "year";
-          value = format(date, "yyyy");
-        } else if (timeframe === "monthly") {
-          period = "month";
-          value = format(date, "yyyy-MM");
-        } else {
-          period = "day";
-          value = format(date, "yyyy-MM-dd");
-        }
-        
-        const params: Record<string, string | number> = {
-          period,
-          value,
-          minerModel,
-          limit
-        };
-        
-        if (leadParty) {
-          params.leadParty = leadParty;
-        }
-        
-        const response = await axios.get('/api/mining-potential/top-farms', { params });
-        
-        // Process and transform the data
-        const processedData = response.data.map((farm: any) => ({
-          name: farm.name.length > 15 ? farm.name.substring(0, 13) + '...' : farm.name,
-          fullName: farm.name,
-          curtailedEnergy: farm.curtailedEnergy,
-          bitcoinMined: farm.bitcoinMined,
-          totalPayment: farm.totalPayment,
-          valueAtCurrentPrice: farm.valueAtCurrentPrice,
-          valueRatio: farm.valueAtCurrentPrice / farm.totalPayment
-        }));
-        
-        setData(processedData);
-      } catch (err: any) {
-        console.error("Error fetching farm comparison data:", err);
-        setError("Failed to load farm comparison data. Please try again.");
-      } finally {
-        setLoading(false);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch top farms data");
       }
-    };
-    
-    fetchData();
-  }, [date, minerModel, timeframe, leadParty, limit]);
-  
-  const periodText = timeframe === "yearly" 
-    ? "year" 
-    : timeframe === "monthly" 
-      ? "month" 
-      : "day";
       
-  const dateLabel = timeframe === "yearly"
-    ? format(date, "yyyy")
-    : timeframe === "monthly"
-      ? format(date, "MMMM yyyy")
-      : format(date, "PP");
+      return response.json();
+    }
+  });
+  
+  // Transform the data for the chart
+  const chartData = farmsData.map(farm => ({
+    name: farm.name || farm.farmId,
+    curtailmentPayment: Math.round(farm.curtailmentPayment),
+    bitcoinValue: Math.round(farm.bitcoinValue)
+  }));
+  
+  // Get chart title based on timeframe
+  const chartTitle = 
+    timeframe === "yearly" ? `Top 5 Curtailed Farms by Volume (${year})` :
+    timeframe === "monthly" ? `Top 5 Curtailed Farms by Volume (${format(date, "MMMM yyyy")})` :
+    `Top 5 Curtailed Farms by Volume (${format(date, "PP")})`;
+  
+  // Colors for the bars
+  const curtailmentColor = "#000000"; // Black for curtailment
+  const bitcoinColor = "#F7931A"; // Bitcoin orange
+  
+  // Format GBP values for tooltips without decimal places
+  const formatGBP = (value: number) => {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(value);
+  };
+  
+  // Custom tooltip for the chart
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-md shadow-md">
+          <p className="font-semibold">{label}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={`item-${index}`} style={{ color: entry.color || entry.fill }}>
+              {entry.name === "Bitcoin Value" ? (
+                <span className="flex items-center">
+                  <span className="text-[#F7931A] mr-1">₿</span>
+                  {formatGBP(entry.value)}
+                </span>
+              ) : (
+                <span>
+                  {formatGBP(entry.value)}
+                </span>
+              )}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
   
   return (
-    <Card className="shadow-md border-gray-200">
-      <CardHeader className="border-b border-gray-100 bg-gray-50/50">
-        <CardTitle className="text-lg font-medium text-gray-800">
-          Top Wind Farms by Curtailment
-        </CardTitle>
-        <CardDescription className="text-xs text-gray-500">
-          Showing top {limit} farms for {dateLabel} {leadParty ? `owned by ${leadParty}` : ""}
-          using {minerModel} miner model
-        </CardDescription>
+    <Card>
+      <CardHeader>
+        <CardTitle>{chartTitle}</CardTitle>
       </CardHeader>
-      <CardContent className="p-6">
-        {loading ? (
-          <div className="h-72 w-full flex items-center justify-center bg-gray-50 rounded-md">
-            <p className="text-gray-500">Loading farm comparison data...</p>
-          </div>
-        ) : error ? (
-          <div className="h-72 w-full flex items-center justify-center bg-red-50 rounded-md border border-red-100">
-            <p className="text-red-600">{error}</p>
-          </div>
-        ) : data.length === 0 ? (
-          <div className="h-72 w-full flex items-center justify-center bg-gray-50 rounded-md">
-            <p className="text-gray-500">No farm comparison data available for this period.</p>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-[300px] w-full" />
+        ) : chartData.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[300px] border border-dashed border-blue-200 rounded-md bg-blue-50/30">
+            <svg className="h-16 w-16 text-blue-400 mb-2" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              {/* Tower */}
+              <rect x="47" y="55" width="6" height="35" fill="currentColor" rx="1" />
+              <rect x="40" y="90" width="20" height="5" rx="2" fill="currentColor" />
+
+              {/* Nacelle (turbine housing) */}
+              <rect x="42" y="48" width="16" height="4" rx="2" fill="currentColor" transform="rotate(5, 50, 50)" />
+
+              {/* Hub */}
+              <circle cx="50" cy="50" r="3" fill="currentColor" />
+
+              {/* Rotating blades - with animation */}
+              <g style={{ transformOrigin: "50px 50px", animation: "windTurbineSpin 8s linear infinite" }}>
+                {/* Blade 1 - pointing right with taper and curve */}
+                <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" />
+                {/* Blade 2 - rotated 120 degrees */}
+                <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(120, 50, 50)" />
+                {/* Blade 3 - rotated 240 degrees */}
+                <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(240, 50, 50)" />
+              </g>
+
+              {/* Animation keyframes - added via style */}
+              <style>{`
+                @keyframes windTurbineSpin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              `}</style>
+            </svg>
+            <h3 className="text-lg font-medium text-blue-500">No Wind Farms Curtailed</h3>
+            <p className="text-sm text-blue-400 max-w-md text-center mt-2 px-4">
+              There were no wind farms curtailed during this {timeframe} period. Try selecting a different date to view farm comparison data.
+            </p>
           </div>
         ) : (
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={data}
-                margin={{ top: 20, right: 30, left: 20, bottom: 50 }}
-                layout="vertical"
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart
+              data={chartData}
+              margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis 
+                tick={{ fontSize: 12 }}
+                tickFormatter={(value) => `£${Math.round(value).toLocaleString()}`}
+                label={{ 
+                  value: 'British Pounds (£)', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  offset: 5,
+                  style: { textAnchor: 'middle' },
+                  dx: -30 
+                }}
+                width={80}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+              <Bar 
+                dataKey="curtailmentPayment" 
+                name="Curtailment Payment" 
+                stackId="a"
               >
-                <CartesianGrid horizontal strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis 
-                  type="number"
-                  tick={{ fontSize: 12, fill: '#4b5563' }}
-                  tickLine={{ stroke: '#d1d5db' }}
-                  axisLine={{ stroke: '#d1d5db' }}
-                  tickFormatter={(value) => {
-                    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-                    if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
-                    return value.toString();
-                  }}
-                  label={{ 
-                    value: 'Curtailed Energy (MWh)', 
-                    position: 'insideBottom', 
-                    offset: -10,
-                    fill: '#4b5563',
-                    fontSize: 14,
-                    fontWeight: 500,
-                  }}
-                />
-                <YAxis 
-                  dataKey="name" 
-                  type="category"
-                  width={100}
-                  tick={{ fontSize: 12, fill: '#4b5563' }}
-                  tickLine={false}
-                />
-                <Tooltip content={<EnhancedChartTooltip title="Farm" />} />
-                <Legend 
-                  iconType="circle"
-                  iconSize={10}
-                  wrapperStyle={{
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    paddingTop: '10px',
-                    paddingBottom: '5px'
-                  }}
-                />
-                <Bar 
-                  dataKey="curtailedEnergy" 
-                  name="Curtailed Energy (MWh)" 
-                  fill="#3b82f6" 
-                  radius={[0, 4, 4, 0]}
-                  barSize={20}
-                >
-                  <LabelList 
-                    dataKey="curtailedEnergy" 
-                    position="right" 
-                    formatter={(value: number) => {
-                      if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-                      if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
-                      return value.toFixed(0);
-                    }}
-                    style={{
-                      fontSize: 12,
-                      fill: '#4b5563',
-                      fontWeight: 500
-                    }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={curtailmentColor} />
+                ))}
+              </Bar>
+              <Bar 
+                dataKey="bitcoinValue" 
+                name="Bitcoin Value"
+                fill={bitcoinColor}
+                stackId="b"
+              />
+            </BarChart>
+          </ResponsiveContainer>
         )}
-        
-        {/* Chart footer with additional information */}
-        <div className="mt-4 pt-3 border-t border-gray-100 text-sm text-gray-500">
-          <p className="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Chart shows farms with the most curtailed energy for this {periodText}. Hover for more details.
-          </p>
-        </div>
       </CardContent>
     </Card>
   );
