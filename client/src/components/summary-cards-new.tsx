@@ -196,110 +196,151 @@ export default function SummaryCards({
       
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Energy Curtailed Card */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Energy Curtailed
-            </CardTitle>
-            <Wind className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+        <Card className="overflow-hidden">
+          <div className="p-6">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground">Energy Curtailed</h3>
+                <p className="text-xs text-muted-foreground">Total wasted wind energy</p>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
+                <Wind className="h-4 w-4 text-blue-600" />
+              </div>
+            </div>
+            
             {isSummaryLoading ? (
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
-              <div className="text-2xl font-bold">
-                {Number.isNaN(Number(summaryData.totalCurtailedEnergy))
-                  ? "0 MWh"
-                  : formatEnergy(Number(summaryData.totalCurtailedEnergy))}
+              <div className="mt-4">
+                <div className="text-2xl font-bold text-blue-600">
+                  {Number.isNaN(Number(summaryData.totalCurtailedEnergy))
+                    ? "0 MWh"
+                    : formatEnergy(Number(summaryData.totalCurtailedEnergy))}
+                </div>
+                <div className="flex items-center mt-1">
+                  <span className="inline-block mr-1 text-blue-600">•</span>
+                  <span className="text-xs text-muted-foreground">Untapped energy resource</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {Number(summaryData.totalCurtailedEnergy) > 0 
+                    ? `That's enough to power approximately ${Math.round(Number(summaryData.totalCurtailedEnergy) / 3.4)} homes for a month`
+                    : "No wasted energy recorded for this period"}
+                </p>
               </div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">
-              Wasted energy that could be utilized
-            </p>
-          </CardContent>
+          </div>
         </Card>
 
         {/* Subsidies Paid Card */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Subsidies Paid
-            </CardTitle>
-            <Battery className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+        <Card className="overflow-hidden">
+          <div className="p-6">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground">Subsidies Paid</h3>
+                <p className="text-xs text-muted-foreground">Consumer cost for curtailment</p>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center">
+                <Battery className="h-4 w-4 text-red-600" />
+              </div>
+            </div>
+            
             {isSummaryLoading ? (
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
-              <div className="text-2xl font-bold text-red-500">
-                {Number.isNaN(Number(summaryData.totalPayment))
-                  ? "£0"
-                  : formatGBP(Number(summaryData.totalPayment))}
+              <div className="mt-4">
+                <div className="text-2xl font-bold text-red-600">
+                  {Number.isNaN(Number(summaryData.totalPayment))
+                    ? "£0"
+                    : formatGBP(Number(summaryData.totalPayment))}
+                </div>
+                <div className="flex items-center mt-1">
+                  <span className="inline-block mr-1 text-red-600">•</span>
+                  <span className="text-xs text-muted-foreground">Paid to idle wind farms</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {Number(summaryData.totalCurtailedEnergy) > 0 && Number(summaryData.totalPayment) > 0
+                    ? `Approximately £${(Number(summaryData.totalPayment) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh of curtailed energy`
+                    : "No subsidy payments recorded for this period"}
+                </p>
               </div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">
-              Consumer cost for idle wind farms
-            </p>
-          </CardContent>
+          </div>
         </Card>
 
         {/* Potential Bitcoin Card */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Potential Bitcoin
-            </CardTitle>
-            <Bitcoin className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+        <Card className="overflow-hidden">
+          <div className="p-6">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground">Potential Bitcoin</h3>
+                <p className="text-xs text-muted-foreground">Mining using {minerModel.replace("_", " ")}</p>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center">
+                <Bitcoin className="h-4 w-4 text-amber-600" />
+              </div>
+            </div>
+            
             {isBitcoinLoading ? (
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
-              <>
-                <div className="text-2xl font-bold text-[#F7931A]">
+              <div className="mt-4">
+                <div className="text-2xl font-bold text-amber-600">
                   {Number.isNaN(Number(bitcoinData.bitcoinMined))
                     ? "0 BTC"
                     : formatBitcoin(Number(bitcoinData.bitcoinMined))}
                 </div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  ≈ {formatGBP(Number(bitcoinData.valueAtCurrentPrice))}
+                <div className="flex items-center mt-1">
+                  <span className="inline-block mr-1 text-amber-600">•</span>
+                  <span className="text-xs text-muted-foreground">≈ {formatGBP(Number(bitcoinData.valueAtCurrentPrice))}</span>
                 </div>
-              </>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {Number(bitcoinData.bitcoinMined) > 0 && Number(summaryData.totalCurtailedEnergy) > 0
+                    ? `Potential value: £${(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh of curtailed energy`
+                    : "Potential value from wasted energy"}
+                </p>
+              </div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">
-              Using {minerModel.replace("_", " ")} miners
-            </p>
-          </CardContent>
+          </div>
         </Card>
 
         {/* Value Ratio Card */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Value Ratio
-            </CardTitle>
-            <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+        <Card className="overflow-hidden">
+          <div className="p-6">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground">Value Ratio</h3>
+                <p className="text-xs text-muted-foreground">Bitcoin value vs. subsidy cost</p>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center">
+                <ArrowRightLeft className="h-4 w-4 text-green-600" />
+              </div>
+            </div>
+            
             {isBitcoinLoading || isSummaryLoading ? (
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
-              <>
-                <div className="text-2xl font-bold text-green-500">
+              <div className="mt-4">
+                <div className="text-2xl font-bold text-green-600">
                   {Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) || 
                    Number.isNaN(Number(summaryData.totalPayment)) ||
                    Number(summaryData.totalPayment) === 0
-                    ? "0.00x"
-                    : `${(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment)).toFixed(2)}x`}
+                    ? "0.00×"
+                    : `${(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment)).toFixed(2)}×`}
                 </div>
-                <div className="flex items-center space-x-1 mt-1">
-                  <div className="text-xs text-muted-foreground">
-                    Higher ratio = better value from mining
-                  </div>
+                <div className="flex items-center mt-1">
+                  <span className="inline-block mr-1 text-green-600">•</span>
+                  <span className="text-xs text-muted-foreground">High value from mining</span>
                 </div>
-              </>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Bitcoin value is {Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) || 
+                   Number.isNaN(Number(summaryData.totalPayment)) ||
+                   Number(summaryData.totalPayment) === 0
+                    ? "0.00"
+                    : (Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment)).toFixed(2)}× the subsidy payment
+                </p>
+              </div>
             )}
-          </CardContent>
+          </div>
         </Card>
       </div>
     </div>
