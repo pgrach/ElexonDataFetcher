@@ -17,6 +17,8 @@ import SummaryCards from "@/components/summary-cards-new";
 import FarmSelector from "@/components/farm-selector";
 import LeadPartySelector from "@/components/lead-party-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Wind } from "lucide-react";
 import CurtailmentInfoBanner from "@/components/curtailment-info-banner";
 import DashboardTutorial from "@/components/dashboard-tutorial";
 // CurtailmentComparisonCard removed as it's redundant with the Value Ratio card
@@ -224,11 +226,22 @@ export default function DashboardOverview() {
                   farmId={farmIdToUse}
                 />
                 
-                <CurtailedFarmsTable 
-                  timeframe={timeframe === "daily" ? "day" : timeframe === "monthly" ? "month" : "year"}
-                  date={date}
-                  minerModel={selectedMinerModel}
-                />
+                {/* Wind Farm Data Table */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl font-bold flex items-center gap-2">
+                      <Wind className="h-5 w-5 text-sky-500" />
+                      Curtailed Wind Farms
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CurtailedFarmsTable 
+                      timeframe={timeframe === "daily" ? "day" : timeframe === "monthly" ? "month" : "year"}
+                      date={date}
+                      minerModel={selectedMinerModel}
+                    />
+                  </CardContent>
+                </Card>
               </TabsContent>
             </Tabs>
           </>

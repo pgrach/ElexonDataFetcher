@@ -51,26 +51,30 @@ async function getGroupedFarmData(
   try {
     console.log(`Getting grouped farm data for ${timeframe}: ${value}, model: ${minerModel}`);
     
-    let dateCondition;
+    // Common date condition function
+    const createDateCondition = (table: any) => {
+      if (timeframe === 'day') {
+        // For a specific day
+        return eq(table.settlementDate, value);
+      } else if (timeframe === 'month') {
+        // For a specific month (YYYY-MM)
+        const [year, month] = value.split('-').map(n => parseInt(n, 10));
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0); // Last day of month
+        const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+        const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+        
+        return sql`${table.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
+      } else if (timeframe === 'year') {
+        // For a specific year
+        return sql`EXTRACT(YEAR FROM ${table.settlementDate}) = ${parseInt(value, 10)}`;
+      } else {
+        throw new Error(`Invalid timeframe type: ${timeframe}`);
+      }
+    };
     
-    if (timeframe === 'day') {
-      // For a specific day
-      dateCondition = eq(curtailmentRecords.settlementDate, value);
-    } else if (timeframe === 'month') {
-      // For a specific month (YYYY-MM)
-      const [year, month] = value.split('-').map(n => parseInt(n, 10));
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0); // Last day of month
-      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
-      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
-      
-      dateCondition = sql`${curtailmentRecords.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
-    } else if (timeframe === 'year') {
-      // For a specific year
-      dateCondition = sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}) = ${parseInt(value, 10)}`;
-    } else {
-      throw new Error(`Invalid timeframe type: ${timeframe}`);
-    }
+    // Set date conditions for each table
+    const curtailmentDateCondition = createDateCondition(curtailmentRecords);
     
     // First, get the total curtailed energy for percentage calculation
     const totalEnergyResult = await db
@@ -78,7 +82,7 @@ async function getGroupedFarmData(
         totalEnergy: sql<number>`SUM(ABS(${curtailmentRecords.volume}))`
       })
       .from(curtailmentRecords)
-      .where(dateCondition);
+      .where(curtailmentDateCondition);
     
     const totalCurtailedEnergy = Number(totalEnergyResult[0]?.totalEnergy || 0);
     
@@ -96,7 +100,7 @@ async function getGroupedFarmData(
       })
       .from(curtailmentRecords)
       .where(and(
-        dateCondition,
+        curtailmentDateCondition,
         // Ensure we have a lead party name
         sql`${curtailmentRecords.leadPartyName} IS NOT NULL AND ${curtailmentRecords.leadPartyName} <> ''`
       ))
@@ -104,6 +108,7 @@ async function getGroupedFarmData(
       .orderBy(desc(sql<number>`SUM(ABS(${curtailmentRecords.volume}))`));
     
     // Get Bitcoin data by lead party name
+    const bitcoinDateCondition = createDateCondition(historicalBitcoinCalculations);
     const bitcoinData = await db
       .select({
         farmId: historicalBitcoinCalculations.farmId,
@@ -111,7 +116,7 @@ async function getGroupedFarmData(
       })
       .from(historicalBitcoinCalculations)
       .where(and(
-        dateCondition,
+        bitcoinDateCondition,
         eq(historicalBitcoinCalculations.minerModel, minerModel)
       ))
       .groupBy(historicalBitcoinCalculations.farmId);
@@ -137,7 +142,7 @@ async function getGroupedFarmData(
           })
           .from(curtailmentRecords)
           .where(and(
-            dateCondition,
+            curtailmentDateCondition,
             // Use SQL for comparison to ensure proper handling of nulls
             sql`${curtailmentRecords.leadPartyName} = ${leadPartyName}`
           ))
