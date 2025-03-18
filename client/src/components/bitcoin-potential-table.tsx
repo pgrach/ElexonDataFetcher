@@ -277,6 +277,11 @@ export default function BitcoinPotentialTable({
             {formatGBP(farm.totalPayment)}
           </TableCell>
           <TableCell className="text-right text-xs sm:text-sm">
+            {farm.totalCurtailedEnergy > 0 
+              ? `£${Math.round(Math.abs(farm.totalPayment) / farm.totalCurtailedEnergy)}`
+              : '£0'}
+          </TableCell>
+          <TableCell className="text-right text-xs sm:text-sm">
             <div>{formatBitcoin(farm.totalPotentialBtc)}</div>
             {farmData?.meta?.currentPrice && (
               <div className="text-[10px] sm:text-xs text-green-500">
@@ -303,6 +308,11 @@ export default function BitcoinPotentialTable({
               </TableCell>
               <TableCell className="text-xs sm:text-sm text-orange-500/70 text-right">
                 {formatGBP(subFarm.payment)}
+              </TableCell>
+              <TableCell className="text-xs sm:text-sm text-muted-foreground text-right">
+                {subFarm.curtailedEnergy > 0 
+                  ? `£${Math.round(Math.abs(subFarm.payment) / subFarm.curtailedEnergy)}`
+                  : '£0'}
               </TableCell>
               <TableCell className="text-xs sm:text-sm text-muted-foreground text-right">
                 <div>{formatBitcoin(subFarm.potentialBtc)}</div>
@@ -353,35 +363,42 @@ export default function BitcoinPotentialTable({
                     <TableHeader className="sticky top-0 bg-background z-10">
                       <TableRow>
                         <TableHead className="w-8 px-1 sm:px-2" />
-                        <TableHead className="w-[30%] min-w-[120px]">
+                        <TableHead className="w-[24%] min-w-[120px]">
                           <SortButton 
                             label="Wind Farm" 
                             sortKey="leadPartyName" 
                             tooltip="The name of the wind farm operator. Click to expand and see individual turbine units."
                           />
                         </TableHead>
-                        <TableHead className="w-[15%] text-right min-w-[60px]">
+                        <TableHead className="w-[10%] text-right min-w-[60px]">
                           <SortButton 
                             label="% Total" 
                             sortKey="totalPercentageOfTotal" 
                             tooltip="Percentage of total curtailed energy from all wind farms for the selected period"
                           />
                         </TableHead>
-                        <TableHead className="w-[20%] text-right min-w-[80px]">
+                        <TableHead className="w-[14%] text-right min-w-[80px]">
                           <SortButton 
                             label="MWh" 
                             sortKey="totalCurtailedEnergy" 
                             tooltip="Total megawatt hours of curtailed energy (energy that could have been generated but was restricted)"
                           />
                         </TableHead>
-                        <TableHead className="w-[20%] text-right min-w-[80px]">
+                        <TableHead className="w-[14%] text-right min-w-[80px]">
                           <SortButton 
                             label="Cost" 
                             sortKey="totalPayment" 
                             tooltip="Total payment received by the wind farm for curtailing their energy generation"
                           />
                         </TableHead>
-                        <TableHead className="w-[15%] text-right min-w-[70px]">
+                        <TableHead className="w-[14%] text-right min-w-[80px]">
+                          <SortButton 
+                            label="Price/MWh" 
+                            sortKey="totalPayment" 
+                            tooltip="Average price per MWh (Cost divided by MWh)"
+                          />
+                        </TableHead>
+                        <TableHead className="w-[14%] text-right min-w-[70px]">
                           <SortButton 
                             label="BTC" 
                             sortKey="totalPotentialBtc" 
