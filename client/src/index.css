@@ -12,4 +12,28 @@
   body {
     @apply font-dosis antialiased bg-background text-foreground;
   }
+  
+  /* Improved text sizing for better readability */
+  .text-xs {
+    @apply text-sm;
+  }
+  
+  .text-sm {
+    @apply text-base;
+  }
+  
+  /* Chart labels and axis text */
+  .recharts-text {
+    @apply text-base;
+  }
+  
+  /* Ensure card content is readable */
+  .card-content {
+    @apply text-base;
+  }
+  
+  /* Make table content larger */
+  .table-content {
+    @apply text-base;
+  }
 }
