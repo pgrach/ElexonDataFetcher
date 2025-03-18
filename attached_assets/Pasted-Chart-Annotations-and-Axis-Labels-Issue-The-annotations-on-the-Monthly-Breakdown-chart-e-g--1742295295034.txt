@@ -1,0 +1,25 @@
+Chart Annotations and Axis Labels:
+Issue: The annotations on the "Monthly Breakdown" chart (e.g., "0.82" and "587") and the day labels on the "Monthly Rate Comparison" chart (e.g., "0.0" to "31.0") are in 10-12 point font, which is an improvement but still on the smaller side. These can be hard to read quickly, especially for users with visual impairments or on smaller screens.
+
+Suggestion: Increase the font size to 12-14 points for all chart annotations and axis labels. Additionally, use a bolder font weight (e.g., semi-bold or bold) to enhance visibility.
+Notes and Secondary Text:
+Issue: The notes (e.g., "Wasted energy could be offset" and "Consumer cost for idle wind farms") are now around 10-12 points, which is better but still light in weight and low-contrast (light gray color). This can make them blend into the background, especially in bright environments.
+
+Suggestion: Increase the font size to 12-14 points and switch to a darker color (e.g., dark gray or black) with higher contrast against the white background. A slight bolding could also help.
+Legend Text:
+Issue: The legend text (e.g., "Curtailed Energy (MWh)" and "Bitcoin Value") in both charts is readable but small (around 10-12 points). It’s functional but could be more prominent given its importance in interpreting the data.
+
+Suggestion: Bump the legend font size to 12-14 points and consider a bolder style to make it stand out more clearly against the chart colors.
+Color Contrast:
+Issue: The orange text (e.g., Bitcoin-related values like "3.7193 BTC" and the orange lines in charts) has decent contrast with the white background, but the black text (e.g., curtailment data) sometimes feels less distinct due to its thin weight or light gray shading in some areas.
+
+Suggestion: Ensure consistent use of bold or medium-weight fonts for all data points and labels. If possible, test the contrast ratio (aim for at least 4.5:1 for normal text per accessibility guidelines) to ensure legibility for all users.
+Mobile and Zoom Considerations:
+Issue: On smaller screens or without zooming, the tiniest text (e.g., some chart annotations or notes) might still require effort to read, which could disrupt the user experience.
+
+Suggestion: Implement a responsive design where font sizes scale up automatically on smaller screens (e.g., 14-16 points for secondary text on mobile). Alternatively, add a "zoom" or "enlarge text" feature for users to adjust readability on demand.
+Consistency Across Sections:
+Issue: There’s a slight variation in font sizes and styles across different sections (e.g., dashboard metrics vs. charts), which can feel disjointed and make some areas harder to scan.
+
+Suggestion: Standardize the font sizes across all sections (e.g., 16-24 points for headings, 12-14 points for secondary text and labels) and use a consistent typeface (e.g., a sans-serif like Arial or Roboto) to create a cohesive look.
+

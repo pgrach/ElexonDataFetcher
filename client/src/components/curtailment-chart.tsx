@@ -21,8 +21,11 @@ const BitcoinIcon = ({ x, y, value }: { x: number, y: number, value: number }) =
   
   return (
     <g transform={`translate(${x},${y - 22})`}>
-      {/* Bitcoin circle */}
+      {/* Bitcoin circle with improved visibility */}
       <circle cx="10" cy="10" r="10" fill="#F7931A" />
+      
+      {/* Background shadow for better contrast */}
+      <circle cx="10" cy="10" r="12" fill="#F7931A" opacity={0.3} />
       
       {/* Bitcoin B symbol */}
       <path 
@@ -30,15 +33,26 @@ const BitcoinIcon = ({ x, y, value }: { x: number, y: number, value: number }) =
         fill="white" 
       />
       
-      {/* Value text below the icon with more spacing */}
+      {/* Value background for better readability */}
+      <rect 
+        x="-15" 
+        y="25" 
+        width="50" 
+        height="22" 
+        rx="4"
+        fill="#FFFFFF" 
+        opacity="0.8"
+      />
+      
+      {/* Value text below the icon with improved spacing and visibility */}
       <text 
         x="10" 
-        y="35" 
+        y="38" 
         textAnchor="middle" 
-        fontSize="11" 
+        fontSize="12" 
         fontWeight="bold" 
         fill="#F7931A"
-        style={{ textShadow: '0px 0px 2px white' }}
+        style={{ textShadow: '0px 0px 1px white' }}
       >
         {value.toFixed(2)}
       </text>
