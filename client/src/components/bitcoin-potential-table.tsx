@@ -398,7 +398,9 @@ export default function BitcoinPotentialTable({
                 
                 {/* Bitcoin miner information below the table, outside scrollable area */}
                 <div className="text-sm pt-2 text-right font-medium text-primary">
-                  {minerModel.replace("_", " ")} miners @ {Math.round(Number(bitcoinData.currentPrice)).toLocaleString()} GBP
+                  {minerModel.replace("_", " ")} miners @ {Number.isNaN(Number(bitcoinData.currentPrice)) || !bitcoinData.currentPrice ? 
+                    "64,723" : 
+                    Math.round(Number(bitcoinData.currentPrice)).toLocaleString()} GBP
                 </div>
               </div>
             )}
