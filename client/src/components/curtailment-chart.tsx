@@ -149,6 +149,81 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     enabled: timeframe === "monthly" // Only fetch when in monthly view
   });
   
+  // Fetch yearly data for yearly view
+  const { data: yearlyData = [], isLoading: isYearlyLoading } = useQuery({
+    queryKey: [`/api/yearly-chart-data`, minerModel, farmId],
+    queryFn: async () => {
+      // We'll use a 5-year range for the yearly chart
+      const currentYear = new Date().getFullYear();
+      const startYear = currentYear - 2;
+      const endYear = currentYear + 2;
+      
+      const years = [];
+      const yearlyDataArray = [];
+      
+      for (let year = startYear; year <= endYear; year++) {
+        years.push(year.toString());
+      }
+      
+      // Get data from API for all years in the range
+      for (const year of years) {
+        try {
+          const summaryUrl = new URL(`/api/summary/yearly/${year}`, window.location.origin);
+          const bitcoinUrl = new URL(`/api/mining-potential/yearly/${year}`, window.location.origin);
+          
+          // Add parameters
+          if (farmId) {
+            summaryUrl.searchParams.set("leadParty", farmId);
+            bitcoinUrl.searchParams.set("leadParty", farmId);
+          }
+          
+          bitcoinUrl.searchParams.set("minerModel", minerModel);
+          
+          console.log(`Fetching yearly summary data for ${year}...`);
+          
+          // Get curtailment energy data and Bitcoin data
+          const summaryResponse = await fetch(summaryUrl);
+          const bitcoinResponse = await fetch(bitcoinUrl);
+          
+          let curtailedEnergy = 0;
+          let bitcoinMined = 0;
+          
+          if (summaryResponse.ok) {
+            const summaryData = await summaryResponse.json();
+            curtailedEnergy = Number(summaryData.totalCurtailedEnergy) || 0;
+            console.log(`Energy data for ${year}:`, summaryData);
+          }
+          
+          if (bitcoinResponse.ok) {
+            const bitcoinData = await bitcoinResponse.json();
+            bitcoinMined = Number(bitcoinData.bitcoinMined) || 0;
+            console.log(`Bitcoin data for ${year}:`, bitcoinData);
+          }
+          
+          console.log(`API values for ${year}: Energy=${formatEnergy(curtailedEnergy)}, Bitcoin=${formatBitcoin(bitcoinMined)}`);
+          
+          yearlyDataArray.push({
+            year: year,
+            curtailedEnergy: curtailedEnergy,
+            bitcoinMined: bitcoinMined
+          });
+        } catch (error) {
+          console.error(`Error fetching data for ${year}:`, error);
+          
+          // Add empty data for error cases
+          yearlyDataArray.push({
+            year: year,
+            curtailedEnergy: 0,
+            bitcoinMined: 0
+          });
+        }
+      }
+      
+      return yearlyDataArray;
+    },
+    enabled: timeframe === "yearly" // Only fetch when in yearly view
+  });
+  
   // Fetch daily Bitcoin potential for daily view
   const { data: dailyBitcoin = { bitcoinMined: 0 }, isLoading: isBitcoinLoading } = useQuery({
     queryKey: [`/api/curtailment/mining-potential`, formattedDate, minerModel, farmId],
