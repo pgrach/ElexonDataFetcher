@@ -266,28 +266,8 @@ export default function BitcoinPotentialTable({
             <Skeleton className="h-8 w-full" />
           </div>
         ) : (
-          <div>
-            {/* Bitcoin summary section at the top */}
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <div className="p-4 rounded-lg bg-muted/50">
-                <div className="text-sm font-medium mb-1">Curtailed Energy</div>
-                <div className="text-xl font-bold">{formatEnergy(Number(summaryData.totalCurtailedEnergy))}</div>
-              </div>
-              <div className="p-4 rounded-lg bg-muted/50">
-                <div className="text-sm font-medium mb-1">Bitcoin Potential</div>
-                <div className="text-xl font-bold">{formatBitcoin(Number(bitcoinData.bitcoinMined))}</div>
-              </div>
-              <div className="p-4 rounded-lg bg-muted/50">
-                <div className="text-sm font-medium mb-1">Bitcoin Value</div>
-                <div className="text-xl font-bold text-green-600">{formatGBP(Number(bitcoinData.valueAtCurrentPrice))}</div>
-              </div>
-              <div className="p-4 rounded-lg bg-muted/50">
-                <div className="text-sm font-medium mb-1">Curtailment Payment</div>
-                <div className="text-xl font-bold text-orange-500">{formatGBP(Number(summaryData.totalPayment))}</div>
-              </div>
-            </div>
-            
-            {/* Wind Farm Data table */}
+          <>
+            {/* Simple status text at the top */}
             <div className="text-xs text-muted-foreground text-center mb-4">
               Bitcoin mining data using {minerModel.replace("_", " ")} miners at £{formatGBP(Number(bitcoinData.currentPrice))}
             </div>
@@ -302,9 +282,10 @@ export default function BitcoinPotentialTable({
             ) : !sortedFarms || sortedFarms.length === 0 ? (
               <p className="text-center text-muted-foreground py-4">No farm data available for the selected period.</p>
             ) : (
-              <div className="overflow-x-auto">
+              /* Make the table area scrollable with fixed max height */
+              <div className="max-h-[500px] overflow-y-auto">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
                       <TableHead className="w-8 px-1 sm:px-2" />
                       <TableHead className="w-[30%] min-w-[120px]">
@@ -409,7 +390,7 @@ export default function BitcoinPotentialTable({
                 </Table>
               </div>
             )}
-          </div>
+          </>
         )}
       </CardContent>
     </Card>
