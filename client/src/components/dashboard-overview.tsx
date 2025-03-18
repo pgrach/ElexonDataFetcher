@@ -10,7 +10,6 @@ import FarmComparisonChart from "@/components/farm-comparison-chart";
 import FarmOpportunityComparisonChart from "@/components/farm-opportunity-comparison-chart";
 import CurtailmentPercentageChart from "@/components/curtailment-percentage-chart";
 import BitcoinPotentialTable from "@/components/bitcoin-potential-table";
-import { CurtailedFarmsTable } from "@/components/curtailed-farms-table";
 import MinerModelSelector from "@/components/miner-model-selector";
 import { DatePicker } from "@/components/date-picker";
 import SummaryCards from "@/components/summary-cards-new";
@@ -18,7 +17,6 @@ import FarmSelector from "@/components/farm-selector";
 import LeadPartySelector from "@/components/lead-party-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind } from "lucide-react";
 import CurtailmentInfoBanner from "@/components/curtailment-info-banner";
 import DashboardTutorial from "@/components/dashboard-tutorial";
 // CurtailmentComparisonCard removed as it's redundant with the Value Ratio card
@@ -218,30 +216,13 @@ export default function DashboardOverview() {
               </TabsContent>
               
               <TabsContent value="data" className="space-y-8">
-                {/* Bitcoin Potential Table */}
+                {/* Bitcoin Potential Table with integrated farm data */}
                 <BitcoinPotentialTable
                   timeframe={timeframe}
                   date={date}
                   minerModel={selectedMinerModel}
                   farmId={farmIdToUse}
                 />
-                
-                {/* Wind Farm Data Table */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl font-bold flex items-center gap-2">
-                      <Wind className="h-5 w-5 text-sky-500" />
-                      Curtailed Wind Farms
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CurtailedFarmsTable 
-                      timeframe={timeframe === "daily" ? "day" : timeframe === "monthly" ? "month" : "year"}
-                      date={date}
-                      minerModel={selectedMinerModel}
-                    />
-                  </CardContent>
-                </Card>
               </TabsContent>
             </Tabs>
           </>
