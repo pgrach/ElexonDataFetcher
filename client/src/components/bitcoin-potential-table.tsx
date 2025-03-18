@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatEnergy, formatGBP, formatBitcoin } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -139,23 +140,23 @@ export default function BitcoinPotentialTable({
             <TableBody>
               <TableRow>
                 <TableCell>Curtailed Energy</TableCell>
-                <TableCell className="text-right">{Math.round(Number(summaryData.totalCurtailedEnergy)).toLocaleString()} MWh</TableCell>
+                <TableCell className="text-right">{formatEnergy(Number(summaryData.totalCurtailedEnergy))}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Bitcoin Potential</TableCell>
-                <TableCell className="text-right">₿{Number(bitcoinData.bitcoinMined).toFixed(2)}</TableCell>
+                <TableCell className="text-right">{formatBitcoin(Number(bitcoinData.bitcoinMined))}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Bitcoin Value (at current price)</TableCell>
-                <TableCell className="text-right">£{Math.round(Number(bitcoinData.valueAtCurrentPrice)).toLocaleString('en-GB')}</TableCell>
+                <TableCell className="text-right">{formatGBP(Number(bitcoinData.valueAtCurrentPrice))}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Current Bitcoin Price</TableCell>
-                <TableCell className="text-right">£{Math.round(Number(bitcoinData.currentPrice)).toLocaleString('en-GB')}</TableCell>
+                <TableCell className="text-right">{formatGBP(Number(bitcoinData.currentPrice))}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Curtailment Payment</TableCell>
-                <TableCell className="text-right">£{Math.round(Number(summaryData.totalPayment)).toLocaleString()}</TableCell>
+                <TableCell className="text-right">{formatGBP(Number(summaryData.totalPayment))}</TableCell>
               </TableRow>
               {/* Add ratio comparison */}
               <TableRow>

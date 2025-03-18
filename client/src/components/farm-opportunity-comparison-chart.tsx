@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatEnergy, formatGBP, formatBitcoin } from "@/lib/utils";
 
 interface FarmOpportunityComparisonChartProps {
   timeframe: string;
@@ -84,7 +85,7 @@ export default function FarmOpportunityComparisonChart({
   });
   
   // Format GBP values for tooltips
-  const formatGBP = (value: number) => {
+  const formatTooltipGBP = (value: number) => {
     // For small values under 1, use 2 decimal places to show proper precision
     if (value > 0 && value < 1) {
       return new Intl.NumberFormat('en-GB', {
@@ -133,11 +134,11 @@ export default function FarmOpportunityComparisonChart({
       return (
         <div className="bg-white p-3 border border-gray-200 rounded-md shadow-md">
           <p className="font-semibold">{formattedLabel}</p>
-          <p style={{ color: '#000000' }}>Curtailment Payment: {formatGBP(paymentPerMwh)}/MWh</p>
-          <p style={{ color: '#F7931A' }}>Bitcoin Value: {formatGBP(bitcoinValuePerMwh)}/MWh</p>
+          <p style={{ color: '#000000' }}>Curtailment Payment: {formatTooltipGBP(paymentPerMwh)}/MWh</p>
+          <p style={{ color: '#F7931A' }}>Bitcoin Value: {formatTooltipGBP(bitcoinValuePerMwh)}/MWh</p>
           <div className="border-t pt-1 mt-1">
             <p style={{ color: difference >= 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
-              Difference: {difference >= 0 ? '+' : ''}{formatGBP(difference)}/MWh
+              Difference: {difference >= 0 ? '+' : ''}{formatTooltipGBP(difference)}/MWh
             </p>
             <p className="text-sm text-gray-500">
               Payment is {percentage}% of potential Bitcoin value
