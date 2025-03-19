@@ -255,16 +255,21 @@ export default function SummaryCards({
             ) : (
               <div className="mt-4">
                 <TooltipProvider>
-                  <Tooltip>
+                  <Tooltip delayDuration={300}>
                     <TooltipTrigger asChild>
-                      <div className="text-2xl font-bold text-red-600 cursor-help">
+                      <div className="text-2xl font-bold text-red-600">
                         {Number.isNaN(Number(summaryData.totalPayment))
                           ? "£0"
                           : formatGBP(Number(summaryData.totalPayment))}
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="px-3 py-1.5">
-                      <p>£{Number.isNaN(Number(summaryData.totalPayment)) ? "0" : Number(summaryData.totalPayment).toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
+                    <TooltipContent 
+                      side="top" 
+                      align="center" 
+                      className="bg-red-50 border-red-200 text-red-600 font-medium px-2 py-1 text-sm"
+                      sideOffset={5}
+                    >
+                      £{Number.isNaN(Number(summaryData.totalPayment)) ? "0" : Number(summaryData.totalPayment).toLocaleString(undefined, {maximumFractionDigits: 2})}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
