@@ -254,25 +254,19 @@ export default function SummaryCards({
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
               <div className="mt-4">
-                <TooltipProvider>
-                  <Tooltip delayDuration={300}>
-                    <TooltipTrigger asChild>
-                      <div className="text-2xl font-bold text-red-600">
-                        {Number.isNaN(Number(summaryData.totalPayment))
-                          ? "£0"
-                          : formatGBP(Number(summaryData.totalPayment))}
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent 
-                      side="top" 
-                      align="center" 
-                      className="bg-red-50 border-red-200 text-red-600 font-medium px-2 py-1 text-sm"
-                      sideOffset={5}
-                    >
-                      £{Number.isNaN(Number(summaryData.totalPayment)) ? "0" : Number(summaryData.totalPayment).toLocaleString(undefined, {maximumFractionDigits: 2})}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <div 
+                  className="text-2xl font-bold text-red-600 relative group" 
+                  style={{ display: 'inline-block' }}
+                >
+                  {Number.isNaN(Number(summaryData.totalPayment))
+                    ? "£0"
+                    : formatGBP(Number(summaryData.totalPayment))}
+                  <div 
+                    className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 bg-red-50 border border-red-200 text-red-600 font-medium px-2 py-1 text-sm rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50"
+                  >
+                    £{Number.isNaN(Number(summaryData.totalPayment)) ? "0" : Number(summaryData.totalPayment).toLocaleString(undefined, {maximumFractionDigits: 2})}
+                  </div>
+                </div>
                 <div className="flex items-center mt-1">
                   <span className="inline-block mr-1 text-red-600">•</span>
                   <span className="text-xs text-muted-foreground">Paid to idle wind farms</span>
