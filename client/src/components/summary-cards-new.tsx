@@ -6,6 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, Bitcoin, Calendar, ArrowRightLeft, PoundSterling, Receipt } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatEnergy, formatGBP, formatBitcoin } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface SummaryCardsProps {
   timeframe: string;
@@ -248,11 +254,20 @@ export default function SummaryCards({
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
               <div className="mt-4">
-                <div className="text-2xl font-bold text-red-600">
-                  {Number.isNaN(Number(summaryData.totalPayment))
-                    ? "£0"
-                    : formatGBP(Number(summaryData.totalPayment))}
-                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="text-2xl font-bold text-red-600 cursor-help">
+                        {Number.isNaN(Number(summaryData.totalPayment))
+                          ? "£0"
+                          : formatGBP(Number(summaryData.totalPayment))}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="px-3 py-1.5">
+                      <p>Full amount: £{Number.isNaN(Number(summaryData.totalPayment)) ? "0" : Number(summaryData.totalPayment).toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <div className="flex items-center mt-1">
                   <span className="inline-block mr-1 text-red-600">•</span>
                   <span className="text-xs text-muted-foreground">Paid to idle wind farms</span>
