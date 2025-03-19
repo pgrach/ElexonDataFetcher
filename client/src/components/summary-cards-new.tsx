@@ -264,7 +264,7 @@ export default function SummaryCards({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="px-3 py-1.5">
-                      <p>Full amount: £{Number.isNaN(Number(summaryData.totalPayment)) ? "0" : Number(summaryData.totalPayment).toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
+                      <p>£{Number.isNaN(Number(summaryData.totalPayment)) ? "0" : Number(summaryData.totalPayment).toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
