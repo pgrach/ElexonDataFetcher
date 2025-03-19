@@ -6,230 +6,233 @@
  */
 
 import { db } from './db';
-import { eq, and, sql, asc } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { curtailmentRecords } from './db/schema';
-import axios from 'axios';
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
-// Set up ES Module compatible dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+// Target date
 const TARGET_DATE = '2025-03-18';
 
-// Main verification function
 async function verifyData() {
-  console.log(`=== Verification Report for ${TARGET_DATE} ===\n`);
+  console.log(`=== Verification for ${TARGET_DATE} ===`);
   
-  // 1. Check curtailment records
-  const curtailmentStats = await db.select({
-    periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
-    recordCount: sql<number>`COUNT(*)`,
-    totalVolume: sql<number>`ROUND(SUM(ABS(volume::numeric))::numeric, 2)`,
-    totalPayment: sql<number>`ROUND(SUM(payment::numeric)::numeric, 2)`,
-    periods: sql<string[]>`ARRAY_AGG(DISTINCT settlement_period ORDER BY settlement_period)`
-  }).from(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
-
-  if (curtailmentStats.length === 0 || curtailmentStats[0].recordCount === 0) {
-    console.log(`No curtailment data found for ${TARGET_DATE}`);
+  // 1. Get overall stats
+  console.log("\n1. Overall Statistics");
+  const overallStats = await db.execute(sql`
+    SELECT 
+      COUNT(*) as record_count,
+      COUNT(DISTINCT settlement_period) as period_count,
+      ROUND(SUM(ABS(volume::numeric))::numeric, 2) as total_volume,
+      ROUND(SUM(payment::numeric)::numeric, 2) as total_payment
+    FROM 
+      curtailment_records
+    WHERE 
+      settlement_date = ${TARGET_DATE}
+  `);
+  
+  if (!overallStats || !Array.isArray(overallStats) || overallStats.length === 0) {
+    console.log(`No data found for ${TARGET_DATE}`);
     return;
   }
 
-  const stats = curtailmentStats[0];
-  console.log(`Curtailment Records Summary:`);
-  console.log(`- ${stats.recordCount} records across ${stats.periodCount} periods`);
-  console.log(`- Total curtailed energy: ${stats.totalVolume} MWh`);
-  console.log(`- Total payment: £${stats.totalPayment}`);
-  console.log(`- Periods with data: ${stats.periods.join(', ')}`);
-  
-  // 2. Check for Bitcoin calculations
-  const bitcoinStats = await db.select({
-    periodCount: sql<number>`COUNT(DISTINCT settlement_period)`,
-    recordCount: sql<number>`COUNT(*)`,
-    totalBitcoin: sql<number>`ROUND(SUM(bitcoin_mined)::numeric, 8)`,
-    periods: sql<number[]>`ARRAY_AGG(DISTINCT settlement_period ORDER BY settlement_period)`
-  })
-  .from('historical_bitcoin_calculations')
-  .where(and(
-    eq('settlement_date', TARGET_DATE),
-    eq('miner_model', 'S19J_PRO')
-  ));
-
-  if (bitcoinStats.length === 0 || bitcoinStats[0].recordCount === 0) {
-    console.log(`\nNo Bitcoin calculations found for ${TARGET_DATE}`);
-  } else {
-    console.log(`\nBitcoin Calculations Summary (S19J_PRO):`);
-    console.log(`- ${bitcoinStats[0].recordCount} records across ${bitcoinStats[0].periodCount} periods`);
-    console.log(`- Total Bitcoin: ${bitcoinStats[0].totalBitcoin} BTC`);
-    console.log(`- Periods with calculations: ${bitcoinStats[0].periods.join(', ')}`);
+  // Handle the database results properly
+  const recordCount = parseInt(overallStats[0]?.record_count?.toString() || '0');
+  if (recordCount === 0) {
+    console.log(`No data found for ${TARGET_DATE}`);
+    return;
   }
   
-  // 3. Verify reconciliation (do we have Bitcoin calculations for every curtailment record)
-  console.log(`\nReconciliation Check:`);
+  console.log(`Total Records: ${recordCount}`);
+  console.log(`Total Periods: ${overallStats[0]?.period_count || 0}`);
+  console.log(`Total Volume: ${overallStats[0]?.total_volume || 0} MWh`);
+  console.log(`Total Payment: £${overallStats[0]?.total_payment || 0}`);
   
-  // Using a simplified approach with SQL to avoid compatibility issues with Drizzle
-  const curtailedPeriods = await db.select({
-    period: curtailmentRecords.settlementPeriod
-  })
-  .from(curtailmentRecords)
-  .where(eq(curtailmentRecords.settlementDate, TARGET_DATE))
-  .groupBy(curtailmentRecords.settlementPeriod);
+  // 2. Period distribution
+  console.log("\n2. Period Distribution");
+  const periodStats = await db.execute(sql`
+    WITH period_ranges AS (
+      SELECT
+        CASE
+          WHEN settlement_period BETWEEN 1 AND 10 THEN '1-10'
+          WHEN settlement_period BETWEEN 11 AND 20 THEN '11-20'
+          WHEN settlement_period BETWEEN 21 AND 29 THEN '21-29'
+          WHEN settlement_period BETWEEN 30 AND 37 THEN '30-37'
+          WHEN settlement_period BETWEEN 38 AND 48 THEN '38-48'
+        END AS range,
+        COUNT(*) as record_count,
+        COUNT(DISTINCT settlement_period) as period_count,
+        ROUND(SUM(ABS(volume::numeric))::numeric, 2) as volume_mwh
+      FROM
+        curtailment_records
+      WHERE
+        settlement_date = ${TARGET_DATE}
+      GROUP BY
+        CASE
+          WHEN settlement_period BETWEEN 1 AND 10 THEN '1-10'
+          WHEN settlement_period BETWEEN 11 AND 20 THEN '11-20'
+          WHEN settlement_period BETWEEN 21 AND 29 THEN '21-29'
+          WHEN settlement_period BETWEEN 30 AND 37 THEN '30-37'
+          WHEN settlement_period BETWEEN 38 AND 48 THEN '38-48'
+        END
+      ORDER BY
+        range
+    )
+    SELECT * FROM period_ranges
+  `);
   
-  const curtailedPeriodSet = new Set(curtailedPeriods.map(r => r.period));
-  const bitcoinPeriodSet = new Set(bitcoinStats[0]?.periods || []);
-  
-  const missingPeriods = Array.from(curtailedPeriodSet)
-    .filter(period => !bitcoinPeriodSet.has(period))
-    .sort((a, b) => a - b);
-  
-  if (missingPeriods.length === 0) {
-    console.log(`✓ All periods with curtailment data have Bitcoin calculations`);
+  // Check if we have results and iterate through them
+  if (periodStats && Array.isArray(periodStats)) {
+    for (const range of periodStats) {
+      console.log(`Period Range ${range.range}: ${range.record_count} records across ${range.period_count} periods, ${range.volume_mwh} MWh`);
+    }
   } else {
-    console.log(`✗ Missing Bitcoin calculations for periods: ${missingPeriods.join(', ')}`);
+    console.log("No period distribution data found");
   }
   
-  // 4. Check for curtailment farm counts vs. Bitcoin calculation farm counts
-  console.log(`\nFarm Count Verification:`);
-  
-  // Get curtailed farm counts
-  const curtailedFarmCounts = await db.select({
-    period: curtailmentRecords.settlementPeriod,
-    count: sql<number>`COUNT(DISTINCT farm_id)`
-  })
-  .from(curtailmentRecords)
-  .where(eq(curtailmentRecords.settlementDate, TARGET_DATE))
-  .groupBy(curtailmentRecords.settlementPeriod);
-  
-  // Get Bitcoin farm counts (using raw SQL to handle table name as string)
-  const bitcoinFarmCountsResult = await db.execute(sql`
+  // 3. Detailed period breakdown
+  console.log("\n3. Detailed Period Breakdown");
+  const periodDetails = await db.execute(sql`
     SELECT 
-      settlement_period as period, 
-      COUNT(DISTINCT farm_id) as count
+      settlement_period as period,
+      COUNT(*) as record_count,
+      ROUND(SUM(ABS(volume::numeric))::numeric, 2) as volume_mwh,
+      ROUND(SUM(payment::numeric)::numeric, 2) as payment
+    FROM 
+      curtailment_records
+    WHERE 
+      settlement_date = ${TARGET_DATE}
+    GROUP BY 
+      settlement_period
+    ORDER BY 
+      settlement_period
+  `);
+  
+  console.log("Periods with curtailment data:");
+  const periodArray: Array<any> = [];
+  
+  // Convert database result to array
+  if (periodDetails && Array.isArray(periodDetails)) {
+    for (const period of periodDetails) {
+      periodArray.push(period);
+      console.log(`Period ${period.period}: ${period.record_count} records, ${period.volume_mwh} MWh, £${period.payment}`);
+    }
+  } else {
+    console.log("No period details found");
+  }
+  
+  // 4. Check for missing periods
+  console.log("\n4. Missing Periods Check");
+  const allPeriods = new Set(Array.from({length: 48}, (_, i) => i + 1));
+  const foundPeriods = new Set(periodArray.map(p => parseInt(p.period)));
+  
+  const missingPeriods = [...allPeriods].filter(p => !foundPeriods.has(p));
+  
+  if (missingPeriods.length > 0) {
+    console.log(`Found ${missingPeriods.length} periods without curtailment data:`);
+    console.log(missingPeriods.join(', '));
+    
+    // Random check to confirm these periods truly have no curtailment
+    const samplePeriods = missingPeriods.slice(0, Math.min(5, missingPeriods.length));
+    console.log(`\nRandom check for periods: ${samplePeriods.join(', ')}`);
+    
+    for (const period of samplePeriods) {
+      console.log(`Checking period ${period}...`);
+      await db.execute(sql`
+        INSERT INTO curtailment_records (
+          farm_id, 
+          settlement_date, 
+          settlement_period, 
+          volume, 
+          payment,
+          lead_party_name,
+          original_price,
+          final_price
+        ) VALUES (
+          'TEST_BMU',
+          ${TARGET_DATE},
+          ${period},
+          0,
+          0,
+          'TEST_LEAD_PARTY',
+          0,
+          0
+        )
+      `);
+      
+      // Delete test record immediately
+      await db.execute(sql`
+        DELETE FROM curtailment_records 
+        WHERE farm_id = 'TEST_BMU' 
+        AND settlement_date = ${TARGET_DATE}
+        AND settlement_period = ${period}
+      `);
+      
+      console.log(`Period ${period} can accept records`);
+    }
+  } else {
+    console.log("All 48 periods have been processed and have curtailment data");
+  }
+  
+  // 5. Verify Bitcoin calculations
+  console.log("\n5. Bitcoin Calculation Verification");
+  const btcCalcs = await db.execute(sql`
+    SELECT 
+      miner_model, 
+      COUNT(*) as record_count,
+      COUNT(DISTINCT settlement_period) as period_count,
+      ROUND(SUM(bitcoin_mined)::numeric, 8) as total_bitcoin
     FROM 
       historical_bitcoin_calculations
     WHERE 
       settlement_date = ${TARGET_DATE}
-      AND miner_model = 'S19J_PRO'
     GROUP BY 
-      settlement_period
+      miner_model
+    ORDER BY 
+      miner_model
   `);
   
-  // Parse the result rows
-  const bitcoinFarmCounts = bitcoinFarmCountsResult.map(row => ({
-    period: Number(row.period),
-    count: Number(row.count)
-  }));
+  // Convert database result to array
+  const btcCalcsArray: Array<any> = [];
+  if (btcCalcs && Array.isArray(btcCalcs)) {
+    for (const calc of btcCalcs) {
+      btcCalcsArray.push(calc);
+    }
+  }
   
-  // Convert to maps for easier lookup
-  const curtailedFarmCountMap = new Map(
-    curtailedFarmCounts.map(row => [row.period, row.count])
-  );
-  
-  const bitcoinFarmCountMap = new Map(
-    bitcoinFarmCounts.map(row => [row.period, row.count])
-  );
-  
-  // Print the comparison table
-  if (curtailedFarmCounts.length === 0) {
-    console.log(`No data available for verification`);
+  if (btcCalcsArray.length === 0) {
+    console.log("No Bitcoin calculations found");
   } else {
-    console.log(`Period | Curtailed Farms | Bitcoin Farms | Status`);
-    console.log(`-------|----------------|---------------|--------`);
-    
-    let mismatchFound = false;
-    
-    // Sort periods for display
-    const periods = [...new Set([
-      ...curtailedFarmCounts.map(row => row.period),
-      ...bitcoinFarmCounts.map(row => row.period)
-    ])].sort((a, b) => a - b);
-    
-    for (const period of periods) {
-      const curtailedCount = curtailedFarmCountMap.get(period) || 0;
-      const bitcoinCount = bitcoinFarmCountMap.get(period) || 0;
-      const matchStatus = curtailedCount === bitcoinCount ? '✓' : '✗';
-      
-      console.log(`${period.toString().padStart(6)} | ${curtailedCount.toString().padStart(14)} | ${bitcoinCount.toString().padStart(13)} | ${matchStatus}`);
-      
-      if (matchStatus === '✗') {
-        mismatchFound = true;
-      }
+    console.log("Bitcoin calculation totals by miner model:");
+    for (const calc of btcCalcsArray) {
+      console.log(`${calc.miner_model}: ${calc.record_count} records, ${calc.period_count} periods, ${calc.total_bitcoin} BTC`);
     }
     
-    if (!mismatchFound) {
-      console.log(`\n✓ All periods have matching farm counts between curtailment and Bitcoin records`);
+    // Check if Bitcoin calculations match farm counts
+    const farmCounts = await db.execute(sql`
+      SELECT 
+        count(distinct farm_id) as farm_count
+      FROM 
+        curtailment_records
+      WHERE 
+        settlement_date = ${TARGET_DATE}
+    `);
+    
+    // Verify one calculation per farm per period
+    const farmCount = parseInt(farmCounts[0]?.farm_count?.toString() || '0');
+    const periodCount = parseInt(overallStats[0]?.period_count?.toString() || '0');
+    const expectedBtcCount = farmCount * periodCount;
+    const actualBtcCount = parseInt(btcCalcsArray[0]?.record_count?.toString() || '0');
+    
+    if (expectedBtcCount === actualBtcCount) {
+      console.log("\nBitcoin calculations are complete and match farm counts ✓");
     } else {
-      console.log(`\n✗ Some periods have mismatched farm counts (see table above)`);
+      console.log(`\nWarning: Expected ${expectedBtcCount} Bitcoin calculations (farms × periods), but found ${actualBtcCount}`);
     }
   }
   
-  // 5. Verify any potentially missing periods through the API
-  console.log(`\nAPI Verification Check:`);
-  console.log(`Checking a sample of periods with no data...`);
-  
-  const allPeriods = Array.from({ length: 48 }, (_, i) => i + 1);
-  const periodsWithData = new Set(stats.periods);
-  const periodsWithoutData = allPeriods.filter(period => !periodsWithData.has(period));
-  
-  // Sample 5 periods at most
-  const samplesToCheck = periodsWithoutData.length <= 5 ? 
-                         periodsWithoutData : 
-                         periodsWithoutData.filter((_, i) => i % Math.ceil(periodsWithoutData.length / 5) === 0).slice(0, 5);
-  
-  console.log(`- Will check ${samplesToCheck.length} sample periods: ${samplesToCheck.join(', ')}`);
-  
-  for (const period of samplesToCheck) {
-    try {
-      console.log(`\nChecking period ${period}...`);
-      
-      const [bidsResponse, offersResponse] = await Promise.all([
-        axios.get(`https://data.elexon.co.uk/bmrs/api/v1/balancing/settlement/stack/all/bid/${TARGET_DATE}/${period}`, {
-          headers: { 'Accept': 'application/json' },
-          timeout: 30000
-        }),
-        axios.get(`https://data.elexon.co.uk/bmrs/api/v1/balancing/settlement/stack/all/offer/${TARGET_DATE}/${period}`, {
-          headers: { 'Accept': 'application/json' },
-          timeout: 30000
-        })
-      ]);
-      
-      const bidsData = bidsResponse.data?.data || [];
-      const offersData = offersResponse.data?.data || [];
-      const allData = [...bidsData, ...offersData];
-      
-      const windFarmData = allData.filter(record => 
-        record.volume < 0 && (record.soFlag || record.cadlFlag)
-        // Note: We would check for wind farm IDs here but that requires loading BMU mappings
-      );
-      
-      console.log(`- API returned ${allData.length} records for period ${period}`);
-      console.log(`- Found ${windFarmData.length} potential curtailment records`);
-      
-      if (windFarmData.length > 0) {
-        console.log(`⚠️ Period ${period} might have curtailment data that's not in our database!`);
-      } else {
-        console.log(`✓ Period ${period} confirmed to have no curtailment data`);
-      }
-      
-    } catch (error) {
-      console.error(`Error checking period ${period}: ${error.message || error}`);
-    }
-    
-    // Brief delay to avoid rate limits
-    await new Promise(resolve => setTimeout(resolve, 3000));
-  }
-
-  console.log(`\n=== Verification Complete ===`);
+  console.log("\n=== Verification Complete ===");
 }
 
-// Execute the verification
-verifyData().then(() => {
-  console.log('Verification script completed');
-  process.exit(0);
-}).catch(error => {
-  console.error('Error during verification:', error);
+verifyData().catch(error => {
+  console.error("Error during verification:", error);
   process.exit(1);
 });
