@@ -149,60 +149,6 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     enabled: timeframe === "monthly" // Only fetch when in monthly view
   });
   
-  // Fetch yearly data for yearly view
-  const { data: yearlyData = [], isLoading: isYearlyLoading } = useQuery({
-    queryKey: [`/api/yearly-chart-data`, minerModel, farmId, timeframe],
-    queryFn: async () => {
-      // We'll create a sample data array for testing
-      // In a production environment, you would fetch this from an API
-      
-      // Get the current year and generate sample years
-      const currentYear = new Date().getFullYear();
-      const years = [
-        (currentYear - 2).toString(),
-        (currentYear - 1).toString(),
-        currentYear.toString(),
-        (currentYear + 1).toString(),
-        (currentYear + 2).toString(),
-      ];
-      
-      // Data for 2025 based on monthly data
-      const dataForCurrentYear = [
-        {
-          year: "2023",
-          curtailedEnergy: 1200000, 
-          bitcoinMined: 100
-        },
-        {
-          year: "2024",
-          curtailedEnergy: 1800000,
-          bitcoinMined: 150
-        },
-        {
-          year: "2025",
-          curtailedEnergy: 2244814.9373064097, // Sum of the monthly data for 2025
-          bitcoinMined: 1037.64 // Sum of the monthly bitcoin mined
-        },
-        {
-          year: "2026",
-          curtailedEnergy: 0,
-          bitcoinMined: 0
-        },
-        {
-          year: "2027",
-          curtailedEnergy: 0,
-          bitcoinMined: 0
-        }
-      ];
-      
-      console.log("Yearly data for chart:", dataForCurrentYear);
-      
-      // Return the sample data
-      return dataForCurrentYear;
-    },
-    enabled: timeframe === "yearly" // Only fetch when in yearly view
-  });
-  
   // Fetch daily Bitcoin potential for daily view
   const { data: dailyBitcoin = { bitcoinMined: 0 }, isLoading: isBitcoinLoading } = useQuery({
     queryKey: [`/api/curtailment/mining-potential`, formattedDate, minerModel, farmId],
@@ -242,8 +188,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
   
   const isLoading = 
     (timeframe === "daily" && (isHourlyLoading || isBitcoinLoading)) || 
-    (timeframe === "monthly" && isMonthlyLoading) ||
-    (timeframe === "yearly" && isYearlyLoading);
+    (timeframe === "monthly" && isMonthlyLoading);
   
   // Process data for the daily chart
   const dailyChartData = hourlyData.map((item: any) => {
@@ -276,27 +221,6 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     });
   console.log("Processed monthly chart data:", monthlyChartData);
   
-  // Process data for the yearly chart
-  console.log("Yearly data before processing:", yearlyData);
-  const yearlyChartData = yearlyData
-    .filter((item: any) => item && item.year) // Filter out any invalid items
-    .map((item: any) => {
-      return {
-        year: item.year,
-        curtailedEnergy: Number(item.curtailedEnergy) || 0,
-        bitcoinMined: Number(item.bitcoinMined) || 0
-      };
-    });
-  console.log("Processed yearly chart data:", yearlyChartData);
-  
-  // Debug the API endpoints being called
-  console.log("API endpoints being called for yearly view:");
-  console.log(`/api/summary/yearly/${currentYear}`);
-  console.log(`/api/mining-potential/yearly/${currentYear}?minerModel=${minerModel}`);
-  if (farmId) {
-    console.log(`With farmId/leadParty: ${farmId}`);
-  }
-  
   // Helper for checking if an hour is in the future
   const isHourInFuture = (hourStr: string) => {
     const [hour] = hourStr.split(":").map(Number);
@@ -320,21 +244,11 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
     return monthIndex > now.getMonth();
   };
   
-  // Helper for checking if a year is in the future
-  const isYearInFuture = (yearStr: string) => {
-    const year = parseInt(yearStr, 10);
-    const now = new Date();
-    return year > now.getFullYear();
-  };
-  
   // Get max Bitcoin value for right Y-axis scaling (daily)
   const maxDailyBitcoin = Math.max(...dailyChartData.map((d: { bitcoinPotential: number }) => d.bitcoinPotential || 0), 0.1);
   
   // Get max Bitcoin value for right Y-axis scaling (monthly)
   const maxMonthlyBitcoin = Math.max(...monthlyChartData.map((d: { bitcoinMined: number }) => d.bitcoinMined || 0), 0.1);
-  
-  // Get max Bitcoin value for right Y-axis scaling (yearly)
-  const maxYearlyBitcoin = Math.max(...yearlyChartData.map((d: { bitcoinMined: number }) => d.bitcoinMined || 0), 0.1);
   
   // Get card title based on timeframe
   const getCardTitle = () => {
@@ -394,7 +308,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               No wind farms were curtailed on this date. All available wind energy was successfully utilized by the grid.
             </p>
           </div>
-        ) : (timeframe === "monthly" || timeframe === "yearly") && ((timeframe === "monthly" && (monthlyChartData.length === 0 || monthlyChartData.every((item: { curtailedEnergy: number }) => item.curtailedEnergy === 0))) || (timeframe === "yearly" && (yearlyChartData.length === 0 || yearlyChartData.every((item: { curtailedEnergy: number }) => item.curtailedEnergy === 0)))) ? (
+        ) : timeframe === "monthly" && (monthlyChartData.length === 0 || monthlyChartData.every((item: { curtailedEnergy: number }) => item.curtailedEnergy === 0)) ? (
           <div className="flex flex-col items-center justify-center h-[300px] border border-dashed border-blue-200 rounded-md bg-blue-50/30">
             <svg className="h-16 w-16 text-blue-400 mb-2" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
               {/* Tower */}
@@ -425,14 +339,9 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
                 }
               `}</style>
             </svg>
-            <h3 className="text-lg font-medium text-blue-500">
-              {timeframe === "monthly" ? "No Monthly Curtailment Data" : "No Yearly Curtailment Data"}
-            </h3>
+            <h3 className="text-lg font-medium text-blue-500">No Monthly Curtailment Data</h3>
             <p className="text-sm text-blue-400 max-w-md text-center mt-2 px-4">
-              {timeframe === "monthly" 
-                ? `No curtailment events were recorded for the selected month in ${currentYear}.`
-                : `No curtailment events were recorded for the selected year.`
-              }
+              No curtailment events were recorded for the selected month in {currentYear}.
             </p>
           </div>
         ) : timeframe === "daily" ? (
@@ -700,153 +609,9 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-        ) : timeframe === "yearly" ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart
-              data={yearlyChartData}
-              margin={{ top: 20, right: 40, left: 20, bottom: 5 }}
-            >
-              {/* Add background highlight for current year */}
-              <defs>
-                <pattern id="selectedYearPattern" patternUnits="userSpaceOnUse" width="100%" height="100%">
-                  <rect x="0" y="0" width="100%" height="100%" fill="#f0f0f0" />
-                </pattern>
-              </defs>
-              {/* Highlight the current year */}
-              <ReferenceArea
-                x1={currentYear.toString()} 
-                x2={currentYear.toString()}
-                yAxisId="left"
-                strokeOpacity={0}
-                fill="#f6f6f6"
-                fillOpacity={0.9}
-                ifOverflow="extendDomain"
-              />
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="year" 
-                tick={{ fontSize: 12 }}
-              />
-              {/* Left Y axis for energy */}
-              <YAxis 
-                yAxisId="left"
-                orientation="left"
-                tick={{ fontSize: 12 }} 
-                label={{ 
-                  value: 'Curtailed Energy (MWh)', 
-                  angle: -90, 
-                  position: 'insideLeft',
-                  style: { textAnchor: 'middle' },
-                  offset: 0
-                }}
-              />
-              {/* Right Y axis for Bitcoin */}
-              <YAxis 
-                yAxisId="right"
-                orientation="right"
-                domain={[0, Math.ceil(maxYearlyBitcoin * 1.2 * 10) / 10]}
-                tick={{ fontSize: 12 }}
-                label={{ 
-                  value: 'Bitcoin Mined (₿)', 
-                  angle: 90, 
-                  position: 'insideRight',
-                  style: { textAnchor: 'middle', fill: '#F7931A' }
-                }}
-                tickFormatter={(value) => formatBitcoin(value).replace(" BTC", "")}
-                stroke="#F7931A"
-              />
-              <Tooltip 
-                content={({ active, payload, label }) => {
-                  if (active && payload && payload.length) {
-                    // Find curtailed energy and bitcoin for payload
-                    const energyItem = payload.find(p => p.name === "Curtailed Energy (MWh)");
-                    const bitcoinItem = payload.find(p => p.name === "Bitcoin Mined (₿)");
-                    
-                    const energyValue = energyItem && typeof energyItem.value === 'number' 
-                      ? formatEnergy(energyItem.value)
-                      : "0 MWh";
-                    const bitcoinValue = bitcoinItem && typeof bitcoinItem.value === 'number' 
-                      ? formatBitcoin(bitcoinItem.value)
-                      : "0.00 BTC";
-                    
-                    return (
-                      <div className="custom-tooltip" style={{ 
-                        backgroundColor: 'white', 
-                        padding: '10px', 
-                        border: '1px solid #ccc',
-                        borderRadius: '4px'
-                      }}>
-                        <p className="label" style={{ margin: '0 0 5px', fontWeight: 'bold' }}>{`Year: ${label}`}</p>
-                        <p style={{ margin: '0', color: '#333' }}>{`Curtailed Energy: ${energyValue}`}</p>
-                        <p style={{ margin: '0', color: '#F7931A' }}>{`Bitcoin Mined: ${bitcoinValue}`}</p>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Legend />
-              <Bar
-                yAxisId="left"
-                dataKey="curtailedEnergy"
-                fill="#000000"
-                name="Curtailed Energy (MWh)"
-                // Apply different styling for future years
-                shape={(props: any) => {
-                  const { x, y, width, height, payload } = props;
-                  const inFuture = isYearInFuture(payload.year);
-                  const isCurrentYear = payload.year === currentYear.toString();
-                  
-                  // Choose fill color based on whether it's the current year or future year
-                  let fillColor = "#000000"; // Default black
-                  let strokeColor = "none";
-                  let strokeWidth = 1;
-                  
-                  if (inFuture) {
-                    fillColor = "#f5f5f5"; // Light grey for future years
-                    strokeColor = "#000000";
-                  } else if (isCurrentYear) {
-                    fillColor = "#000000"; // Keep black for current year bar
-                    strokeColor = "#000000";
-                  }
-                  
-                  return (
-                    <rect
-                      key={`bar-${payload.year}`}
-                      x={x}
-                      y={y}
-                      width={width}
-                      height={height}
-                      fill={fillColor}
-                      stroke={strokeColor}
-                      strokeWidth={strokeWidth}
-                      r={0}
-                    />
-                  );
-                }}
-              />
-              <Bar
-                yAxisId="right"
-                dataKey="bitcoinMined"
-                fill="transparent"
-                stroke="transparent"
-                name="Bitcoin Mined (₿)"
-              >
-                {/* Custom label to show Bitcoin icons */}
-                <LabelList
-                  dataKey="bitcoinMined"
-                  position="top"
-                  content={(props: any) => {
-                    const { x, y, value, index } = props;
-                    return <BitcoinIcon x={x} y={y} value={value} key={`bitcoin-${index}`} />;
-                  }}
-                />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
         ) : (
           <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-            This chart is only available in daily, monthly, and yearly views
+            This chart is only available in daily and monthly views
           </div>
         )}
       </CardContent>
