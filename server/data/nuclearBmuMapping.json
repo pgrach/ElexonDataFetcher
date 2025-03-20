@@ -1,0 +1,162 @@
+[
+  {
+    "nationalGridBmUnit": "DNGB21",
+    "elexonBmUnit": "T_DNGB21",
+    "bmUnitName": "Dungeness B Generator 21",
+    "generationCapacity": "0.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Customers Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DNGB22",
+    "elexonBmUnit": "T_DNGB22",
+    "bmUnitName": "Dungeness B Generator 22",
+    "generationCapacity": "0.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Customers Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HEYM11",
+    "elexonBmUnit": "T_HEYM11",
+    "bmUnitName": "Heysham 1 Generator 1",
+    "generationCapacity": "610.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HEYM12",
+    "elexonBmUnit": "T_HEYM12",
+    "bmUnitName": "Heysham 1 Generator 2",
+    "generationCapacity": "585.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HEYM27",
+    "elexonBmUnit": "T_HEYM27",
+    "bmUnitName": "Heysham 2 Generator 7",
+    "generationCapacity": "660.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HEYM28",
+    "elexonBmUnit": "T_HEYM28",
+    "bmUnitName": "Heysham 2 Generator 8",
+    "generationCapacity": "660.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HINB-7",
+    "elexonBmUnit": "T_HINB-7",
+    "bmUnitName": "Hinkley Point B Generator 7",
+    "generationCapacity": "0.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HINB-8",
+    "elexonBmUnit": "T_HINB-8",
+    "bmUnitName": "Hinkley Point B Generator 8",
+    "generationCapacity": "0.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HRTL-1",
+    "elexonBmUnit": "T_HRTL-1",
+    "bmUnitName": "Hartlepool Generator 1",
+    "generationCapacity": "620.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HRTL-2",
+    "elexonBmUnit": "T_HRTL-2",
+    "bmUnitName": "Hartlepool Generator 2",
+    "generationCapacity": "620.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HUNB-7",
+    "elexonBmUnit": "T_HUNB-7",
+    "bmUnitName": "Hunterston B Generator 7",
+    "generationCapacity": "510.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "HUNB-8",
+    "elexonBmUnit": "T_HUNB-8",
+    "bmUnitName": "Hunterston B Generator 8",
+    "generationCapacity": "510.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "SIZB-1",
+    "elexonBmUnit": "T_SIZB-1",
+    "bmUnitName": "Sizewell B Genrator 1",
+    "generationCapacity": "630.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "SIZB-2",
+    "elexonBmUnit": "T_SIZB-2",
+    "bmUnitName": "Sizewell B Genrator 2",
+    "generationCapacity": "630.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "TORN-1",
+    "elexonBmUnit": "T_TORN-1",
+    "bmUnitName": "Torness Generator 1",
+    "generationCapacity": "652.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "TORN-2",
+    "elexonBmUnit": "T_TORN-2",
+    "bmUnitName": "Torness Generator 2",
+    "generationCapacity": "700.000",
+    "fuelType": "NUCLEAR",
+    "reactorType": "Unknown",
+    "leadPartyName": "EDF Energy Nuclear Generation",
+    "region": ""
+  }
+]

@@ -1,0 +1,152 @@
+[
+  {
+    "nationalGridBmUnit": "DNBAR-1",
+    "elexonBmUnit": "2__NSMAE001",
+    "bmUnitName": "2__NSMAE001",
+    "generationCapacity": "33.386",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "Smartestenergy Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "LNMTH-1",
+    "elexonBmUnit": "E_LYNE1",
+    "bmUnitName": "LYNEMOUTH GENERATOR 1",
+    "generationCapacity": "140.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "EP UK INVESTMENTS LIMITED",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "LNMTH-2",
+    "elexonBmUnit": "E_LYNE2",
+    "bmUnitName": "LYNEMOUTH GENERATOR 2",
+    "generationCapacity": "140.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "EP UK INVESTMENTS LIMITED",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "LNMTH-3",
+    "elexonBmUnit": "E_LYNE3",
+    "bmUnitName": "LYNEMOUTH GENERATOR 3",
+    "generationCapacity": "140.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "EP UK INVESTMENTS LIMITED",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "MARK-1",
+    "elexonBmUnit": "E_MARK-1",
+    "bmUnitName": "Rothes Bio-Plant CHP1",
+    "generationCapacity": "86.139",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "Edgware Energy Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DRAXX-1",
+    "elexonBmUnit": "T_DRAXX-1",
+    "bmUnitName": "T_DRAXX-1",
+    "generationCapacity": "665.248",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "Drax Power Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DRAXX-2",
+    "elexonBmUnit": "T_DRAXX-2",
+    "bmUnitName": "T_DRAXX-2",
+    "generationCapacity": "669.400",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "Drax Power Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DRAXX-3",
+    "elexonBmUnit": "T_DRAXX-3",
+    "bmUnitName": "T_DRAXX-3",
+    "generationCapacity": "661.400",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "Drax Power Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DRAXX-4",
+    "elexonBmUnit": "T_DRAXX-4",
+    "bmUnitName": "T_DRAXX-4",
+    "generationCapacity": "645.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "Drax Power Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "JGPR-1",
+    "elexonBmUnit": "T_JGPR-1",
+    "bmUnitName": "High Marnham JGPEARS",
+    "generationCapacity": "13.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "JG Pears Power Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "TSREP-1",
+    "elexonBmUnit": "T_TSREP-1",
+    "bmUnitName": "MGT TEESIDE TEESREP MAIN",
+    "generationCapacity": "285.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "MGT TEESSIDE LTD.",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "USKM-13",
+    "elexonBmUnit": "T_USKM-13",
+    "bmUnitName": "Uskmouth 13",
+    "generationCapacity": "14.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "SIMEC Uskmouth Power Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "USKM-14",
+    "elexonBmUnit": "T_USKM-14",
+    "bmUnitName": "Uskmouth 14",
+    "generationCapacity": "0.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "Marble Power Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "USKM-15",
+    "elexonBmUnit": "T_USKM-15",
+    "bmUnitName": "Uskmouth 15",
+    "generationCapacity": "0.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "Marble Power Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "WILCT-1",
+    "elexonBmUnit": "T_WILCT-1",
+    "bmUnitName": "ETOL - Wilton Site",
+    "generationCapacity": "182.000",
+    "fuelType": "BIOMASS",
+    "biomassType": "General Biomass",
+    "leadPartyName": "SembCorp Utilities (UK) Ltd",
+    "region": ""
+  }
+]
