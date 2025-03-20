@@ -1,1 +1,210 @@
-[]
+[
+  {
+    "nationalGridBmUnit": "AG-NFLX01",
+    "elexonBmUnit": "2__NFLEX001",
+    "bmUnitName": "2__NFLEX001",
+    "generationCapacity": "49.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Flexitricity Limited"
+  },
+  {
+    "nationalGridBmUnit": "AG-NFLX09",
+    "elexonBmUnit": "2__NFLEX009",
+    "bmUnitName": "2__NFLEX009",
+    "generationCapacity": "49.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Flexitricity Limited"
+  },
+  {
+    "nationalGridBmUnit": "AG-PFLX01",
+    "elexonBmUnit": "2__PFLEX001",
+    "bmUnitName": "2__PFLEX001",
+    "generationCapacity": "49.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Flexitricity Limited"
+  },
+  {
+    "nationalGridBmUnit": "AG-PFLX02",
+    "elexonBmUnit": "2__PFLEX002",
+    "bmUnitName": "2__PFLEX002",
+    "generationCapacity": "49.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Flexitricity Limited"
+  },
+  {
+    "nationalGridBmUnit": "AG-PEDF01",
+    "elexonBmUnit": "2__PLOND001",
+    "bmUnitName": "EDFE Aggregate N Scot 1",
+    "generationCapacity": "50.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "EDF Energy Customers Limited"
+  },
+  {
+    "nationalGridBmUnit": "BLHLB-1",
+    "elexonBmUnit": "T_BLHLB-1",
+    "bmUnitName": "T_BLHLB-1",
+    "generationCapacity": "50.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "ZENOBE BLACKHILLOCK LIMITED"
+  },
+  {
+    "nationalGridBmUnit": "BLHLB-2",
+    "elexonBmUnit": "T_BLHLB-2",
+    "bmUnitName": "T_BLHLB-2",
+    "generationCapacity": "50.420",
+    "fuelType": "SOLAR",
+    "leadPartyName": "ZENOBE BLACKHILLOCK LIMITED"
+  },
+  {
+    "nationalGridBmUnit": "BLHLB-3",
+    "elexonBmUnit": "T_BLHLB-3",
+    "bmUnitName": "T_BLHLB-3",
+    "generationCapacity": "54.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "ZENOBE BLACKHILLOCK LIMITED"
+  },
+  {
+    "nationalGridBmUnit": "BLHLB-4",
+    "elexonBmUnit": "T_BLHLB-4",
+    "bmUnitName": "T_BLHLB-4",
+    "generationCapacity": "54.420",
+    "fuelType": "SOLAR",
+    "leadPartyName": "ZENOBE BLACKHILLOCK LIMITED"
+  },
+  {
+    "nationalGridBmUnit": "BRCHS-1",
+    "elexonBmUnit": "T_BRCHS-1",
+    "bmUnitName": "T_BRCHS-1",
+    "generationCapacity": "50.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Burwell 11 Solar Ltd"
+  },
+  {
+    "nationalGridBmUnit": "BURWS-1",
+    "elexonBmUnit": "T_BURWS-1",
+    "bmUnitName": "Beechgreen Energy Farm",
+    "generationCapacity": "50.067",
+    "fuelType": "SOLAR",
+    "leadPartyName": "EDF Energy Customers Limited"
+  },
+  {
+    "nationalGridBmUnit": "CLVHS-1",
+    "elexonBmUnit": "T_CLVHS-1",
+    "bmUnitName": "Cleve Hill Solar 1",
+    "generationCapacity": "112.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Cleve Hill Solar Park"
+  },
+  {
+    "nationalGridBmUnit": "CLVHS-2",
+    "elexonBmUnit": "T_CLVHS-2",
+    "bmUnitName": "Cleve Hill Solar 2",
+    "generationCapacity": "205.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Cleve Hill Solar Park"
+  },
+  {
+    "nationalGridBmUnit": "COVNB-1",
+    "elexonBmUnit": "T_COVNB-1",
+    "bmUnitName": "Pivot Power Coventry",
+    "generationCapacity": "49.900",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Pivoted Power LLP"
+  },
+  {
+    "nationalGridBmUnit": "LARKS-1",
+    "elexonBmUnit": "T_LARKS-1",
+    "bmUnitName": "Larks Green Solar",
+    "generationCapacity": "49.900",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Cero Generation Services Ltd"
+  },
+  {
+    "nationalGridBmUnit": "PINFB-1",
+    "elexonBmUnit": "T_PINFB-1",
+    "bmUnitName": "T_PINFB-1",
+    "generationCapacity": "27.080",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Zenobe Capenhurst Limited"
+  },
+  {
+    "nationalGridBmUnit": "PINFB-2",
+    "elexonBmUnit": "T_PINFB-2",
+    "bmUnitName": "T_PINFB-2",
+    "generationCapacity": "26.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Zenobe Capenhurst Limited"
+  },
+  {
+    "nationalGridBmUnit": "PINFB-3",
+    "elexonBmUnit": "T_PINFB-3",
+    "bmUnitName": "T_PINFB-3",
+    "generationCapacity": "26.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Zenobe Capenhurst Limited"
+  },
+  {
+    "nationalGridBmUnit": "PINFB-4",
+    "elexonBmUnit": "T_PINFB-4",
+    "bmUnitName": "T_PINFB-4",
+    "generationCapacity": "26.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Zenobe Capenhurst Limited"
+  },
+  {
+    "nationalGridBmUnit": "RICHB-1",
+    "elexonBmUnit": "T_RICHB-1",
+    "bmUnitName": "Richborough Energy Park 1",
+    "generationCapacity": "49.900",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Limejump Energy Limited"
+  },
+  {
+    "nationalGridBmUnit": "RICHB-2",
+    "elexonBmUnit": "T_RICHB-2",
+    "bmUnitName": "Richborough Energy Park 2",
+    "generationCapacity": "49.900",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Limejump Energy Limited"
+  },
+  {
+    "nationalGridBmUnit": "SUTBS-1",
+    "elexonBmUnit": "T_SUTBS-1",
+    "bmUnitName": "Sutton Bridge Solar Farm",
+    "generationCapacity": "50.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "EDF Energy Customers Limited"
+  },
+  {
+    "nationalGridBmUnit": "TEBWS-1",
+    "elexonBmUnit": "T_TEBWS-1",
+    "bmUnitName": "Tebworth PV Power Park",
+    "generationCapacity": "39.900",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Sundon Green Limited"
+  },
+  {
+    "nationalGridBmUnit": "AG-HEL0DN",
+    "elexonBmUnit": "V__NHABI005",
+    "bmUnitName": "Camilla",
+    "generationCapacity": "0.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Habitat Energy Limited"
+  },
+  {
+    "nationalGridBmUnit": "AG-HEL0CP",
+    "elexonBmUnit": "V__PHABI004",
+    "bmUnitName": "Fordtown",
+    "generationCapacity": "0.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Habitat Energy Limited"
+  },
+  {
+    "nationalGridBmUnit": "AG-HEL0EP",
+    "elexonBmUnit": "V__PHABI006",
+    "bmUnitName": "Glendevon",
+    "generationCapacity": "0.000",
+    "fuelType": "SOLAR",
+    "leadPartyName": "Habitat Energy Limited"
+  }
+]

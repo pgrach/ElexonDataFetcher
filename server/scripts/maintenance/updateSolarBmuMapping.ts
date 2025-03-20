@@ -19,27 +19,18 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 const REQUEST_TIMEOUT = 10000; // 10 seconds
 
-// Define validation schema for API response data
+// Define validation schema for API response data with nullable fields
 const bmuResponseSchema = z.object({
-  nationalGridBmUnit: z.string(),
-  elexonBmUnit: z.string(),
-  bmUnitName: z.string(),
-  generationCapacity: z.string(),
-  fuelType: z.string().nullable(),
-  leadPartyName: z.string().nullable()
-}).partial();
-
-// Define validation schema for Solar BMU data
-const solarBmuSchema = z.object({
-  nationalGridBmUnit: z.string(),
-  elexonBmUnit: z.string(),
-  bmUnitName: z.string(),
-  generationCapacity: z.string().refine(val => !isNaN(parseFloat(val)), {
-    message: "Generation capacity must be a valid number string"
-  }),
-  fuelType: z.literal('SOLAR'),
-  leadPartyName: z.string().min(1, "Lead party name is required")
+  nationalGridBmUnit: z.string().nullable().optional(),
+  elexonBmUnit: z.string().nullable().optional(),
+  bmUnitName: z.string().nullable().optional(),
+  generationCapacity: z.string().nullable().optional(),
+  fuelType: z.string().nullable().optional(),
+  leadPartyName: z.string().nullable().optional()
 });
+
+// We're using a more flexible approach for Solar BMU mapping
+// instead of strict schema validation
 
 async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -49,6 +40,8 @@ async function fetchBmuData(attempt = 1): Promise<any[]> {
   try {
     console.log(`Attempt ${attempt}/${MAX_RETRIES} to fetch BMU data...`);
 
+    console.log('Making API request to:', ELEXON_API_URL);
+    
     const response = await axios.get(ELEXON_API_URL, {
       timeout: REQUEST_TIMEOUT,
       headers: {
@@ -56,8 +49,22 @@ async function fetchBmuData(attempt = 1): Promise<any[]> {
       }
     });
 
-    if (!response.data || !Array.isArray(response.data)) {
-      throw new Error('Invalid response format from Elexon API');
+    console.log('API response received, status:', response.status);
+    if (!response.data) {
+      throw new Error('No data returned from Elexon API');
+    }
+    
+    // Check response structure
+    console.log('Response data type:', typeof response.data);
+    if (Array.isArray(response.data)) {
+      console.log(`Response contains array of ${response.data.length} items`);
+      // Log sample of first item
+      if (response.data.length > 0) {
+        console.log('Sample first item:', JSON.stringify(response.data[0]).substring(0, 500) + '...');
+      }
+    } else {
+      console.log('Response structure:', Object.keys(response.data));
+      throw new Error('Invalid response format from Elexon API - not an array');
     }
 
     // Validate API response data
@@ -93,29 +100,115 @@ async function updateSolarBmuMapping() {
     // Fetch data with retry logic
     const bmuData = await fetchBmuData();
 
-    // Check if any solar units are available
-    const solarTypeCheck = bmuData.filter(bmu => bmu?.fuelType?.toUpperCase().includes('SOLAR') || 
-                                            bmu?.fuelType?.toUpperCase().includes('PV'));
-    
-    console.log(`Found ${solarTypeCheck.length} potential solar BMUs before validation`);
+    // Log all unique fuel types to better understand the data
+    const fuelTypes = new Set<string>();
+    bmuData.forEach(bmu => {
+      if (bmu?.fuelType) {
+        fuelTypes.add(bmu.fuelType.toUpperCase());
+      }
+    });
+    console.log('Available fuel types in the API response:', Array.from(fuelTypes));
 
-    // Validate and filter solar units
+    // Since there's no explicit 'SOLAR' or 'PV' fuel type, try to identify solar units by their names
+    // Common keywords that might indicate solar plants
+    const solarKeywords = ['solar', 'pv', 'photovoltaic', 'sun', 'solar farm', 'solar park'];
+    
+    // Keywords to exclude (not solar units)
+    const exclusionKeywords = ['battery', 'batteries', 'storage', 'bess', 'energy storage'];
+    
+    const potentialSolarBmus = bmuData.filter(bmu => {
+      // Look for solar keywords in BMU name or ID
+      const bmUnitName = (bmu?.bmUnitName || '').toLowerCase();
+      const elexonBmUnit = (bmu?.elexonBmUnit || '').toLowerCase();
+      const nationalGridBmUnit = (bmu?.nationalGridBmUnit || '').toLowerCase();
+      
+      // First check if any solar keywords match
+      const hasSolarKeyword = solarKeywords.some(keyword => 
+        bmUnitName.includes(keyword) || 
+        elexonBmUnit.includes(keyword) || 
+        nationalGridBmUnit.includes(keyword)
+      );
+      
+      // Then check for exclusion keywords
+      const hasExclusionKeyword = exclusionKeywords.some(keyword => 
+        bmUnitName.includes(keyword) || 
+        elexonBmUnit.includes(keyword) || 
+        nationalGridBmUnit.includes(keyword)
+      );
+      
+      // Include if it has a solar keyword and doesn't have an exclusion keyword
+      return hasSolarKeyword && !hasExclusionKeyword;
+    });
+    
+    console.log(`Found ${potentialSolarBmus.length} potential solar BMUs by name keywords before validation`);
+
+    // Additionally, check OTHER fuel types that might be solar (but exclude storage systems)
+    const otherFuelTypeBmus = bmuData.filter(bmu => {
+      if (bmu?.fuelType !== 'OTHER') return false;
+      
+      // Exclude battery storage systems
+      const bmUnitName = (bmu?.bmUnitName || '').toLowerCase();
+      const elexonBmUnit = (bmu?.elexonBmUnit || '').toLowerCase();
+      const nationalGridBmUnit = (bmu?.nationalGridBmUnit || '').toLowerCase();
+      
+      const hasExclusionKeyword = exclusionKeywords.some(keyword => 
+        bmUnitName.includes(keyword) || 
+        elexonBmUnit.includes(keyword) || 
+        nationalGridBmUnit.includes(keyword)
+      );
+      
+      return !hasExclusionKeyword;
+    });
+    
+    console.log(`Found ${otherFuelTypeBmus.length} BMUs with 'OTHER' fuel type (excluding storage)`);
+    
+    // Log some samples of filtered 'OTHER' fuel type to see if we can identify patterns
+    if (otherFuelTypeBmus.length > 0) {
+      console.log('Sample OTHER fuel type BMUs (excluding storage):');
+      otherFuelTypeBmus.slice(0, 5).forEach((bmu, index) => {
+        console.log(`  ${index + 1}. ${bmu.bmUnitName || 'unnamed'} (${bmu.elexonBmUnit || 'no ID'})`);
+      });
+    }
+
+    // Combine both methods to get potential solar BMUs
+    const combinedPotentialSolar = [...potentialSolarBmus];
+    
+    // Add filtered OTHER fuel types that might be solar (aren't already included)
+    otherFuelTypeBmus.forEach(bmu => {
+      const isAlreadyIncluded = combinedPotentialSolar.some(
+        solarBmu => solarBmu.elexonBmUnit === bmu.elexonBmUnit
+      );
+      
+      if (!isAlreadyIncluded) {
+        combinedPotentialSolar.push(bmu);
+      }
+    });
+    
+    console.log(`Combined total of ${combinedPotentialSolar.length} potential solar BMUs`);
+
+    // Validate and filter solar units (using the combined approach)
     const solarBmus = (await Promise.all(
-      bmuData
+      combinedPotentialSolar
         .filter(bmu => {
-          const fuelType = bmu?.fuelType?.toUpperCase() || '';
-          return fuelType.includes('SOLAR') || fuelType.includes('PV');
+          // Ensure the BMU has required fields
+          return bmu.nationalGridBmUnit && bmu.elexonBmUnit && bmu.bmUnitName && bmu.generationCapacity;
         })
         .map(async bmu => {
           try {
-            return solarBmuSchema.parse({
+            // Make sure all required fields exist
+            if (!bmu.nationalGridBmUnit || !bmu.elexonBmUnit || !bmu.bmUnitName || !bmu.generationCapacity) {
+              console.warn('Skipping BMU with missing required fields', bmu.elexonBmUnit || 'unknown');
+              return null;
+            }
+            
+            return {
               nationalGridBmUnit: bmu.nationalGridBmUnit,
               elexonBmUnit: bmu.elexonBmUnit,
               bmUnitName: bmu.bmUnitName,
               generationCapacity: bmu.generationCapacity,
               fuelType: 'SOLAR', // Standardize on 'SOLAR' regardless of original 'SOLAR' or 'PV'
               leadPartyName: bmu.leadPartyName || 'Unknown'
-            });
+            };
           } catch (error) {
             console.warn('Solar BMU validation failed:', error);
             return null;

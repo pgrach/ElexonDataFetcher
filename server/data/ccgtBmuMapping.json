@@ -1,0 +1,490 @@
+[
+  {
+    "nationalGridBmUnit": "BRGG-1",
+    "elexonBmUnit": "E_BRGG-1",
+    "bmUnitName": "Glanford Brigg",
+    "generationCapacity": "50.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "CBS ENERGY STORAGE ASSETS LTD"
+  },
+  {
+    "nationalGridBmUnit": "CORB-1",
+    "elexonBmUnit": "E_CORB-1",
+    "bmUnitName": "CORBY POWER LIMITED",
+    "generationCapacity": "260.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "CORBY POWER LIMITED"
+  },
+  {
+    "nationalGridBmUnit": "FAWN-1",
+    "elexonBmUnit": "E_FAWN-1",
+    "bmUnitName": "Fawley Cogen",
+    "generationCapacity": "155.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "ESSO Petroleum Company Ltd"
+  },
+  {
+    "nationalGridBmUnit": "FELL-1",
+    "elexonBmUnit": "E_FELL-1",
+    "bmUnitName": "E_FELL-1",
+    "generationCapacity": "140.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "NDA"
+  },
+  {
+    "nationalGridBmUnit": "GYAR-1",
+    "elexonBmUnit": "E_GYAR-1",
+    "bmUnitName": "Great Yarmouth Power Limited",
+    "generationCapacity": "420.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "KLYN-A-1",
+    "elexonBmUnit": "E_KLYN-A-1",
+    "bmUnitName": "Kings Lynn A",
+    "generationCapacity": "392.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "PETEM1",
+    "elexonBmUnit": "E_PETEM1",
+    "bmUnitName": "Peterborough",
+    "generationCapacity": "245.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "River Nene Power Limited"
+  },
+  {
+    "nationalGridBmUnit": "SHOS-1",
+    "elexonBmUnit": "E_SHOS-1",
+    "bmUnitName": "Shoreham Power Station",
+    "generationCapacity": "460.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "VPI Power Limited"
+  },
+  {
+    "nationalGridBmUnit": "BAGE-1",
+    "elexonBmUnit": "T_BAGE-1",
+    "bmUnitName": "BAGE-1",
+    "generationCapacity": "500.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Baglan Operations Ltd"
+  },
+  {
+    "nationalGridBmUnit": "BAGE-2",
+    "elexonBmUnit": "T_BAGE-2",
+    "bmUnitName": "BAGE-2",
+    "generationCapacity": "32.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Baglan Operations Ltd"
+  },
+  {
+    "nationalGridBmUnit": "CARR-1",
+    "elexonBmUnit": "T_CARR-1",
+    "bmUnitName": "Carrington Power Ltd - Unit 1",
+    "generationCapacity": "470.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Carrington Power Ltd"
+  },
+  {
+    "nationalGridBmUnit": "CARR-2",
+    "elexonBmUnit": "T_CARR-2",
+    "bmUnitName": "Carrington Power Ltd - Unit 2",
+    "generationCapacity": "470.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Carrington Power Ltd"
+  },
+  {
+    "nationalGridBmUnit": "CDCL-1",
+    "elexonBmUnit": "T_CDCL-1",
+    "bmUnitName": "T_CDCL-1",
+    "generationCapacity": "445.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "CNQPS-1",
+    "elexonBmUnit": "T_CNQPS-1",
+    "bmUnitName": "T_CNQPS-1",
+    "generationCapacity": "351.162",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "CNQPS-2",
+    "elexonBmUnit": "T_CNQPS-2",
+    "bmUnitName": "T_CNQPS-2",
+    "generationCapacity": "352.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "CNQPS-3",
+    "elexonBmUnit": "T_CNQPS-3",
+    "bmUnitName": "T_CNQPS-3",
+    "generationCapacity": "350.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "CNQPS-4",
+    "elexonBmUnit": "T_CNQPS-4",
+    "bmUnitName": "T_CNQPS-4",
+    "generationCapacity": "356.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "COSO-1",
+    "elexonBmUnit": "T_COSO-1",
+    "bmUnitName": "Coryton Power Station",
+    "generationCapacity": "800.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Coryton Energy Company Ltd"
+  },
+  {
+    "nationalGridBmUnit": "DAMC-1",
+    "elexonBmUnit": "T_DAMC-1",
+    "bmUnitName": "Damhead Creek Ltd.",
+    "generationCapacity": "820.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "VPI Power Limited"
+  },
+  {
+    "nationalGridBmUnit": "DIDCB5",
+    "elexonBmUnit": "T_DIDCB5",
+    "bmUnitName": "Didcot B main unit 5",
+    "generationCapacity": "770.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "DIDCB6",
+    "elexonBmUnit": "T_DIDCB6",
+    "bmUnitName": "Didcot B main unit 6",
+    "generationCapacity": "720.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "EECL-1",
+    "elexonBmUnit": "T_EECL-1",
+    "bmUnitName": "Enfield Energy Centre Ltd BMU1",
+    "generationCapacity": "444.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "GRAI-6",
+    "elexonBmUnit": "T_GRAI-6",
+    "bmUnitName": "T_GRAI-6",
+    "generationCapacity": "468.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "GRAI-7",
+    "elexonBmUnit": "T_GRAI-7",
+    "bmUnitName": "T_GRAI-7",
+    "generationCapacity": "468.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "GRAI-8",
+    "elexonBmUnit": "T_GRAI-8",
+    "bmUnitName": "T_GRAI-8",
+    "generationCapacity": "468.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "GRMO-1",
+    "elexonBmUnit": "T_GRMO-1",
+    "bmUnitName": "T_GRMO-1",
+    "generationCapacity": "144.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Grangemouth CHP Ltd"
+  },
+  {
+    "nationalGridBmUnit": "HUMR-1",
+    "elexonBmUnit": "T_HUMR-1",
+    "bmUnitName": "HUMR-1",
+    "generationCapacity": "1283.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "VPI Immingham LLP"
+  },
+  {
+    "nationalGridBmUnit": "KEAD-1",
+    "elexonBmUnit": "T_KEAD-1",
+    "bmUnitName": "KGL CCGT 1",
+    "generationCapacity": "764.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Keadby Generation Limited"
+  },
+  {
+    "nationalGridBmUnit": "KEAD-2",
+    "elexonBmUnit": "T_KEAD-2",
+    "bmUnitName": "Keadby-2 Main",
+    "generationCapacity": "887.260",
+    "fuelType": "CCGT",
+    "leadPartyName": "Keadby Generation Limited"
+  },
+  {
+    "nationalGridBmUnit": "KILLPG-1",
+    "elexonBmUnit": "T_KILLPG-1",
+    "bmUnitName": "T_KILLPG-1",
+    "generationCapacity": "311.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "KILLPG-2",
+    "elexonBmUnit": "T_KILLPG-2",
+    "bmUnitName": "T_KILLPG-2",
+    "generationCapacity": "316.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Uniper UK Limited"
+  },
+  {
+    "nationalGridBmUnit": "LAGA-1",
+    "elexonBmUnit": "T_LAGA-1",
+    "bmUnitName": "Langage Power Station",
+    "generationCapacity": "905.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "EP UK INVESTMENTS LIMITED"
+  },
+  {
+    "nationalGridBmUnit": "LBAR-1",
+    "elexonBmUnit": "T_LBAR-1",
+    "bmUnitName": "Little Barford main unit 1",
+    "generationCapacity": "750.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "MEDP-1",
+    "elexonBmUnit": "T_MEDP-1",
+    "bmUnitName": "Medway Power",
+    "generationCapacity": "750.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Medway Power Ltd"
+  },
+  {
+    "nationalGridBmUnit": "MRWD-1",
+    "elexonBmUnit": "T_MRWD-1",
+    "bmUnitName": "Marchwood Power Ltd",
+    "generationCapacity": "920.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Marchwood Power Limited"
+  },
+  {
+    "nationalGridBmUnit": "PEHE-1",
+    "elexonBmUnit": "T_PEHE-1",
+    "bmUnitName": "Peterhead Block 1",
+    "generationCapacity": "1200.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "SSE Thermal Generation"
+  },
+  {
+    "nationalGridBmUnit": "PEMB-11",
+    "elexonBmUnit": "T_PEMB-11",
+    "bmUnitName": "Pembroke Unit 11",
+    "generationCapacity": "475.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "PEMB-21",
+    "elexonBmUnit": "T_PEMB-21",
+    "bmUnitName": "Pembroke Unit 21",
+    "generationCapacity": "475.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "PEMB-31",
+    "elexonBmUnit": "T_PEMB-31",
+    "bmUnitName": "Pembroke Unit 31",
+    "generationCapacity": "475.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "PEMB-41",
+    "elexonBmUnit": "T_PEMB-41",
+    "bmUnitName": "Pembroke Unit 41",
+    "generationCapacity": "475.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "PEMB-51",
+    "elexonBmUnit": "T_PEMB-51",
+    "bmUnitName": "Pembroke Unit 51",
+    "generationCapacity": "475.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "ROCK-1",
+    "elexonBmUnit": "T_ROCK-1",
+    "bmUnitName": "Rocksavage Power Station",
+    "generationCapacity": "810.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Rocksavage Power Company Ltd"
+  },
+  {
+    "nationalGridBmUnit": "RYHPS-1",
+    "elexonBmUnit": "T_RYHPS-1",
+    "bmUnitName": "T_RYHPS-1",
+    "generationCapacity": "720.980",
+    "fuelType": "CCGT",
+    "leadPartyName": "VPI Power Limited"
+  },
+  {
+    "nationalGridBmUnit": "SCCL-1",
+    "elexonBmUnit": "T_SCCL-1",
+    "bmUnitName": "Unit 1",
+    "generationCapacity": "408.200",
+    "fuelType": "CCGT",
+    "leadPartyName": "SCCL"
+  },
+  {
+    "nationalGridBmUnit": "SCCL-2",
+    "elexonBmUnit": "T_SCCL-2",
+    "bmUnitName": "Unit 2",
+    "generationCapacity": "409.100",
+    "fuelType": "CCGT",
+    "leadPartyName": "SCCL"
+  },
+  {
+    "nationalGridBmUnit": "SCCL-3",
+    "elexonBmUnit": "T_SCCL-3",
+    "bmUnitName": "Unit 3",
+    "generationCapacity": "409.300",
+    "fuelType": "CCGT",
+    "leadPartyName": "SCCL"
+  },
+  {
+    "nationalGridBmUnit": "SEAB-1",
+    "elexonBmUnit": "T_SEAB-1",
+    "bmUnitName": "Seabank Power Module",
+    "generationCapacity": "830.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Seabank Power Limited"
+  },
+  {
+    "nationalGridBmUnit": "SEAB-2",
+    "elexonBmUnit": "T_SEAB-2",
+    "bmUnitName": "Seabank Power Module 2",
+    "generationCapacity": "406.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Seabank Power Limited"
+  },
+  {
+    "nationalGridBmUnit": "SHBA-1",
+    "elexonBmUnit": "T_SHBA-1",
+    "bmUnitName": "SOUTH HUMBER BANK P/S PHASE 1",
+    "generationCapacity": "821.400",
+    "fuelType": "CCGT",
+    "leadPartyName": "EP UK INVESTMENTS LIMITED"
+  },
+  {
+    "nationalGridBmUnit": "SHBA-2",
+    "elexonBmUnit": "T_SHBA-2",
+    "bmUnitName": "SOUTH HUMBER BANK P/S PHASE 2",
+    "generationCapacity": "580.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "EP UK INVESTMENTS LIMITED"
+  },
+  {
+    "nationalGridBmUnit": "SPLN-1",
+    "elexonBmUnit": "T_SPLN-1",
+    "bmUnitName": "Spalding Power Station",
+    "generationCapacity": "950.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Spalding Energy Company Ltd"
+  },
+  {
+    "nationalGridBmUnit": "STAY-1",
+    "elexonBmUnit": "T_STAY-1",
+    "bmUnitName": "Staythorpe Unit 1",
+    "generationCapacity": "464.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "STAY-2",
+    "elexonBmUnit": "T_STAY-2",
+    "bmUnitName": "Staythorpe Unit 2",
+    "generationCapacity": "464.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "STAY-3",
+    "elexonBmUnit": "T_STAY-3",
+    "bmUnitName": "Staythorpe Unit 3",
+    "generationCapacity": "464.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "STAY-4",
+    "elexonBmUnit": "T_STAY-4",
+    "bmUnitName": "Staythorpe Unit 4",
+    "generationCapacity": "464.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "RWE Generation UK plc"
+  },
+  {
+    "nationalGridBmUnit": "SUTB-1",
+    "elexonBmUnit": "T_SUTB-1",
+    "bmUnitName": "BMUid for Sutton Bridge Power",
+    "generationCapacity": "850.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "SUTTON BRIDGE POWER GENERATION"
+  },
+  {
+    "nationalGridBmUnit": "SVRP-10",
+    "elexonBmUnit": "T_SVRP-10",
+    "bmUnitName": "Dong Energy Severn Power Ut 10",
+    "generationCapacity": "425.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Severn Power Limited"
+  },
+  {
+    "nationalGridBmUnit": "SVRP-20",
+    "elexonBmUnit": "T_SVRP-20",
+    "bmUnitName": "Dong Energy Severn Power Ut 20",
+    "generationCapacity": "425.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "Severn Power Limited"
+  },
+  {
+    "nationalGridBmUnit": "WBURB-1",
+    "elexonBmUnit": "T_WBURB-1",
+    "bmUnitName": "West Burton B Unit 1",
+    "generationCapacity": "470.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "West Burton B Limited"
+  },
+  {
+    "nationalGridBmUnit": "WBURB-2",
+    "elexonBmUnit": "T_WBURB-2",
+    "bmUnitName": "West Burton B Unit 2",
+    "generationCapacity": "470.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "West Burton B Limited"
+  },
+  {
+    "nationalGridBmUnit": "WBURB-3",
+    "elexonBmUnit": "T_WBURB-3",
+    "bmUnitName": "West Burton B Unit 3",
+    "generationCapacity": "470.000",
+    "fuelType": "CCGT",
+    "leadPartyName": "West Burton B Limited"
+  }
+]
