@@ -1,0 +1,11 @@
+National Grid BMU ID,Elexon BMU ID,BMU Name,Generation Capacity (MW),Fuel Type,Lead Party Name,Region
+"DRAXX-5","T_DRAXX-5","T_DRAXX-5",645.000,"COAL","Drax Power Ltd",""
+"DRAXX-6","T_DRAXX-6","T_DRAXX-6",645.000,"COAL","Drax Power Ltd",""
+"RATS-1","T_RATS-1","T_RATS-1",0.000,"COAL","Uniper UK Limited",""
+"RATS-2","T_RATS-2","T_RATS-2",0.000,"COAL","Uniper UK Limited",""
+"RATS-3","T_RATS-3","T_RATS-3",0.000,"COAL","Uniper UK Limited",""
+"RATS-4","T_RATS-4","T_RATS-4",0.000,"COAL","Uniper UK Limited",""
+"WBUPS-1","T_WBUPS-1","West Burton Unit 01",484.000,"COAL","EDF Energy (Thermal Generation","West"
+"WBUPS-2","T_WBUPS-2","West Burton Unit 02",503.700,"COAL","EDF Energy (Thermal Generation","West"
+"WBUPS-3","T_WBUPS-3","West Burton Unit 03",503.000,"COAL","EDF Energy (Thermal Generation","West"
+"WBUPS-4","T_WBUPS-4","West Burton Unit 04",489.000,"COAL","EDF Energy (Thermal Generation","West"

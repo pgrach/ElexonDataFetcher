@@ -1,0 +1,101 @@
+[
+  {
+    "nationalGridBmUnit": "EAG-ELEC1",
+    "elexonBmUnit": "I_EAG-ELEC1",
+    "bmUnitName": "Eleclink NGC Gen Account",
+    "generationCapacity": "1025.000",
+    "fuelType": "INTELEC",
+    "interconnectorName": "IFA (France)",
+    "leadPartyName": "NESO"
+  },
+  {
+    "nationalGridBmUnit": "IBG-BRTN1",
+    "elexonBmUnit": "I_IBG-BRTN1",
+    "bmUnitName": "BritNed_Gen",
+    "generationCapacity": "1478.200",
+    "fuelType": "INTNED",
+    "interconnectorName": "Unknown",
+    "leadPartyName": "BritNed Development Ltd"
+  },
+  {
+    "nationalGridBmUnit": "IEG-ELEC1",
+    "elexonBmUnit": "I_IEG-ELEC1",
+    "bmUnitName": "Eleclink Gen",
+    "generationCapacity": "1050.000",
+    "fuelType": "INTELEC",
+    "interconnectorName": "IFA (France)",
+    "leadPartyName": "ElecLink Ltd (ELECL1)"
+  },
+  {
+    "nationalGridBmUnit": "IEG-EWIC1",
+    "elexonBmUnit": "I_IEG-EWIC1",
+    "bmUnitName": "IEG_EWIC1",
+    "generationCapacity": "530.920",
+    "fuelType": "INTEW",
+    "interconnectorName": "East-West (Ireland)",
+    "leadPartyName": "Eirgrid PLC"
+  },
+  {
+    "nationalGridBmUnit": "IEG-FRAN1",
+    "elexonBmUnit": "I_IEG-FRAN1",
+    "bmUnitName": "IEG-FRAN1",
+    "generationCapacity": "2013.950",
+    "fuelType": "INTFR",
+    "interconnectorName": "IFA2 (France)",
+    "leadPartyName": "Nat Grid Interconnectors Ltd"
+  },
+  {
+    "nationalGridBmUnit": "IEG-GRN1",
+    "elexonBmUnit": "I_IEG-GRN1",
+    "bmUnitName": "I_IEG-GRN1",
+    "generationCapacity": "1400.000",
+    "fuelType": "INTGRNL",
+    "interconnectorName": "BritNed (Netherlands)",
+    "leadPartyName": "Greenlink Interconnector Ltd"
+  },
+  {
+    "nationalGridBmUnit": "IEG-IFA2",
+    "elexonBmUnit": "I_IEG-IFA2",
+    "bmUnitName": "IEG-IFA2",
+    "generationCapacity": "1100.000",
+    "fuelType": "INTIFA2",
+    "interconnectorName": "IFA2 (France)",
+    "leadPartyName": "National Grid IFA 2 Limited"
+  },
+  {
+    "nationalGridBmUnit": "IEG-MOYL1",
+    "elexonBmUnit": "I_IEG-MOYL1",
+    "bmUnitName": "IEG-MOYL1",
+    "generationCapacity": "401.700",
+    "fuelType": "INTIRL",
+    "interconnectorName": "Moyle (Northern Ireland)",
+    "leadPartyName": "SONI Ltd"
+  },
+  {
+    "nationalGridBmUnit": "IEG-NSL1",
+    "elexonBmUnit": "I_IEG-NSL1",
+    "bmUnitName": "IEG-NSL1",
+    "generationCapacity": "1400.000",
+    "fuelType": "INTNSL",
+    "interconnectorName": "North Sea Link (Norway)",
+    "leadPartyName": "National Grid North Sea Link"
+  },
+  {
+    "nationalGridBmUnit": "IEG-VKL1",
+    "elexonBmUnit": "I_IEG-VKL1",
+    "bmUnitName": "I_IEG-VKL1",
+    "generationCapacity": "1400.000",
+    "fuelType": "INTVKL",
+    "interconnectorName": "Viking Link (Denmark)",
+    "leadPartyName": "National Grid Viking Link Ltd"
+  },
+  {
+    "nationalGridBmUnit": "ING-NEMO1",
+    "elexonBmUnit": "I_ING-NEMO1",
+    "bmUnitName": "NEMO Gen (BE to GB flow)",
+    "generationCapacity": "1020.000",
+    "fuelType": "INTNEM",
+    "interconnectorName": "NEMO (Belgium)",
+    "leadPartyName": "Nemo Link Limited"
+  }
+]

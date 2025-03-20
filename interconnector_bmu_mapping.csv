@@ -1,0 +1,12 @@
+National Grid BMU ID,Elexon BMU ID,BMU Name,Generation Capacity (MW),Fuel Type,Interconnector Name,Lead Party Name
+"EAG-ELEC1","I_EAG-ELEC1","Eleclink NGC Gen Account",1025.000,"INTELEC","IFA (France)","NESO"
+"IBG-BRTN1","I_IBG-BRTN1","BritNed_Gen",1478.200,"INTNED","Unknown","BritNed Development Ltd"
+"IEG-ELEC1","I_IEG-ELEC1","Eleclink Gen",1050.000,"INTELEC","IFA (France)","ElecLink Ltd (ELECL1)"
+"IEG-EWIC1","I_IEG-EWIC1","IEG_EWIC1",530.920,"INTEW","East-West (Ireland)","Eirgrid PLC"
+"IEG-FRAN1","I_IEG-FRAN1","IEG-FRAN1",2013.950,"INTFR","IFA2 (France)","Nat Grid Interconnectors Ltd"
+"IEG-GRN1","I_IEG-GRN1","I_IEG-GRN1",1400.000,"INTGRNL","BritNed (Netherlands)","Greenlink Interconnector Ltd"
+"IEG-IFA2","I_IEG-IFA2","IEG-IFA2",1100.000,"INTIFA2","IFA2 (France)","National Grid IFA 2 Limited"
+"IEG-MOYL1","I_IEG-MOYL1","IEG-MOYL1",401.700,"INTIRL","Moyle (Northern Ireland)","SONI Ltd"
+"IEG-NSL1","I_IEG-NSL1","IEG-NSL1",1400.000,"INTNSL","North Sea Link (Norway)","National Grid North Sea Link"
+"IEG-VKL1","I_IEG-VKL1","I_IEG-VKL1",1400.000,"INTVKL","Viking Link (Denmark)","National Grid Viking Link Ltd"
+"ING-NEMO1","I_ING-NEMO1","NEMO Gen (BE to GB flow)",1020.000,"INTNEM","NEMO (Belgium)","Nemo Link Limited"
