@@ -1,0 +1,382 @@
+[
+  {
+    "nationalGridBmUnit": "LCSMH-1",
+    "elexonBmUnit": "2__PMARB001",
+    "bmUnitName": "Lochaber Hydro",
+    "generationCapacity": "80.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "Marble Power Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CLAC-1",
+    "elexonBmUnit": "E_CLAC-1",
+    "bmUnitName": "Clachan G1",
+    "generationCapacity": "43.380",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FASN3",
+    "elexonBmUnit": "E_FASN-3",
+    "bmUnitName": "Fasnakyle  G3",
+    "generationCapacity": "24.200",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FASN-4",
+    "elexonBmUnit": "E_FASN-4",
+    "bmUnitName": "Fasnakyle G4",
+    "generationCapacity": "8.320",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CAS-BEU01",
+    "elexonBmUnit": "M_CAS-BEU01",
+    "bmUnitName": "Beauly Cascade",
+    "generationCapacity": "93.514",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CAS-CLU01",
+    "elexonBmUnit": "M_CAS-CLU01",
+    "bmUnitName": "Clunie Cascade",
+    "generationCapacity": "76.200",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CAS-CON01",
+    "elexonBmUnit": "M_CAS-CON01",
+    "bmUnitName": "Conon Cascade",
+    "generationCapacity": "90.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CAS-GAR01",
+    "elexonBmUnit": "M_CAS-GAR01",
+    "bmUnitName": "Garry Cascade",
+    "generationCapacity": "40.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CAS-KIL01",
+    "elexonBmUnit": "M_CAS-KIL01",
+    "bmUnitName": "Killin Cascade",
+    "generationCapacity": "70.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CAS-MOR01",
+    "elexonBmUnit": "M_CAS-MOR01",
+    "bmUnitName": "Moriston Cascade",
+    "generationCapacity": "74.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "SLOY-1",
+    "elexonBmUnit": "M_SLOY-1",
+    "bmUnitName": "Sloy G1",
+    "generationCapacity": "50.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "SLOY-4",
+    "elexonBmUnit": "M_SLOY-4",
+    "bmUnitName": "Sloy G4",
+    "generationCapacity": "40.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CRUA-1",
+    "elexonBmUnit": "T_CRUA-1",
+    "bmUnitName": "T_CRUA-1",
+    "generationCapacity": "123.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "Drax Pumped Storage Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CRUA-2",
+    "elexonBmUnit": "T_CRUA-2",
+    "bmUnitName": "T_CRUA-2",
+    "generationCapacity": "124.760",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "Drax Pumped Storage Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CRUA-3",
+    "elexonBmUnit": "T_CRUA-3",
+    "bmUnitName": "T_CRUA-3",
+    "generationCapacity": "100.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "Drax Pumped Storage Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "CRUA-4",
+    "elexonBmUnit": "T_CRUA-4",
+    "bmUnitName": "T_CRUA-4",
+    "generationCapacity": "104.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "Drax Pumped Storage Limited",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DINO-1",
+    "elexonBmUnit": "T_DINO-1",
+    "bmUnitName": "Dinorwig 1",
+    "generationCapacity": "320.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DINO-2",
+    "elexonBmUnit": "T_DINO-2",
+    "bmUnitName": "Dinorwig 2",
+    "generationCapacity": "320.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DINO-3",
+    "elexonBmUnit": "T_DINO-3",
+    "bmUnitName": "Dinorwig 3",
+    "generationCapacity": "320.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DINO-4",
+    "elexonBmUnit": "T_DINO-4",
+    "bmUnitName": "Dinorwig 4",
+    "generationCapacity": "320.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DINO-5",
+    "elexonBmUnit": "T_DINO-5",
+    "bmUnitName": "Dinorwig 5",
+    "generationCapacity": "320.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "DINO-6",
+    "elexonBmUnit": "T_DINO-6",
+    "bmUnitName": "Dinorwig 6",
+    "generationCapacity": "320.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "ERRO-1",
+    "elexonBmUnit": "T_ERRO-1",
+    "bmUnitName": "Errochty G1",
+    "generationCapacity": "25.300",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "ERRO-2",
+    "elexonBmUnit": "T_ERRO-2",
+    "bmUnitName": "Errochty G2",
+    "generationCapacity": "25.260",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "ERRO-3",
+    "elexonBmUnit": "T_ERRO-3",
+    "bmUnitName": "Errochty G3",
+    "generationCapacity": "25.660",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FASN-1",
+    "elexonBmUnit": "T_FASN-1",
+    "bmUnitName": "Fasnakyle G1",
+    "generationCapacity": "23.040",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FASN2",
+    "elexonBmUnit": "T_FASN-2",
+    "bmUnitName": "Fasnakyle  G2",
+    "generationCapacity": "23.280",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FFES-1",
+    "elexonBmUnit": "T_FFES-1",
+    "bmUnitName": "Ffestioniog 1",
+    "generationCapacity": "91.033",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FFES-2",
+    "elexonBmUnit": "T_FFES-2",
+    "bmUnitName": "Ffestioniog 2",
+    "generationCapacity": "91.875",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FFES-3",
+    "elexonBmUnit": "T_FFES-3",
+    "bmUnitName": "Ffestioniog 3",
+    "generationCapacity": "90.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FFES-4",
+    "elexonBmUnit": "T_FFES-4",
+    "bmUnitName": "Ffestioniog 4",
+    "generationCapacity": "90.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "First Hydro Company",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FINL-1",
+    "elexonBmUnit": "T_FINL-1",
+    "bmUnitName": "Finlarig",
+    "generationCapacity": "16.802",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FOYE-1",
+    "elexonBmUnit": "T_FOYE-1",
+    "bmUnitName": "Foyers G1",
+    "generationCapacity": "160.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "FOYE-2",
+    "elexonBmUnit": "T_FOYE-2",
+    "bmUnitName": "Foyers G2",
+    "generationCapacity": "160.000",
+    "fuelType": "PS",
+    "hydroType": "Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "GLNDO-1",
+    "elexonBmUnit": "T_GLNDO-1",
+    "bmUnitName": "Glendoe Generator 1",
+    "generationCapacity": "100.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "NANT-1",
+    "elexonBmUnit": "T_NANT-1",
+    "bmUnitName": "Nant",
+    "generationCapacity": "20.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "SLOY-2",
+    "elexonBmUnit": "T_SLOY-2",
+    "bmUnitName": "Sloy G2",
+    "generationCapacity": "41.000",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  },
+  {
+    "nationalGridBmUnit": "SLOY-3",
+    "elexonBmUnit": "T_SLOY-3",
+    "bmUnitName": "Sloy G3",
+    "generationCapacity": "41.460",
+    "fuelType": "NPSHYD",
+    "hydroType": "Non-Pumped Storage",
+    "leadPartyName": "SSE Generation Ltd",
+    "region": ""
+  }
+]
