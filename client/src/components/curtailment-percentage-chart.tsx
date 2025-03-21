@@ -243,11 +243,8 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
       ) : (
         <div className="h-auto">
           {!loading && showPieChart && totalPotentialGeneration > 0 ? (
-            // Show improved pie chart for "All Farms" view
+            // Show improved pie chart for "All Farms" view without redundant title/description
             <div>
-              <h2 className="text-2xl font-bold tracking-tight mb-1">{chartTitle}</h2>
-              <p className="text-muted-foreground mb-6">{chartDescription}</p>
-              
               <CurtailmentPieChart
                 totalPotentialGeneration={totalPotentialGeneration}
                 totalCurtailedVolume={totalCurtailedVolume}

@@ -82,76 +82,52 @@ export default function CurtailmentPieChart({
       ) : loading ? (
         <div className="space-y-4 py-8">
           <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-full" />
           <Skeleton className="h-32 w-full" />
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Key Metric Highlight - Single central value */}
-          <div className="flex flex-col items-center mb-2">
-            <h2 className="text-3xl font-bold mb-1">Wind Farm Curtailment Analysis</h2>
-            <div className="flex items-center gap-2 mb-8">
-              <Activity className="text-primary h-7 w-7" />
-              <span className="text-4xl font-bold">{curtailmentPercentage.toFixed(1)}%</span>
-              <span className="text-lg text-muted-foreground">of potential generation curtailed</span>
-            </div>
-          </div>
-          
-          {/* Simplified metrics row */}
-          <div className="grid grid-cols-2 gap-6 mb-6">
-            <div className="flex items-center justify-center gap-3 p-4 bg-card rounded-lg shadow-sm border border-border/20">
-              <Wind className="w-6 h-6 text-emerald-500" />
-              <div>
-                <div className="text-2xl font-bold">{formatNumber(actualGeneration)}</div>
-                <div className="text-sm text-muted-foreground">Actual Generation</div>
+          {/* Central visualization with minimalist details */}
+          <div className="flex flex-col items-center">
+            <h2 className="text-3xl font-bold mb-8">Curtailment Breakdown</h2>
+            
+            {/* Main pie chart visualization - larger size */}
+            <div className="mx-auto max-w-3xl w-full">
+              <div className="h-96 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={data}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={110}
+                      outerRadius={150}
+                      paddingAngle={0}
+                      dataKey="value"
+                      startAngle={90}
+                      endAngle={-270}
+                      label={({ name, percent }) => 
+                        `${name}: ${(percent * 100).toFixed(1)}%`
+                      }
+                      labelLine={false}
+                    >
+                      {data.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={COLORS[index % COLORS.length]}
+                          stroke="transparent"
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             </div>
-            <div className="flex items-center justify-center gap-3 p-4 bg-card rounded-lg shadow-sm border border-border/20">
-              <Zap className="w-6 h-6 text-amber-500" />
-              <div>
-                <div className="text-2xl font-bold">{formatNumber(totalCurtailedVolume)}</div>
-                <div className="text-sm text-muted-foreground">Curtailed Energy</div>
-              </div>
+            
+            {/* Subtle caption */}
+            <div className="text-center text-muted-foreground text-sm mt-8">
+              {curtailmentPercentage.toFixed(1)}% of potential generation curtailed on {format(date, "MMMM d, yyyy")}
             </div>
-          </div>
-          
-          {/* Streamlined pie chart */}
-          <div className="mx-auto max-w-2xl">
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={data}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={90}
-                    outerRadius={120}
-                    paddingAngle={0}
-                    dataKey="value"
-                    startAngle={90}
-                    endAngle={-270}
-                    label={({ name, percent }) => 
-                      `${name}: ${(percent * 100).toFixed(1)}%`
-                    }
-                    labelLine={false}
-                  >
-                    {data.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={COLORS[index % COLORS.length]}
-                        stroke="transparent"
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          
-          {/* Date stamp */}
-          <div className="text-center text-muted-foreground text-sm mt-4">
-            Data for {format(date, "MMMM d, yyyy")}
           </div>
         </div>
       )}
