@@ -7,11 +7,12 @@
 
 import axios from 'axios';
 import { db } from '../../db';
-import { curtailmentRecords } from '../../db/schema';
+import { curtailmentRecords, windGenerationData } from '../../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { logger } from '../utils/logger';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as windGenerationService from './windGenerationService';
 
 // Types for PN data
 export interface PhysicalNotification {
@@ -287,19 +288,43 @@ export async function calculateFarmCurtailmentPercentage(farmId: string, date: s
         )
       );
 
-    // 3. Get PN data for this farm on this date
+    // 3. Get wind generation data for this date from our database
+    let windGenData: any[] = [];
+    try {
+      windGenData = await windGenerationService.getWindGenerationDataForDate(date);
+      if (windGenData.length === 0) {
+        logger.warning(`No wind generation data found in database for ${date}, processing data from API`, {
+          module: 'pnDataService'
+        });
+        
+        // Try to fetch and process wind data for this date
+        await windGenerationService.processSingleDate(date);
+        windGenData = await windGenerationService.getWindGenerationDataForDate(date);
+      }
+      
+      logger.info(`Found ${windGenData.length} wind generation records for ${date}`, {
+        module: 'pnDataService'
+      });
+    } catch (error) {
+      logger.error(`Failed to fetch wind generation data for ${date}`, {
+        module: 'pnDataService',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+    
+    // Fallback to PN data if no wind generation data available
     const pnData = await fetchPNData(date);
     let farmPNData = pnData.filter(pn => 
       pn.nationalGridBmUnit === farmId || pn.bmUnit === `T_${farmId}`
     );
 
     // If no PN data found for this farm, generate farm-specific mock data
-    if (farmPNData.length === 0) {
-      logger.warning(`No Physical Notification data found for ${farmId} on ${date}, generating farm-specific mock data`, {
+    if (farmPNData.length === 0 && windGenData.length === 0) {
+      logger.warning(`No Physical Notification data or wind generation data available for ${farmId} on ${date}, generating farm-specific mock data as last resort`, {
         module: 'pnDataService'
       });
       
-      // Generate mock data specific to this farm
+      // Generate mock data specific to this farm as a last resort
       farmPNData = generateMockPNData(date, [farmId]);
     }
 
@@ -310,25 +335,85 @@ export async function calculateFarmCurtailmentPercentage(farmId: string, date: s
       curtailmentPercentage: number;
     }>();
 
-    // Process PN data first (potential generation)
-    for (const pn of farmPNData) {
-      const period = pn.settlementPeriod;
-      const potentialGeneration = (pn.levelFrom + pn.levelTo) / 2 * 0.5; // Average level * 0.5 hour = MWh
-      
-      if (!periodDetails.has(period)) {
-        periodDetails.set(period, {
-          potentialGeneration,
-          curtailedVolume: 0,
-          curtailmentPercentage: 0
-        });
-      } else {
-        // If multiple PN records exist for the same period, use the higher value
-        const current = periodDetails.get(period)!;
-        if (potentialGeneration > current.potentialGeneration) {
-          current.potentialGeneration = potentialGeneration;
-          periodDetails.set(period, current);
+    // First use actual wind generation data if available
+    if (windGenData.length > 0) {
+      // For each period with wind generation data
+      for (const windRecord of windGenData) {
+        const period = windRecord.settlementPeriod;
+        
+        // Calculate the wind farm's share of total generation by estimating its capacity ratio
+        // We'll estimate the farm's capacity by looking at the maximum curtailment volume
+        // This is an approximation, but better than using mock data
+        
+        // Find maximum curtailment for this farm
+        const farmMaxCurtailment = Math.max(
+          ...curtailmentData
+            .filter(record => record.settlementPeriod === period)
+            .map(record => Math.abs(parseFloat(record.volume.toString()))),
+          0 // Default if no curtailment data
+        );
+        
+        // If we have curtailment data for this farm, we can use it to estimate the farm's share
+        let farmShare = 0.05; // Default to 5% if we can't calculate
+        let windTotal = parseFloat(windRecord.totalWind);
+        
+        // A large wind farm might have higher curtailment values
+        if (farmMaxCurtailment > 0) {
+          if (farmMaxCurtailment > 100) farmShare = 0.25; // Very large farm (25%)
+          else if (farmMaxCurtailment > 50) farmShare = 0.15; // Large farm (15%)
+          else if (farmMaxCurtailment > 20) farmShare = 0.10; // Medium farm (10%)
+          else if (farmMaxCurtailment > 5) farmShare = 0.05; // Small farm (5%)
+          else farmShare = 0.02; // Very small farm (2%)
+        }
+        
+        // Calculate potential generation as a share of total wind generation
+        const potentialGeneration = windTotal * farmShare;
+        
+        if (!periodDetails.has(period)) {
+          periodDetails.set(period, {
+            potentialGeneration,
+            curtailedVolume: 0,
+            curtailmentPercentage: 0
+          });
+        } else {
+          // If we already have data for this period, use the higher value
+          const current = periodDetails.get(period)!;
+          if (potentialGeneration > current.potentialGeneration) {
+            current.potentialGeneration = potentialGeneration;
+            periodDetails.set(period, current);
+          }
         }
       }
+      
+      logger.info(`Used actual wind generation data for curtailment calculation for ${farmId} on ${date}`, {
+        module: 'pnDataService'
+      });
+    } 
+    // Fallback to PN data if wind generation data is not available
+    else {
+      for (const pn of farmPNData) {
+        const period = pn.settlementPeriod;
+        const potentialGeneration = (pn.levelFrom + pn.levelTo) / 2 * 0.5; // Average level * 0.5 hour = MWh
+        
+        if (!periodDetails.has(period)) {
+          periodDetails.set(period, {
+            potentialGeneration,
+            curtailedVolume: 0,
+            curtailmentPercentage: 0
+          });
+        } else {
+          // If multiple PN records exist for the same period, use the higher value
+          const current = periodDetails.get(period)!;
+          if (potentialGeneration > current.potentialGeneration) {
+            current.potentialGeneration = potentialGeneration;
+            periodDetails.set(period, current);
+          }
+        }
+      }
+      
+      logger.info(`Used PN data for curtailment calculation for ${farmId} on ${date}`, {
+        module: 'pnDataService'
+      });
     }
 
     // Then process curtailment data
