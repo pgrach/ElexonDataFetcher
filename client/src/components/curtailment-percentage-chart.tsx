@@ -172,15 +172,15 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
   const renderCustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-card text-card-foreground p-3 border shadow-sm rounded-md">
-          <p className="font-medium">{label}</p>
-          <p className="text-sm">
+        <div className="bg-card text-card-foreground p-4 border shadow-sm rounded-md">
+          <p className="font-medium text-base">{label}</p>
+          <p className="text-base mt-1">
             <span className="font-medium">Potential:</span> {payload[0].value} MWh
           </p>
-          <p className="text-sm">
+          <p className="text-base mt-1">
             <span className="font-medium">Curtailed:</span> {payload[1].value} MWh
           </p>
-          <p className="text-sm">
+          <p className="text-base mt-1">
             <span className="font-medium">Percentage:</span> {payload[2].value}%
           </p>
         </div>

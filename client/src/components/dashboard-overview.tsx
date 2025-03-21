@@ -153,10 +153,10 @@ export default function DashboardOverview() {
           <>
             {/* Tabs for different analyses */}
             <Tabs defaultValue="charts" className="mt-10">
-              <TabsList className="grid grid-cols-3 mb-8">
-                <TabsTrigger value="charts">Charts & Visualizations</TabsTrigger>
-                <TabsTrigger value="curtailment">Curtailment Analysis</TabsTrigger>
-                <TabsTrigger value="data">Data Tables</TabsTrigger>
+              <TabsList className="grid grid-cols-3 mb-8 text-lg">
+                <TabsTrigger value="charts" className="py-3">Charts & Visualizations</TabsTrigger>
+                <TabsTrigger value="curtailment" className="py-3">Curtailment Analysis</TabsTrigger>
+                <TabsTrigger value="data" className="py-3">Data Tables</TabsTrigger>
               </TabsList>
               
               <TabsContent value="charts" className="space-y-8">
@@ -190,8 +190,8 @@ export default function DashboardOverview() {
               <TabsContent value="curtailment" className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 items-end">
                   <div className="col-span-1 md:col-span-2">
-                    <h2 className="text-2xl font-bold mb-2">Wind Farm Curtailment Percentage Analysis</h2>
-                    <p className="text-muted-foreground">
+                    <h2 className="text-3xl font-bold mb-3">Wind Farm Curtailment Percentage Analysis</h2>
+                    <p className="text-lg text-muted-foreground">
                       Compare physical notifications (PN) data with actual curtailment volumes to analyze wasted wind farm capacity.
                     </p>
                   </div>
