@@ -77,7 +77,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
   
   // Fetch monthly data for monthly view - using actual API data for all months
   const { data: monthlyData = [], isLoading: isMonthlyLoading } = useQuery({
-    queryKey: [`/api/monthly-chart-data`, currentYear, minerModel, farmId],
+    queryKey: [`/api/monthly-chart-data`, currentYear, format(date, "yyyy-MM"), minerModel, farmId],
     queryFn: async () => {
       // Fetch data for each month of the year
       const months = [];
