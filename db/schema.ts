@@ -151,6 +151,21 @@ export const selectDailyMiningPotentialSchema = createSelectSchema(dailyMiningPo
 export const insertYearlyMiningPotentialSchema = createInsertSchema(yearlyMiningPotential);
 export const selectYearlyMiningPotentialSchema = createSelectSchema(yearlyMiningPotential);
 
+// Wind generation aggregation table
+export const windGenerationData = pgTable("wind_generation_data", {
+  id: serial("id").primaryKey(),
+  settlementDate: date("settlement_date").notNull(),
+  settlementPeriod: integer("settlement_period").notNull(),
+  windOnshore: numeric("wind_onshore").notNull(),
+  windOffshore: numeric("wind_offshore").notNull(),
+  totalWind: numeric("total_wind").notNull(),
+  lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+  dataSource: text("data_source").default("ELEXON").notNull(),
+});
+
+export const insertWindGenerationDataSchema = createInsertSchema(windGenerationData);
+export const selectWindGenerationDataSchema = createSelectSchema(windGenerationData);
+
 // Define types for all tables
 export type CurtailmentRecord = typeof curtailmentRecords.$inferSelect;
 export type InsertCurtailmentRecord = typeof curtailmentRecords.$inferInsert;
@@ -162,6 +177,8 @@ export type YearlySummary = typeof yearlySummaries.$inferSelect;
 export type InsertYearlySummary = typeof yearlySummaries.$inferInsert;
 export type IngestionProgress = typeof ingestionProgress.$inferSelect;
 export type InsertIngestionProgress = typeof ingestionProgress.$inferInsert;
+export type WindGenerationData = typeof windGenerationData.$inferSelect;
+export type InsertWindGenerationData = typeof windGenerationData.$inferInsert;
 
 export type HistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferSelect;
 export type InsertHistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferInsert;
