@@ -195,17 +195,17 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
   return (
     <Card className="w-full h-full">
       <CardHeader>
-        <CardTitle className="flex justify-between items-center">
+        <CardTitle className="flex justify-between items-center text-2xl">
           {chartTitle}
           {loading && <Badge variant="outline">Loading...</Badge>}
         </CardTitle>
-        <p className="text-sm text-muted-foreground">{chartDescription}</p>
+        <p className="text-lg text-muted-foreground">{chartDescription}</p>
       </CardHeader>
       <CardContent>
         {error ? (
           <div className="flex flex-col items-center justify-center h-80 text-center">
-            <AlertCircle className="h-10 w-10 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">{error}</p>
+            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-lg text-muted-foreground">{error}</p>
           </div>
         ) : (
           <div className="h-80">
@@ -255,7 +255,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
               </ResponsiveContainer>
             ) : !loading ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <p className="text-muted-foreground">No data to display</p>
+                <p className="text-lg text-muted-foreground">No data to display</p>
               </div>
             ) : null}
           </div>

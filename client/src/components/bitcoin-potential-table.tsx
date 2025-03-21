@@ -233,13 +233,13 @@ export default function BitcoinPotentialTable({
           <Button 
             variant="ghost" 
             onClick={() => handleSort(sortKey)}
-            className="hover:text-sky-500 text-xs sm:text-sm whitespace-nowrap"
+            className="hover:text-sky-500 text-sm sm:text-base whitespace-nowrap"
           >
             {label}
-            <ArrowUpDown className="ml-1 sm:ml-2 h-3 w-3 sm:h-4 sm:w-4" />
+            <ArrowUpDown className="ml-1 sm:ml-2 h-4 w-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent className="max-w-[200px] text-xs">
+        <TooltipContent className="max-w-[250px] text-sm p-3">
           {tooltip}
         </TooltipContent>
       </Tooltip>
@@ -334,7 +334,7 @@ export default function BitcoinPotentialTable({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className="text-2xl">{title}</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -348,14 +348,14 @@ export default function BitcoinPotentialTable({
         ) : (
           <>
             {farmDataError ? (
-              <div className="p-4 rounded-lg bg-destructive/10 text-destructive">
-                <p className="text-sm font-medium">Unable to fetch farm data</p>
-                <p className="text-xs mt-1">
+              <div className="p-5 rounded-lg bg-destructive/10 text-destructive">
+                <p className="text-base font-medium">Unable to fetch farm data</p>
+                <p className="text-sm mt-2">
                   Please try again later or contact support if the problem persists.
                 </p>
               </div>
             ) : !sortedFarms || sortedFarms.length === 0 ? (
-              <p className="text-center text-muted-foreground py-4">No farm data available for the selected period.</p>
+              <p className="text-center text-lg text-muted-foreground py-6">No farm data available for the selected period.</p>
             ) : (
               <div className="space-y-4">
                 <div className="max-h-[500px] overflow-y-auto border rounded-md">
@@ -414,7 +414,7 @@ export default function BitcoinPotentialTable({
                 </div>
                 
                 {/* Bitcoin miner information below the table, outside scrollable area */}
-                <div className="text-sm pt-2 text-right font-medium text-primary">
+                <div className="text-base md:text-lg pt-3 text-right font-medium text-primary">
                   {minerModel.replace("_", " ")} miners @ {Number.isNaN(Number(bitcoinData.currentPrice)) || !bitcoinData.currentPrice ? 
                     "64,723" : 
                     Math.round(Number(bitcoinData.currentPrice)).toLocaleString()} GBP
