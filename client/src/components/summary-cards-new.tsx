@@ -292,12 +292,12 @@ export default function SummaryCards({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <p className="text-sm text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                        <p className="text-base text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
                           Powers ~{Math.round(Number(summaryData.totalCurtailedEnergy) / 3.4)} homes/month
                         </p>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="text-xs">
+                        <p className="text-sm">
                           This energy could power approximately {Math.round(Number(summaryData.totalCurtailedEnergy) / 3.4)} homes for an entire month
                         </p>
                       </TooltipContent>
@@ -356,7 +356,7 @@ export default function SummaryCards({
                 </div>
                 {Number(summaryData.totalCurtailedEnergy) > 0 &&
                   Number(summaryData.totalPayment) > 0 && (
-                    <p className="text-sm text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                    <p className="text-base text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
                       £{(Number(summaryData.totalPayment) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh
                     </p>
                   )}
@@ -395,7 +395,7 @@ export default function SummaryCards({
                 </div>
                 {Number(bitcoinData.bitcoinMined) > 0 &&
                   Number(summaryData.totalCurtailedEnergy) > 0 && (
-                    <p className="text-sm text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                    <p className="text-base text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
                       £{(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh
                     </p>
                   )}
@@ -448,7 +448,7 @@ export default function SummaryCards({
                         </p>
                       </div>
                       {valueRatio > 0 && (
-                        <p className="text-sm text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                        <p className="text-base text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
                           {valueRatio >= 1.0
                             ? `Bitcoin > subsidy by ${valueRatio.toFixed(2)}×`
                             : `Subsidy > Bitcoin by ${(1 / valueRatio).toFixed(2)}×`}
