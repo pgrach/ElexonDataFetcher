@@ -18,8 +18,7 @@ import LeadPartySelector from "@/components/lead-party-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import CurtailmentInfoBanner from "@/components/curtailment-info-banner";
-import DashboardTutorial from "@/components/dashboard-tutorial";
-// CurtailmentComparisonCard removed as it's redundant with the Value Ratio card
+// Guide component removed as requested
 
 export default function DashboardOverview() {
   // State
@@ -140,7 +139,6 @@ export default function DashboardOverview() {
         
         {/* Educational components */}
         <CurtailmentInfoBanner />
-        <DashboardTutorial />
         
         {/* Summary cards */}
         <SummaryCards 
