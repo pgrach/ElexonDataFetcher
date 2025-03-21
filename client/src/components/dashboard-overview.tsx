@@ -186,20 +186,12 @@ export default function DashboardOverview() {
               </TabsContent>
               
               <TabsContent value="curtailment" className="space-y-8">
-                <div className="mb-6">
-                  <h2 className="text-3xl font-bold mb-3">Wind Farm Curtailment Percentage Analysis</h2>
-                  <p className="text-lg text-muted-foreground">
-                    Compare physical notifications (PN) data with actual curtailment volumes to analyze wasted wind farm capacity.
-                  </p>
-                </div>
-                
-                {/* Curtailment Percentage Chart - always showing "All Farms" view */}
+                {/* Simplified view - no redundant title */}
                 <CurtailmentPercentageChart 
                   date={date}
                   leadPartyName={undefined}
                   farmId={undefined}
                 />
-                
               </TabsContent>
               
               <TabsContent value="data" className="space-y-8">

@@ -146,8 +146,8 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
             ? (totalCurtailed / totalPotential) * 100 
             : 0;
           
-          setChartTitle("All Wind Farms Curtailment Analysis");
-          setChartDescription(`${overallPercentage.toFixed(1)}% of total potential generation curtailed on ${formattedDate}`);
+          setChartTitle("Wind Farm Curtailment");
+          setChartDescription("");
           
           setData(leadPartyDataArray);
         }
@@ -250,6 +250,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
                 description={chartDescription}
                 loading={loading}
                 error={error}
+                date={date}
               />
             </div>
           ) : !loading && data && data.length > 0 ? (
