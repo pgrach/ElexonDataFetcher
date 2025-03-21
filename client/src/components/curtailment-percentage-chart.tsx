@@ -216,24 +216,33 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
   const colors = getBarColors(data?.length || 0);
   
   return (
-    <Card className="w-full h-full">
-      <CardHeader>
-        <CardTitle className="flex justify-between items-center text-2xl">
-          {chartTitle}
-          {loading && <Badge variant="outline">Loading...</Badge>}
-        </CardTitle>
-        <p className="text-lg text-muted-foreground">{chartDescription}</p>
-      </CardHeader>
-      <CardContent>
-        {error ? (
-          <div className="flex flex-col items-center justify-center h-80 text-center">
-            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg text-muted-foreground">{error}</p>
+    <div className="w-full h-full">
+      {/* Clean page header section */}
+      <div className="mb-6">
+        {loading && (
+          <div className="flex items-center gap-2 mb-3">
+            <Badge variant="outline" className="animate-pulse bg-muted px-3 py-1">
+              <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-r-transparent animate-spin mr-2"></span>
+              Loading data...
+            </Badge>
           </div>
-        ) : (
-          <div className="h-auto">
-            {!loading && showPieChart && totalPotentialGeneration > 0 ? (
-              // Show pie chart for "All Farms" view
+        )}
+      </div>
+
+      {error ? (
+        <div className="flex flex-col items-center justify-center h-80 text-center bg-card rounded-lg border border-border/40 shadow-sm p-6">
+          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+          <p className="text-xl font-medium mb-2">Unable to Load Data</p>
+          <p className="text-muted-foreground">{error}</p>
+        </div>
+      ) : (
+        <div className="h-auto">
+          {!loading && showPieChart && totalPotentialGeneration > 0 ? (
+            // Show improved pie chart for "All Farms" view
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight mb-1">{chartTitle}</h2>
+              <p className="text-muted-foreground mb-6">{chartDescription}</p>
+              
               <CurtailmentPieChart
                 totalPotentialGeneration={totalPotentialGeneration}
                 totalCurtailedVolume={totalCurtailedVolume}
@@ -242,61 +251,84 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
                 loading={loading}
                 error={error}
               />
-            ) : !loading && data && data.length > 0 ? (
-              // Show bar chart for specific farm or lead party
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={data}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 65 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                    <XAxis 
-                      dataKey="name" 
-                      angle={-45} 
-                      textAnchor="end" 
-                      tick={{ fontSize: 10 }}
-                      height={60} 
-                    />
-                    <YAxis yAxisId="left" label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft' }} />
-                    <YAxis yAxisId="right" orientation="right" label={{ value: 'Percentage (%)', angle: -90, position: 'insideRight' }} />
-                    <Tooltip content={renderCustomTooltip} />
-                    <Legend />
-                    <Bar 
-                      yAxisId="left"
-                      name="Potential Generation" 
-                      dataKey="potentialMWh" 
-                      fill="#8884d8" 
-                      opacity={0.7}
-                    />
-                    <Bar 
-                      yAxisId="left"
-                      name="Curtailed Energy" 
-                      dataKey="curtailedMWh" 
-                      fill="#82ca9d" 
-                      opacity={0.9}
-                    />
-                    <Bar 
-                      yAxisId="right"
-                      name="Curtailment %" 
-                      dataKey="percentage" 
-                      fill="#ff7300"
+            </div>
+          ) : !loading && data && data.length > 0 ? (
+            // Show bar chart for specific farm or lead party
+            <Card className="w-full overflow-hidden bg-gradient-to-br from-background to-muted/30">
+              <CardHeader>
+                <CardTitle className="text-2xl font-bold tracking-tight">{chartTitle}</CardTitle>
+                <p className="text-muted-foreground">{chartDescription}</p>
+              </CardHeader>
+              <CardContent>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={data}
+                      margin={{ top: 5, right: 30, left: 20, bottom: 65 }}
                     >
-                      {data.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : !loading ? (
-              <div className="flex flex-col items-center justify-center h-80 text-center">
-                <p className="text-lg text-muted-foreground">No data to display</p>
-              </div>
-            ) : null}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45} 
+                        textAnchor="end" 
+                        tick={{ fontSize: 11 }}
+                        height={60} 
+                        tickMargin={10}
+                        stroke="#888888"
+                      />
+                      <YAxis 
+                        yAxisId="left" 
+                        label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle'} }} 
+                        stroke="#888888"
+                      />
+                      <YAxis 
+                        yAxisId="right" 
+                        orientation="right" 
+                        label={{ value: 'Percentage (%)', angle: -90, position: 'insideRight', style: {textAnchor: 'middle'} }} 
+                        stroke="#888888"
+                      />
+                      <Tooltip content={renderCustomTooltip} />
+                      <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                      <Bar 
+                        yAxisId="left"
+                        name="Potential Generation" 
+                        dataKey="potentialMWh" 
+                        fill="#4f46e5" 
+                        radius={[4, 4, 0, 0]}
+                        opacity={0.8}
+                      />
+                      <Bar 
+                        yAxisId="left"
+                        name="Curtailed Energy" 
+                        dataKey="curtailedMWh" 
+                        fill="#ef4444" 
+                        radius={[4, 4, 0, 0]}
+                        opacity={0.8}
+                      />
+                      <Bar 
+                        yAxisId="right"
+                        name="Curtailment %" 
+                        dataKey="percentage" 
+                        fill="#f59e0b"
+                        radius={[4, 4, 0, 0]}
+                      >
+                        {data.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          ) : !loading ? (
+            <div className="flex flex-col items-center justify-center h-80 text-center bg-card rounded-lg border border-border/40 shadow-sm p-6">
+              <p className="text-xl font-medium mb-2">No Data Available</p>
+              <p className="text-muted-foreground">No curtailment data found for the selected filters.</p>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }
