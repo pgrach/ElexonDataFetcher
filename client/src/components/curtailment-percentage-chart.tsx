@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle } from "lucide-react";
+import CurtailmentPieChart from "@/components/curtailment-pie-chart";
 
 interface CurtailmentPercentageChartProps {
   date: Date;
@@ -49,6 +50,9 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
   const [data, setData] = useState<any[]>([]);
   const [chartTitle, setChartTitle] = useState<string>("Curtailment Percentage");
   const [chartDescription, setChartDescription] = useState<string>("");
+  const [totalPotentialGeneration, setTotalPotentialGeneration] = useState<number>(0);
+  const [totalCurtailedVolume, setTotalCurtailedVolume] = useState<number>(0);
+  const [showPieChart, setShowPieChart] = useState<boolean>(false);
 
   useEffect(() => {
     async function fetchCurtailmentData() {
@@ -107,26 +111,45 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
             }
           );
           
-          const aggregateData = await Promise.all(
-            leadParties.map(async (party: { leadPartyName: string }) => {
-              const encodedLeadParty = encodeURIComponent(party.leadPartyName);
-              const { data } = await axios.get<LeadPartyCurtailmentData>(
-                `/api/production/curtailment-percentage/lead-party/${encodedLeadParty}/${formattedDate}`
-              );
-              
-              return {
-                name: party.leadPartyName,
-                potentialMWh: Number(data.totalPotentialGeneration.toFixed(1)),
-                curtailedMWh: Number(data.totalCurtailedVolume.toFixed(1)),
-                percentage: Number(data.overallCurtailmentPercentage.toFixed(1))
-              };
-            })
-          );
+          // Array to store all lead party data
+          const leadPartyDataArray = [];
+          let totalPotential = 0;
+          let totalCurtailed = 0;
           
-          setChartTitle("All Lead Parties Curtailment Analysis");
-          setChartDescription(`Curtailment percentages by lead party on ${formattedDate}`);
+          // Process all lead parties
+          for (const party of leadParties) {
+            const encodedLeadParty = encodeURIComponent(party.leadPartyName);
+            const { data } = await axios.get<LeadPartyCurtailmentData>(
+              `/api/production/curtailment-percentage/lead-party/${encodedLeadParty}/${formattedDate}`
+            );
+            
+            // Add to totals
+            totalPotential += data.totalPotentialGeneration;
+            totalCurtailed += data.totalCurtailedVolume;
+            
+            // Add to chart data
+            leadPartyDataArray.push({
+              name: party.leadPartyName,
+              potentialMWh: Number(data.totalPotentialGeneration.toFixed(1)),
+              curtailedMWh: Number(data.totalCurtailedVolume.toFixed(1)),
+              percentage: Number(data.overallCurtailmentPercentage.toFixed(1))
+            });
+          }
           
-          setData(aggregateData);
+          // Store overall values for pie chart
+          setTotalPotentialGeneration(totalPotential);
+          setTotalCurtailedVolume(totalCurtailed);
+          setShowPieChart(true);
+          
+          // Calculate overall percentage
+          const overallPercentage = totalPotential > 0 
+            ? (totalCurtailed / totalPotential) * 100 
+            : 0;
+          
+          setChartTitle("All Wind Farms Curtailment Analysis");
+          setChartDescription(`${overallPercentage.toFixed(1)}% of total potential generation curtailed on ${formattedDate}`);
+          
+          setData(leadPartyDataArray);
         }
       } catch (err) {
         console.error("Error fetching curtailment data:", err);
@@ -208,56 +231,121 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
             <p className="text-lg text-muted-foreground">{error}</p>
           </div>
         ) : (
-          <div className="h-80">
-            {!loading && data && data.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={data}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 65 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                  <XAxis 
-                    dataKey="name" 
-                    angle={-45} 
-                    textAnchor="end" 
-                    tick={{ fontSize: 10 }}
-                    height={60} 
-                  />
-                  <YAxis yAxisId="left" label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft' }} />
-                  <YAxis yAxisId="right" orientation="right" label={{ value: 'Percentage (%)', angle: -90, position: 'insideRight' }} />
-                  <Tooltip content={renderCustomTooltip} />
-                  <Legend />
-                  <Bar 
-                    yAxisId="left"
-                    name="Potential Generation" 
-                    dataKey="potentialMWh" 
-                    fill="#8884d8" 
-                    opacity={0.7}
-                  />
-                  <Bar 
-                    yAxisId="left"
-                    name="Curtailed Energy" 
-                    dataKey="curtailedMWh" 
-                    fill="#82ca9d" 
-                    opacity={0.9}
-                  />
-                  <Bar 
-                    yAxisId="right"
-                    name="Curtailment %" 
-                    dataKey="percentage" 
-                    fill="#ff7300"
+          <div className="h-auto">
+            {!loading && showPieChart && totalPotentialGeneration > 0 ? (
+              // Show pie chart for "All Farms" view
+              <CurtailmentPieChart
+                totalPotentialGeneration={totalPotentialGeneration}
+                totalCurtailedVolume={totalCurtailedVolume}
+                title={chartTitle}
+                description={chartDescription}
+                loading={loading}
+                error={error}
+              />
+            ) : !loading && data && data.length > 0 ? (
+              // Show bar chart for specific farm or lead party
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={data}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 65 }}
                   >
-                    {data.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-45} 
+                      textAnchor="end" 
+                      tick={{ fontSize: 10 }}
+                      height={60} 
+                    />
+                    <YAxis yAxisId="left" label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft' }} />
+                    <YAxis yAxisId="right" orientation="right" label={{ value: 'Percentage (%)', angle: -90, position: 'insideRight' }} />
+                    <Tooltip content={renderCustomTooltip} />
+                    <Legend />
+                    <Bar 
+                      yAxisId="left"
+                      name="Potential Generation" 
+                      dataKey="potentialMWh" 
+                      fill="#8884d8" 
+                      opacity={0.7}
+                    />
+                    <Bar 
+                      yAxisId="left"
+                      name="Curtailed Energy" 
+                      dataKey="curtailedMWh" 
+                      fill="#82ca9d" 
+                      opacity={0.9}
+                    />
+                    <Bar 
+                      yAxisId="right"
+                      name="Curtailment %" 
+                      dataKey="percentage" 
+                      fill="#ff7300"
+                    >
+                      {data.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             ) : !loading ? (
-              <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="flex flex-col items-center justify-center h-80 text-center">
                 <p className="text-lg text-muted-foreground">No data to display</p>
               </div>
             ) : null}
+            
+            {/* If we're showing the pie chart (All Farms view), add the bar chart with lead party breakdown below */}
+            {showPieChart && data && data.length > 0 && (
+              <div className="mt-8">
+                <h3 className="text-xl font-semibold mb-4">Lead Party Breakdown</h3>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={data}
+                      margin={{ top: 5, right: 30, left: 20, bottom: 65 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45} 
+                        textAnchor="end" 
+                        tick={{ fontSize: 10 }}
+                        height={60} 
+                      />
+                      <YAxis yAxisId="left" label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft' }} />
+                      <YAxis yAxisId="right" orientation="right" label={{ value: 'Percentage (%)', angle: -90, position: 'insideRight' }} />
+                      <Tooltip content={renderCustomTooltip} />
+                      <Legend />
+                      <Bar 
+                        yAxisId="left"
+                        name="Potential Generation" 
+                        dataKey="potentialMWh" 
+                        fill="#8884d8" 
+                        opacity={0.7}
+                      />
+                      <Bar 
+                        yAxisId="left"
+                        name="Curtailed Energy" 
+                        dataKey="curtailedMWh" 
+                        fill="#82ca9d" 
+                        opacity={0.9}
+                      />
+                      <Bar 
+                        yAxisId="right"
+                        name="Curtailment %" 
+                        dataKey="percentage" 
+                        fill="#ff7300"
+                      >
+                        {data.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
