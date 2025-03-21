@@ -3,7 +3,14 @@
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, Bitcoin, Calendar, ArrowRightLeft, PoundSterling, Receipt } from "lucide-react";
+import {
+  Wind,
+  Bitcoin,
+  Calendar,
+  ArrowRightLeft,
+  PoundSterling,
+  Receipt,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatEnergy, formatGBP, formatBitcoin } from "@/lib/utils";
 import {
@@ -121,8 +128,9 @@ export default function SummaryCards({
         : format(date, "PP");
 
   // Check if there's no data for the selected date
-  const hasCurtailmentData = !isSummaryLoading && Number(summaryData.totalCurtailedEnergy) > 0;
-  
+  const hasCurtailmentData =
+    !isSummaryLoading && Number(summaryData.totalCurtailedEnergy) > 0;
+
   // If there's no data, show a message instead of empty cards
   if (!hasCurtailmentData && !isSummaryLoading) {
     return (
@@ -131,10 +139,12 @@ export default function SummaryCards({
         <div className="flex justify-center items-center">
           <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-muted">
             <Calendar className="h-4 w-4 mr-2" />
-            <span className="text-sm font-medium">Data for {timeframeLabel}</span>
+            <span className="text-sm font-medium">
+              Data for {timeframeLabel}
+            </span>
           </div>
         </div>
-      
+
         <Card className="mb-4">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center justify-center p-6 text-center">
@@ -145,23 +155,67 @@ export default function SummaryCards({
                   xmlns="http://www.w3.org/2000/svg"
                 >
                   {/* Wind turbine icon with animation */}
-                  <circle cx="50" cy="50" r="40" fill="currentColor" opacity="0.1" />
-                  
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="currentColor"
+                    opacity="0.1"
+                  />
+
                   {/* Tower */}
-                  <rect x="47" y="55" width="6" height="35" fill="currentColor" rx="1" />
-                  <rect x="40" y="90" width="20" height="5" rx="2" fill="currentColor" />
+                  <rect
+                    x="47"
+                    y="55"
+                    width="6"
+                    height="35"
+                    fill="currentColor"
+                    rx="1"
+                  />
+                  <rect
+                    x="40"
+                    y="90"
+                    width="20"
+                    height="5"
+                    rx="2"
+                    fill="currentColor"
+                  />
 
                   {/* Nacelle (turbine housing) */}
-                  <rect x="42" y="48" width="16" height="4" rx="2" fill="currentColor" transform="rotate(5, 50, 50)" />
+                  <rect
+                    x="42"
+                    y="48"
+                    width="16"
+                    height="4"
+                    rx="2"
+                    fill="currentColor"
+                    transform="rotate(5, 50, 50)"
+                  />
 
                   {/* Hub */}
                   <circle cx="50" cy="50" r="3" fill="currentColor" />
 
                   {/* Rotating blades with animation */}
-                  <g style={{ transformOrigin: "50px 50px", animation: "windTurbineSpin 12s linear infinite" }}>
-                    <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" />
-                    <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(120, 50, 50)" />
-                    <path d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z" fill="currentColor" transform="rotate(240, 50, 50)" />
+                  <g
+                    style={{
+                      transformOrigin: "50px 50px",
+                      animation: "windTurbineSpin 12s linear infinite",
+                    }}
+                  >
+                    <path
+                      d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z"
+                      fill="currentColor"
+                      transform="rotate(120, 50, 50)"
+                    />
+                    <path
+                      d="M50 50 L85 40 Q90 35, 88 30 L52 45 Z"
+                      fill="currentColor"
+                      transform="rotate(240, 50, 50)"
+                    />
                   </g>
 
                   {/* Animation keyframes */}
@@ -173,14 +227,19 @@ export default function SummaryCards({
                   `}</style>
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold mb-2">No Curtailment Data Available</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                No Wind Curtailment Detected{" "}
+              </h3>
               <p className="text-muted-foreground max-w-lg">
-                There were no curtailment events during this period. Try selecting a different date to see wind farm curtailment 
-                data and potential Bitcoin mining comparisons.
+                There were no curtailment events during this period. Try
+                selecting a different date to see wind farm curtailment data and
+                potential Bitcoin mining comparisons.
               </p>
               <div className="flex items-center gap-2 mt-4 text-primary">
                 <Calendar className="h-4 w-4" />
-                <span className="text-sm font-medium">Try selecting a different date or timeframe</span>
+                <span className="text-sm font-medium">
+                  Try selecting a different date or timeframe
+                </span>
               </div>
             </div>
           </CardContent>
@@ -199,21 +258,25 @@ export default function SummaryCards({
           <span className="text-sm font-medium">Data for {timeframeLabel}</span>
         </div>
       </div>
-      
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Energy Curtailed Card */}
         <Card className="overflow-hidden">
           <div className="p-6">
             <div className="flex justify-between items-start mb-2">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Energy Curtailed</h3>
-                <p className="text-xs text-muted-foreground">Total wasted wind energy</p>
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  Energy Curtailed
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Total wasted wind energy
+                </p>
               </div>
               <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
                 <Wind className="h-4 w-4 text-blue-600" />
               </div>
             </div>
-            
+
             {isSummaryLoading ? (
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
@@ -225,10 +288,12 @@ export default function SummaryCards({
                 </div>
                 <div className="flex items-center mt-1">
                   <span className="inline-block mr-1 text-blue-600">•</span>
-                  <span className="text-xs text-muted-foreground">Untapped energy resource</span>
+                  <span className="text-xs text-muted-foreground">
+                    Untapped energy resource
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {Number(summaryData.totalCurtailedEnergy) > 0 
+                  {Number(summaryData.totalCurtailedEnergy) > 0
                     ? `That's enough to power approximately ${Math.round(Number(summaryData.totalCurtailedEnergy) / 3.4)} homes for a month`
                     : "No wasted energy recorded for this period"}
                 </p>
@@ -242,37 +307,48 @@ export default function SummaryCards({
           <div className="p-6">
             <div className="flex justify-between items-start mb-2">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Subsidies Paid</h3>
-                <p className="text-xs text-muted-foreground">Consumer cost for curtailment</p>
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  Subsidies Paid
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Consumer cost for curtailment
+                </p>
               </div>
               <div className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center">
                 <PoundSterling className="h-4 w-4 text-red-600" />
               </div>
             </div>
-            
+
             {isSummaryLoading ? (
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
               <div className="mt-4">
-                <div 
-                  className="text-2xl font-bold text-red-600 relative group" 
-                  style={{ display: 'inline-block' }}
+                <div
+                  className="text-2xl font-bold text-red-600 relative group"
+                  style={{ display: "inline-block" }}
                 >
                   {Number.isNaN(Number(summaryData.totalPayment))
                     ? "£0"
                     : formatGBP(Number(summaryData.totalPayment))}
-                  <div 
-                    className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 bg-red-50 border border-red-200 text-red-600 font-medium px-2 py-1 text-sm rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50"
-                  >
-                    £{Number.isNaN(Number(summaryData.totalPayment)) ? "0" : Number(summaryData.totalPayment).toLocaleString(undefined, {maximumFractionDigits: 2})}
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 bg-red-50 border border-red-200 text-red-600 font-medium px-2 py-1 text-sm rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                    £
+                    {Number.isNaN(Number(summaryData.totalPayment))
+                      ? "0"
+                      : Number(summaryData.totalPayment).toLocaleString(
+                          undefined,
+                          { maximumFractionDigits: 2 },
+                        )}
                   </div>
                 </div>
                 <div className="flex items-center mt-1">
                   <span className="inline-block mr-1 text-red-600">•</span>
-                  <span className="text-xs text-muted-foreground">Paid to idle wind farms</span>
+                  <span className="text-xs text-muted-foreground">
+                    Paid to idle wind farms
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {Number(summaryData.totalCurtailedEnergy) > 0 && Number(summaryData.totalPayment) > 0
+                  {Number(summaryData.totalCurtailedEnergy) > 0 &&
+                  Number(summaryData.totalPayment) > 0
                     ? `Approximately £${(Number(summaryData.totalPayment) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh of curtailed energy`
                     : "No subsidy payments recorded for this period"}
                 </p>
@@ -286,14 +362,18 @@ export default function SummaryCards({
           <div className="p-6">
             <div className="flex justify-between items-start mb-2">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Potential Bitcoin</h3>
-                <p className="text-xs text-muted-foreground">Mining using {minerModel.replace("_", " ")}</p>
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  Potential Bitcoin
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Mining using {minerModel.replace("_", " ")}
+                </p>
               </div>
               <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center">
                 <Bitcoin className="h-4 w-4 text-amber-600" />
               </div>
             </div>
-            
+
             {isBitcoinLoading ? (
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
@@ -305,10 +385,13 @@ export default function SummaryCards({
                 </div>
                 <div className="flex items-center mt-1">
                   <span className="inline-block mr-1 text-amber-600">•</span>
-                  <span className="text-xs text-muted-foreground">≈ {formatGBP(Number(bitcoinData.valueAtCurrentPrice))}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ≈ {formatGBP(Number(bitcoinData.valueAtCurrentPrice))}
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {Number(bitcoinData.bitcoinMined) > 0 && Number(summaryData.totalCurtailedEnergy) > 0
+                  {Number(bitcoinData.bitcoinMined) > 0 &&
+                  Number(summaryData.totalCurtailedEnergy) > 0
                     ? `Potential value: £${(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh of curtailed energy`
                     : "Potential value from wasted energy"}
                 </p>
@@ -322,65 +405,86 @@ export default function SummaryCards({
           <div className="p-6">
             <div className="flex justify-between items-start mb-2">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Value Ratio</h3>
-                <p className="text-xs text-muted-foreground">Bitcoin value vs. subsidy cost</p>
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  Value Ratio
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Bitcoin value vs. subsidy cost
+                </p>
               </div>
               {(() => {
                 // Calculate ratio for icon
-                const valueRatio = Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) || 
+                const valueRatio =
+                  Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) ||
                   Number.isNaN(Number(summaryData.totalPayment)) ||
                   Number(summaryData.totalPayment) === 0
                     ? 0
-                    : Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment);
-                
+                    : Number(bitcoinData.valueAtCurrentPrice) /
+                      Number(summaryData.totalPayment);
+
                 // Use green for ratios >= 1.0 and slate for < 1.0
-                const bgColor = valueRatio >= 1.0 ? "bg-green-100" : "bg-slate-100";
-                const iconColor = valueRatio >= 1.0 ? "text-green-600" : "text-slate-600";
+                const bgColor =
+                  valueRatio >= 1.0 ? "bg-green-100" : "bg-slate-100";
+                const iconColor =
+                  valueRatio >= 1.0 ? "text-green-600" : "text-slate-600";
 
                 return (
-                  <div className={`w-7 h-7 rounded-full ${bgColor} flex items-center justify-center`}>
+                  <div
+                    className={`w-7 h-7 rounded-full ${bgColor} flex items-center justify-center`}
+                  >
                     <ArrowRightLeft className={`h-4 w-4 ${iconColor}`} />
                   </div>
                 );
               })()}
             </div>
-            
+
             {isBitcoinLoading || isSummaryLoading ? (
               <Skeleton className="h-8 w-32 mb-1" />
             ) : (
               <div className="mt-4">
                 {(() => {
                   // Calculate ratio for reuse
-                  const valueRatio = Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) || 
+                  const valueRatio =
+                    Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) ||
                     Number.isNaN(Number(summaryData.totalPayment)) ||
                     Number(summaryData.totalPayment) === 0
                       ? 0
-                      : Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalPayment);
-                  
+                      : Number(bitcoinData.valueAtCurrentPrice) /
+                        Number(summaryData.totalPayment);
+
                   // Determine color and message based on ratio
                   const isHighValue = valueRatio >= 1.0;
-                  const textColor = isHighValue ? "text-green-600" : "text-slate-500";
-                  const dotColor = isHighValue ? "text-green-600" : "text-slate-500";
-                  const message = isHighValue 
-                    ? "High value from mining" 
+                  const textColor = isHighValue
+                    ? "text-green-600"
+                    : "text-slate-500";
+                  const dotColor = isHighValue
+                    ? "text-green-600"
+                    : "text-slate-500";
+                  const message = isHighValue
+                    ? "High value from mining"
                     : "Subsidies exceed mining value";
-                  
+
                   return (
                     <>
                       <div className={`text-2xl font-bold ${textColor}`}>
-                        {valueRatio === 0 ? "0.00×" : `${valueRatio.toFixed(2)}×`}
+                        {valueRatio === 0
+                          ? "0.00×"
+                          : `${valueRatio.toFixed(2)}×`}
                       </div>
                       <div className="flex items-center mt-1">
-                        <span className={`inline-block mr-1 ${dotColor}`}>•</span>
-                        <span className="text-xs text-muted-foreground">{message}</span>
+                        <span className={`inline-block mr-1 ${dotColor}`}>
+                          •
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {message}
+                        </span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">
-                        {valueRatio === 0 
-                          ? "No comparison data available" 
+                        {valueRatio === 0
+                          ? "No comparison data available"
                           : isHighValue
                             ? `Bitcoin value is ${valueRatio.toFixed(2)}× the subsidy payment`
-                            : `Subsidy payments exceed Bitcoin value by ${(1/valueRatio).toFixed(2)}×`
-                        }
+                            : `Subsidy payments exceed Bitcoin value by ${(1 / valueRatio).toFixed(2)}×`}
                       </p>
                     </>
                   );
