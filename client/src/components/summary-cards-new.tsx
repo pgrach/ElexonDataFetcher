@@ -284,7 +284,7 @@ export default function SummaryCards({
                 </div>
                 <div className="flex items-center">
                   <div className="h-3 w-3 rounded-full bg-blue-600 mr-2"></div>
-                  <p className="text-base text-muted-foreground">
+                  <p className="text-lg text-muted-foreground">
                     Untapped energy resource
                   </p>
                 </div>
@@ -292,12 +292,12 @@ export default function SummaryCards({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <p className="text-base text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                        <p className="text-lg text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
                           Powers ~{Math.round(Number(summaryData.totalCurtailedEnergy) / 3.4)} homes/month
                         </p>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="text-sm">
+                        <p className="text-base">
                           This energy could power approximately {Math.round(Number(summaryData.totalCurtailedEnergy) / 3.4)} homes for an entire month
                         </p>
                       </TooltipContent>
@@ -336,7 +336,7 @@ export default function SummaryCards({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="text-sm">
+                      <p className="text-base">
                         Full amount: £
                         {Number.isNaN(Number(summaryData.totalPayment))
                           ? "0"
@@ -350,13 +350,13 @@ export default function SummaryCards({
                 </TooltipProvider>
                 <div className="flex items-center">
                   <div className="h-3 w-3 rounded-full bg-red-600 mr-2"></div>
-                  <p className="text-base text-muted-foreground">
+                  <p className="text-lg text-muted-foreground">
                     Paid to idle wind farms
                   </p>
                 </div>
                 {Number(summaryData.totalCurtailedEnergy) > 0 &&
                   Number(summaryData.totalPayment) > 0 && (
-                    <p className="text-base text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                    <p className="text-lg text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
                       £{(Number(summaryData.totalPayment) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh
                     </p>
                   )}
@@ -389,13 +389,13 @@ export default function SummaryCards({
                 </div>
                 <div className="flex items-center">
                   <div className="h-3 w-3 rounded-full bg-amber-600 mr-2"></div>
-                  <p className="text-base text-muted-foreground">
+                  <p className="text-lg text-muted-foreground">
                     ≈ {formatGBP(Number(bitcoinData.valueAtCurrentPrice))}
                   </p>
                 </div>
                 {Number(bitcoinData.bitcoinMined) > 0 &&
                   Number(summaryData.totalCurtailedEnergy) > 0 && (
-                    <p className="text-base text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                    <p className="text-lg text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
                       £{(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh
                     </p>
                   )}
@@ -443,12 +443,12 @@ export default function SummaryCards({
                       </div>
                       <div className="flex items-center">
                         <div className={`h-3 w-3 rounded-full mr-2 ${valueRatio >= 1.0 ? "bg-green-600" : "bg-slate-600"}`}></div>
-                        <p className="text-base text-muted-foreground">
+                        <p className="text-lg text-muted-foreground">
                           {valueRatio >= 1.0 ? "High value from mining" : "Subsidies exceed mining value"}
                         </p>
                       </div>
                       {valueRatio > 0 && (
-                        <p className="text-base text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                        <p className="text-lg text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
                           {valueRatio >= 1.0
                             ? `Bitcoin > subsidy by ${valueRatio.toFixed(2)}×`
                             : `Subsidy > Bitcoin by ${(1 / valueRatio).toFixed(2)}×`}
