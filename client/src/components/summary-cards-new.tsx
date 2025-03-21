@@ -248,6 +248,15 @@ export default function SummaryCards({
     );
   }
 
+  // Calculate ratio for the Value Ratio card
+  const valueRatio =
+    Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) ||
+    Number.isNaN(Number(summaryData.totalPayment)) ||
+    Number(summaryData.totalPayment) === 0
+      ? 0
+      : Number(bitcoinData.valueAtCurrentPrice) /
+        Number(summaryData.totalPayment);
+
   // Regular view when data is available
   return (
     <div className="space-y-4 mb-8">
@@ -405,61 +414,43 @@ export default function SummaryCards({
         </Card>
 
         {/* Value Ratio Card */}
-        <Card className="overflow-hidden border-t-4 shadow-md">
-          {(() => {
-            // Calculate ratio for card styling
-            const valueRatio =
-              Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) ||
-              Number.isNaN(Number(summaryData.totalPayment)) ||
-              Number(summaryData.totalPayment) === 0
-                ? 0
-                : Number(bitcoinData.valueAtCurrentPrice) /
-                  Number(summaryData.totalPayment);
-
-            // Use green for ratios >= 1.0 and slate for < 1.0
-            const borderColor = valueRatio >= 1.0 ? "border-t-green-500" : "border-t-slate-500";
-            
-            return (
-              <div className={borderColor}>
-                <CardHeader className="pb-2">
-                  <div className="flex justify-between items-center">
-                    <CardTitle className="text-lg font-semibold">
-                      Value Ratio
-                    </CardTitle>
-                    <div className={`p-2 rounded-full ${valueRatio >= 1.0 ? "bg-green-100" : "bg-slate-100"} flex items-center justify-center`}>
-                      <ArrowRightLeft className={`h-5 w-5 ${valueRatio >= 1.0 ? "text-green-600" : "text-slate-600"}`} />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {isBitcoinLoading || isSummaryLoading ? (
-                    <Skeleton className="h-12 w-36 mb-2" />
-                  ) : (
-                    <>
-                      <div className={`text-4xl font-bold mb-2 ${valueRatio >= 1.0 ? "text-green-600" : "text-slate-600"}`}>
-                        {valueRatio === 0
-                          ? "0.00×"
-                          : `${valueRatio.toFixed(2)}×`}
-                      </div>
-                      <div className="flex items-center">
-                        <div className={`h-3 w-3 rounded-full mr-2 ${valueRatio >= 1.0 ? "bg-green-600" : "bg-slate-600"}`}></div>
-                        <p className="text-lg text-muted-foreground">
-                          {valueRatio >= 1.0 ? "High value from mining" : "Subsidies exceed mining value"}
-                        </p>
-                      </div>
-                      {valueRatio > 0 && (
-                        <p className="text-lg text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
-                          {valueRatio >= 1.0
-                            ? `Bitcoin > subsidy by ${valueRatio.toFixed(2)}×`
-                            : `Subsidy > Bitcoin by ${(1 / valueRatio).toFixed(2)}×`}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </CardContent>
+        <Card className={`overflow-hidden border-t-4 shadow-md ${valueRatio >= 1.0 ? "border-t-green-500" : "border-t-slate-500"}`}>
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-lg font-semibold">
+                Value Ratio
+              </CardTitle>
+              <div className={`p-2 rounded-full ${valueRatio >= 1.0 ? "bg-green-100" : "bg-slate-100"} flex items-center justify-center`}>
+                <ArrowRightLeft className={`h-5 w-5 ${valueRatio >= 1.0 ? "text-green-600" : "text-slate-600"}`} />
               </div>
-            );
-          })()}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isBitcoinLoading || isSummaryLoading ? (
+              <Skeleton className="h-12 w-36 mb-2" />
+            ) : (
+              <>
+                <div className={`text-4xl font-bold mb-2 ${valueRatio >= 1.0 ? "text-green-600" : "text-slate-600"}`}>
+                  {valueRatio === 0
+                    ? "0.00×"
+                    : `${valueRatio.toFixed(2)}×`}
+                </div>
+                <div className="flex items-center">
+                  <div className={`h-3 w-3 rounded-full mr-2 ${valueRatio >= 1.0 ? "bg-green-600" : "bg-slate-600"}`}></div>
+                  <p className="text-lg text-muted-foreground">
+                    {valueRatio >= 1.0 ? "High value from mining" : "Subsidies exceed mining value"}
+                  </p>
+                </div>
+                {valueRatio > 0 && (
+                  <p className="text-lg text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                    {valueRatio >= 1.0
+                      ? `Bitcoin > subsidy by ${valueRatio.toFixed(2)}×`
+                      : `Subsidy > Bitcoin by ${(1 / valueRatio).toFixed(2)}×`}
+                  </p>
+                )}
+              </>
+            )}
+          </CardContent>
         </Card>
       </div>
     </div>
