@@ -2,10 +2,12 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startDataUpdateService } from "./services/dataUpdater";
+import { startWindDataUpdateService } from "./services/windDataUpdater";
 import { requestLogger } from "./middleware/requestLogger";
 import { errorHandler } from "./middleware/errorHandler";
 import { performanceMonitor } from "./middleware/performanceMonitor";
 import { logger } from "./utils/logger";
+import { runMigration } from "../run_wind_data_migration";
 
 // Initialize Express app
 const app = express();
@@ -50,6 +52,7 @@ app.use((req, res, next) => {
 });
 
 let dataUpdateServiceStarted = false;
+let windDataServiceStarted = false;
 let server: any;
 
 const startServer = async () => {
@@ -81,6 +84,15 @@ const startServer = async () => {
       });
     });
 
+    // Run wind data migration to ensure the database table exists
+    try {
+      console.log("Running wind generation data migration...");
+      await runMigration();
+      console.log("Wind generation data migration completed successfully");
+    } catch (error) {
+      console.error("Failed to run wind generation data migration:", error);
+    }
+
     // Start the data update service after server is ready
     if (!dataUpdateServiceStarted) {
       try {
@@ -92,7 +104,6 @@ const startServer = async () => {
           process.on('SIGTERM', () => {
             console.log('Shutting down data update service...');
             clearInterval(updateServiceInterval);
-            process.exit(0);
           });
 
           dataUpdateServiceStarted = true;
@@ -102,6 +113,19 @@ const startServer = async () => {
         }
       } catch (error) {
         console.error("Failed to start data update service:", error);
+      }
+    }
+    
+    // Start the wind data update service
+    if (!windDataServiceStarted) {
+      try {
+        console.log("Initializing wind data update service...");
+        startWindDataUpdateService();
+        
+        windDataServiceStarted = true;
+        console.log("Wind data update service started successfully");
+      } catch (error) {
+        console.error("Failed to start wind data update service:", error);
       }
     }
   } catch (error) {

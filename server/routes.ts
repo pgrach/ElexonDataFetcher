@@ -6,6 +6,7 @@ import curtailmentRoutes from "./routes/curtailmentRoutes";
 import optimizedMiningRoutes from "./routes/optimizedMiningRoutes";
 import productionRoutes from "./routes/productionRoutes";
 import farmDataTableRoutes from "./routes/farmDataTableRoutes";
+import windGenerationRoutes from "./routes/windGenerationRoutes";
 
 export function registerRoutes(app: Express): Server {
   // Get lead parties endpoint
@@ -43,6 +44,9 @@ export function registerRoutes(app: Express): Server {
   
   // Register farm data table routes
   app.use('/api/farm-tables', farmDataTableRoutes);
+  
+  // Register wind generation data routes
+  app.use('/api/wind-generation', windGenerationRoutes);
 
   // Re-ingest data endpoint
   app.post("/api/ingest/:date", async (req, res) => {

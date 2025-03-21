@@ -50,14 +50,15 @@ async function runMigration() {
   } catch (error) {
     logger.error('Error creating wind_generation_data table', { 
       module: 'windDataMigration',
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error : new Error(String(error))
     });
     throw error;
   }
 }
 
 // Run the migration if the script is executed directly
-if (require.main === module) {
+// Note: Using import.meta.url for ES module compatibility
+if (import.meta.url.endsWith(process.argv[1])) {
   runMigration()
     .then(() => {
       console.log('Migration completed successfully');
