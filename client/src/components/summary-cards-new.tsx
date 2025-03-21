@@ -264,7 +264,7 @@ export default function SummaryCards({
         <Card className="overflow-hidden border-t-4 border-t-blue-500 shadow-md">
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-base font-medium">
+              <CardTitle className="text-lg font-semibold">
                 Energy Curtailed
               </CardTitle>
               <div className="p-2 rounded-full bg-blue-100 flex items-center justify-center">
@@ -277,14 +277,14 @@ export default function SummaryCards({
               <Skeleton className="h-12 w-36 mb-2" />
             ) : (
               <>
-                <div className="text-3xl font-bold text-blue-600 mb-2">
+                <div className="text-4xl font-bold text-blue-600 mb-2">
                   {Number.isNaN(Number(summaryData.totalCurtailedEnergy))
                     ? "0 MWh"
                     : formatEnergy(Number(summaryData.totalCurtailedEnergy))}
                 </div>
                 <div className="flex items-center">
-                  <div className="h-2 w-2 rounded-full bg-blue-600 mr-2"></div>
-                  <p className="text-sm text-muted-foreground">
+                  <div className="h-3 w-3 rounded-full bg-blue-600 mr-2"></div>
+                  <p className="text-base text-muted-foreground">
                     Untapped energy resource
                   </p>
                 </div>
@@ -313,7 +313,7 @@ export default function SummaryCards({
         <Card className="overflow-hidden border-t-4 border-t-red-500 shadow-md">
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-base font-medium">
+              <CardTitle className="text-lg font-semibold">
                 Subsidies Paid
               </CardTitle>
               <div className="p-2 rounded-full bg-red-100 flex items-center justify-center">
@@ -329,14 +329,14 @@ export default function SummaryCards({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="text-3xl font-bold text-red-600 mb-2">
+                      <div className="text-4xl font-bold text-red-600 mb-2">
                         {Number.isNaN(Number(summaryData.totalPayment))
                           ? "£0"
                           : formatGBP(Number(summaryData.totalPayment))}
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="text-xs">
+                      <p className="text-sm">
                         Full amount: £
                         {Number.isNaN(Number(summaryData.totalPayment))
                           ? "0"
@@ -349,8 +349,8 @@ export default function SummaryCards({
                   </Tooltip>
                 </TooltipProvider>
                 <div className="flex items-center">
-                  <div className="h-2 w-2 rounded-full bg-red-600 mr-2"></div>
-                  <p className="text-sm text-muted-foreground">
+                  <div className="h-3 w-3 rounded-full bg-red-600 mr-2"></div>
+                  <p className="text-base text-muted-foreground">
                     Paid to idle wind farms
                   </p>
                 </div>
@@ -369,7 +369,7 @@ export default function SummaryCards({
         <Card className="overflow-hidden border-t-4 border-t-amber-500 shadow-md">
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-base font-medium">
+              <CardTitle className="text-lg font-semibold">
                 Potential Bitcoin
               </CardTitle>
               <div className="p-2 rounded-full bg-amber-100 flex items-center justify-center">
@@ -382,14 +382,14 @@ export default function SummaryCards({
               <Skeleton className="h-12 w-36 mb-2" />
             ) : (
               <>
-                <div className="text-3xl font-bold text-amber-600 mb-2">
+                <div className="text-4xl font-bold text-amber-600 mb-2">
                   {Number.isNaN(Number(bitcoinData.bitcoinMined))
                     ? "0 BTC"
                     : formatBitcoin(Number(bitcoinData.bitcoinMined))}
                 </div>
                 <div className="flex items-center">
-                  <div className="h-2 w-2 rounded-full bg-amber-600 mr-2"></div>
-                  <p className="text-sm text-muted-foreground">
+                  <div className="h-3 w-3 rounded-full bg-amber-600 mr-2"></div>
+                  <p className="text-base text-muted-foreground">
                     ≈ {formatGBP(Number(bitcoinData.valueAtCurrentPrice))}
                   </p>
                 </div>
@@ -423,7 +423,7 @@ export default function SummaryCards({
               <div className={borderColor}>
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-center">
-                    <CardTitle className="text-base font-medium">
+                    <CardTitle className="text-lg font-semibold">
                       Value Ratio
                     </CardTitle>
                     <div className={`p-2 rounded-full ${valueRatio >= 1.0 ? "bg-green-100" : "bg-slate-100"} flex items-center justify-center`}>
@@ -436,14 +436,14 @@ export default function SummaryCards({
                     <Skeleton className="h-12 w-36 mb-2" />
                   ) : (
                     <>
-                      <div className={`text-3xl font-bold mb-2 ${valueRatio >= 1.0 ? "text-green-600" : "text-slate-600"}`}>
+                      <div className={`text-4xl font-bold mb-2 ${valueRatio >= 1.0 ? "text-green-600" : "text-slate-600"}`}>
                         {valueRatio === 0
                           ? "0.00×"
                           : `${valueRatio.toFixed(2)}×`}
                       </div>
                       <div className="flex items-center">
-                        <div className={`h-2 w-2 rounded-full mr-2 ${valueRatio >= 1.0 ? "bg-green-600" : "bg-slate-600"}`}></div>
-                        <p className="text-sm text-muted-foreground">
+                        <div className={`h-3 w-3 rounded-full mr-2 ${valueRatio >= 1.0 ? "bg-green-600" : "bg-slate-600"}`}></div>
+                        <p className="text-base text-muted-foreground">
                           {valueRatio >= 1.0 ? "High value from mining" : "Subsidies exceed mining value"}
                         </p>
                       </div>
