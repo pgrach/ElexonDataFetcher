@@ -16,7 +16,7 @@ import SummaryCards from "@/components/summary-cards";
 import FarmSelector from "@/components/farm-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import CurtailmentInfoBanner from "@/components/curtailment-info-banner";
+// CurtailmentInfoBanner removed as requested
 // Guide component removed as requested
 
 export default function DashboardOverview() {
@@ -136,8 +136,7 @@ export default function DashboardOverview() {
       <div className="container mx-auto py-8">
         <h1 className="text-4xl font-bold mb-8">CurtailCoin Dashboard</h1>
         
-        {/* Educational components */}
-        <CurtailmentInfoBanner />
+        {/* Educational components removed as requested */}
         
         {/* Summary cards */}
         <SummaryCards 
