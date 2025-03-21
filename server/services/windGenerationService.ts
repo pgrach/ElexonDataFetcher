@@ -212,27 +212,43 @@ async function saveAggregatedData(aggregatedData: Map<string, AggregatedWindData
       dataSource: 'ELEXON'
     }));
     
-    // Use upsert to handle existing records
+    // Use raw SQL for upsert to handle existing records
     // This will insert new records or update existing ones if the unique constraint is violated
-    const result = await db
-      .insert(windGenerationData)
-      .values(recordsToInsert)
-      .onConflict({
-        target: [windGenerationData.settlementDate, windGenerationData.settlementPeriod],
-        set: {
-          windOnshore: sql`EXCLUDED.wind_onshore`,
-          windOffshore: sql`EXCLUDED.wind_offshore`,
-          totalWind: sql`EXCLUDED.total_wind`,
-          lastUpdated: sql`CURRENT_TIMESTAMP`
-        }
-      })
-      .returning({ id: windGenerationData.id });
+    const result = await db.execute(sql`
+      INSERT INTO wind_generation_data 
+        (settlement_date, settlement_period, wind_onshore, wind_offshore, total_wind, last_updated, data_source)
+      VALUES 
+        ${sql.join(
+          recordsToInsert.map(
+            r => sql`(
+              ${r.settlementDate}, 
+              ${r.settlementPeriod}, 
+              ${r.windOnshore}, 
+              ${r.windOffshore}, 
+              ${r.totalWind}, 
+              ${r.lastUpdated}, 
+              ${r.dataSource}
+            )`
+          ),
+          sql`, `
+        )}
+      ON CONFLICT (settlement_date, settlement_period) 
+      DO UPDATE SET 
+        wind_onshore = EXCLUDED.wind_onshore,
+        wind_offshore = EXCLUDED.wind_offshore,
+        total_wind = EXCLUDED.total_wind,
+        last_updated = CURRENT_TIMESTAMP
+      RETURNING id
+    `);
     
-    logger.info(`Successfully saved ${result.length} wind generation records`, {
+    // Since raw SQL execution returns a different structure, handle the result appropriately
+    const rowCount = result.rows?.length || 0;
+    
+    logger.info(`Successfully saved ${rowCount} wind generation records`, {
       module: 'windGenerationService'
     });
     
-    return result.length;
+    return rowCount;
   } catch (error) {
     logger.error('Error saving wind generation data', {
       module: 'windGenerationService',
