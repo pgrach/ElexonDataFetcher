@@ -127,11 +127,6 @@ export default function CurtailmentPieChart({
                 </ResponsiveContainer>
               </div>
             </div>
-            
-            {/* Subtle date stamp */}
-            <div className="text-center text-muted-foreground text-sm mt-8">
-              Data for {format(date, "MMMM d, yyyy")}
-            </div>
           </div>
         </div>
       )}
