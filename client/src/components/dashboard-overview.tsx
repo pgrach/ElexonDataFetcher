@@ -14,7 +14,6 @@ import MinerModelSelector from "@/components/miner-model-selector";
 import { DatePicker } from "@/components/date-picker";
 import SummaryCards from "@/components/summary-cards";
 import FarmSelector from "@/components/farm-selector";
-import LeadPartySelector from "@/components/lead-party-selector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import CurtailmentInfoBanner from "@/components/curtailment-info-banner";
@@ -34,7 +33,7 @@ export default function DashboardOverview() {
   // Initially set to monthly, but we'll update this based on data availability
   const [timeframe, setTimeframe] = useState("monthly");
   
-  const [selectedCurtailmentLeadParty, setSelectedCurtailmentLeadParty] = useState("All Lead Parties");
+  // Removed Lead Party selector for Curtailment Analysis
 
   // Derived values
   const formattedDate = format(date, "yyyy-MM-dd");
@@ -188,26 +187,17 @@ export default function DashboardOverview() {
               </TabsContent>
               
               <TabsContent value="curtailment" className="space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 items-end">
-                  <div className="col-span-1 md:col-span-2">
-                    <h2 className="text-3xl font-bold mb-3">Wind Farm Curtailment Percentage Analysis</h2>
-                    <p className="text-lg text-muted-foreground">
-                      Compare physical notifications (PN) data with actual curtailment volumes to analyze wasted wind farm capacity.
-                    </p>
-                  </div>
-                  <div>
-                    <LeadPartySelector
-                      value={selectedCurtailmentLeadParty}
-                      onValueChange={setSelectedCurtailmentLeadParty}
-                      date={date}
-                    />
-                  </div>
+                <div className="mb-6">
+                  <h2 className="text-3xl font-bold mb-3">Wind Farm Curtailment Percentage Analysis</h2>
+                  <p className="text-lg text-muted-foreground">
+                    Compare physical notifications (PN) data with actual curtailment volumes to analyze wasted wind farm capacity.
+                  </p>
                 </div>
                 
-                {/* Curtailment Percentage Chart */}
+                {/* Curtailment Percentage Chart - always showing "All Farms" view */}
                 <CurtailmentPercentageChart 
                   date={date}
-                  leadPartyName={selectedCurtailmentLeadParty === "All Lead Parties" ? undefined : selectedCurtailmentLeadParty}
+                  leadPartyName={undefined}
                   farmId={undefined}
                 />
                 
