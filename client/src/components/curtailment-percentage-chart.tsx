@@ -294,58 +294,6 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
                 <p className="text-lg text-muted-foreground">No data to display</p>
               </div>
             ) : null}
-            
-            {/* If we're showing the pie chart (All Farms view), add the bar chart with lead party breakdown below */}
-            {showPieChart && data && data.length > 0 && (
-              <div className="mt-8">
-                <h3 className="text-xl font-semibold mb-4">Lead Party Breakdown</h3>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={data}
-                      margin={{ top: 5, right: 30, left: 20, bottom: 65 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                      <XAxis 
-                        dataKey="name" 
-                        angle={-45} 
-                        textAnchor="end" 
-                        tick={{ fontSize: 10 }}
-                        height={60} 
-                      />
-                      <YAxis yAxisId="left" label={{ value: 'Energy (MWh)', angle: -90, position: 'insideLeft' }} />
-                      <YAxis yAxisId="right" orientation="right" label={{ value: 'Percentage (%)', angle: -90, position: 'insideRight' }} />
-                      <Tooltip content={renderCustomTooltip} />
-                      <Legend />
-                      <Bar 
-                        yAxisId="left"
-                        name="Potential Generation" 
-                        dataKey="potentialMWh" 
-                        fill="#8884d8" 
-                        opacity={0.7}
-                      />
-                      <Bar 
-                        yAxisId="left"
-                        name="Curtailed Energy" 
-                        dataKey="curtailedMWh" 
-                        fill="#82ca9d" 
-                        opacity={0.9}
-                      />
-                      <Bar 
-                        yAxisId="right"
-                        name="Curtailment %" 
-                        dataKey="percentage" 
-                        fill="#ff7300"
-                      >
-                        {data.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </CardContent>
