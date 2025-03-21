@@ -261,237 +261,205 @@ export default function SummaryCards({
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Energy Curtailed Card */}
-        <Card className="overflow-hidden">
-          <div className="p-6">
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Energy Curtailed
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Total wasted wind energy
-                </p>
-              </div>
-              <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
-                <Wind className="h-4 w-4 text-blue-600" />
+        <Card className="overflow-hidden border-t-4 border-t-blue-500 shadow-md">
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-base font-medium">
+                Energy Curtailed
+              </CardTitle>
+              <div className="p-2 rounded-full bg-blue-100 flex items-center justify-center">
+                <Wind className="h-5 w-5 text-blue-600" />
               </div>
             </div>
-
+          </CardHeader>
+          <CardContent>
             {isSummaryLoading ? (
-              <Skeleton className="h-8 w-32 mb-1" />
+              <Skeleton className="h-12 w-36 mb-2" />
             ) : (
-              <div className="mt-4">
-                <div className="text-2xl font-bold text-blue-600">
+              <>
+                <div className="text-3xl font-bold text-blue-600 mb-2">
                   {Number.isNaN(Number(summaryData.totalCurtailedEnergy))
                     ? "0 MWh"
                     : formatEnergy(Number(summaryData.totalCurtailedEnergy))}
                 </div>
-                <div className="flex items-center mt-1">
-                  <span className="inline-block mr-1 text-blue-600">•</span>
-                  <span className="text-xs text-muted-foreground">
+                <div className="flex items-center">
+                  <div className="h-2 w-2 rounded-full bg-blue-600 mr-2"></div>
+                  <p className="text-sm text-muted-foreground">
                     Untapped energy resource
-                  </span>
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {Number(summaryData.totalCurtailedEnergy) > 0
-                    ? `That's enough to power approximately ${Math.round(Number(summaryData.totalCurtailedEnergy) / 3.4)} homes for a month`
-                    : "No wasted energy recorded for this period"}
-                </p>
-              </div>
+                {Number(summaryData.totalCurtailedEnergy) > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="text-sm text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                          Powers ~{Math.round(Number(summaryData.totalCurtailedEnergy) / 3.4)} homes/month
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          This energy could power approximately {Math.round(Number(summaryData.totalCurtailedEnergy) / 3.4)} homes for an entire month
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </>
             )}
-          </div>
+          </CardContent>
         </Card>
 
         {/* Subsidies Paid Card */}
-        <Card className="overflow-hidden">
-          <div className="p-6">
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Subsidies Paid
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Consumer cost for curtailment
-                </p>
-              </div>
-              <div className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center">
-                <PoundSterling className="h-4 w-4 text-red-600" />
+        <Card className="overflow-hidden border-t-4 border-t-red-500 shadow-md">
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-base font-medium">
+                Subsidies Paid
+              </CardTitle>
+              <div className="p-2 rounded-full bg-red-100 flex items-center justify-center">
+                <PoundSterling className="h-5 w-5 text-red-600" />
               </div>
             </div>
-
+          </CardHeader>
+          <CardContent>
             {isSummaryLoading ? (
-              <Skeleton className="h-8 w-32 mb-1" />
+              <Skeleton className="h-12 w-36 mb-2" />
             ) : (
-              <div className="mt-4">
-                <div
-                  className="text-2xl font-bold text-red-600 relative group"
-                  style={{ display: "inline-block" }}
-                >
-                  {Number.isNaN(Number(summaryData.totalPayment))
-                    ? "£0"
-                    : formatGBP(Number(summaryData.totalPayment))}
-                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 bg-red-50 border border-red-200 text-red-600 font-medium px-2 py-1 text-sm rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                    £
-                    {Number.isNaN(Number(summaryData.totalPayment))
-                      ? "0"
-                      : Number(summaryData.totalPayment).toLocaleString(
-                          undefined,
-                          { maximumFractionDigits: 2 },
-                        )}
-                  </div>
-                </div>
-                <div className="flex items-center mt-1">
-                  <span className="inline-block mr-1 text-red-600">•</span>
-                  <span className="text-xs text-muted-foreground">
+              <>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="text-3xl font-bold text-red-600 mb-2">
+                        {Number.isNaN(Number(summaryData.totalPayment))
+                          ? "£0"
+                          : formatGBP(Number(summaryData.totalPayment))}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">
+                        Full amount: £
+                        {Number.isNaN(Number(summaryData.totalPayment))
+                          ? "0"
+                          : Number(summaryData.totalPayment).toLocaleString(
+                              undefined,
+                              { maximumFractionDigits: 2 }
+                            )}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <div className="flex items-center">
+                  <div className="h-2 w-2 rounded-full bg-red-600 mr-2"></div>
+                  <p className="text-sm text-muted-foreground">
                     Paid to idle wind farms
-                  </span>
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {Number(summaryData.totalCurtailedEnergy) > 0 &&
-                  Number(summaryData.totalPayment) > 0
-                    ? `Approximately £${(Number(summaryData.totalPayment) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh of curtailed energy`
-                    : "No subsidy payments recorded for this period"}
-                </p>
-              </div>
+                {Number(summaryData.totalCurtailedEnergy) > 0 &&
+                  Number(summaryData.totalPayment) > 0 && (
+                    <p className="text-sm text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                      £{(Number(summaryData.totalPayment) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh
+                    </p>
+                  )}
+              </>
             )}
-          </div>
+          </CardContent>
         </Card>
 
         {/* Potential Bitcoin Card */}
-        <Card className="overflow-hidden">
-          <div className="p-6">
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Potential Bitcoin
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Mining using {minerModel.replace("_", " ")}
-                </p>
-              </div>
-              <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center">
-                <Bitcoin className="h-4 w-4 text-amber-600" />
+        <Card className="overflow-hidden border-t-4 border-t-amber-500 shadow-md">
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-base font-medium">
+                Potential Bitcoin
+              </CardTitle>
+              <div className="p-2 rounded-full bg-amber-100 flex items-center justify-center">
+                <Bitcoin className="h-5 w-5 text-amber-600" />
               </div>
             </div>
-
+          </CardHeader>
+          <CardContent>
             {isBitcoinLoading ? (
-              <Skeleton className="h-8 w-32 mb-1" />
+              <Skeleton className="h-12 w-36 mb-2" />
             ) : (
-              <div className="mt-4">
-                <div className="text-2xl font-bold text-amber-600">
+              <>
+                <div className="text-3xl font-bold text-amber-600 mb-2">
                   {Number.isNaN(Number(bitcoinData.bitcoinMined))
                     ? "0 BTC"
                     : formatBitcoin(Number(bitcoinData.bitcoinMined))}
                 </div>
-                <div className="flex items-center mt-1">
-                  <span className="inline-block mr-1 text-amber-600">•</span>
-                  <span className="text-xs text-muted-foreground">
+                <div className="flex items-center">
+                  <div className="h-2 w-2 rounded-full bg-amber-600 mr-2"></div>
+                  <p className="text-sm text-muted-foreground">
                     ≈ {formatGBP(Number(bitcoinData.valueAtCurrentPrice))}
-                  </span>
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {Number(bitcoinData.bitcoinMined) > 0 &&
-                  Number(summaryData.totalCurtailedEnergy) > 0
-                    ? `Potential value: £${(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh of curtailed energy`
-                    : "Potential value from wasted energy"}
-                </p>
-              </div>
+                {Number(bitcoinData.bitcoinMined) > 0 &&
+                  Number(summaryData.totalCurtailedEnergy) > 0 && (
+                    <p className="text-sm text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                      £{(Number(bitcoinData.valueAtCurrentPrice) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh
+                    </p>
+                  )}
+              </>
             )}
-          </div>
+          </CardContent>
         </Card>
 
         {/* Value Ratio Card */}
-        <Card className="overflow-hidden">
-          <div className="p-6">
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Value Ratio
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Bitcoin value vs. subsidy cost
-                </p>
-              </div>
-              {(() => {
-                // Calculate ratio for icon
-                const valueRatio =
-                  Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) ||
-                  Number.isNaN(Number(summaryData.totalPayment)) ||
-                  Number(summaryData.totalPayment) === 0
-                    ? 0
-                    : Number(bitcoinData.valueAtCurrentPrice) /
-                      Number(summaryData.totalPayment);
+        <Card className="overflow-hidden border-t-4 shadow-md">
+          {(() => {
+            // Calculate ratio for card styling
+            const valueRatio =
+              Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) ||
+              Number.isNaN(Number(summaryData.totalPayment)) ||
+              Number(summaryData.totalPayment) === 0
+                ? 0
+                : Number(bitcoinData.valueAtCurrentPrice) /
+                  Number(summaryData.totalPayment);
 
-                // Use green for ratios >= 1.0 and slate for < 1.0
-                const bgColor =
-                  valueRatio >= 1.0 ? "bg-green-100" : "bg-slate-100";
-                const iconColor =
-                  valueRatio >= 1.0 ? "text-green-600" : "text-slate-600";
-
-                return (
-                  <div
-                    className={`w-7 h-7 rounded-full ${bgColor} flex items-center justify-center`}
-                  >
-                    <ArrowRightLeft className={`h-4 w-4 ${iconColor}`} />
+            // Use green for ratios >= 1.0 and slate for < 1.0
+            const borderColor = valueRatio >= 1.0 ? "border-t-green-500" : "border-t-slate-500";
+            
+            return (
+              <div className={borderColor}>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-base font-medium">
+                      Value Ratio
+                    </CardTitle>
+                    <div className={`p-2 rounded-full ${valueRatio >= 1.0 ? "bg-green-100" : "bg-slate-100"} flex items-center justify-center`}>
+                      <ArrowRightLeft className={`h-5 w-5 ${valueRatio >= 1.0 ? "text-green-600" : "text-slate-600"}`} />
+                    </div>
                   </div>
-                );
-              })()}
-            </div>
-
-            {isBitcoinLoading || isSummaryLoading ? (
-              <Skeleton className="h-8 w-32 mb-1" />
-            ) : (
-              <div className="mt-4">
-                {(() => {
-                  // Calculate ratio for reuse
-                  const valueRatio =
-                    Number.isNaN(Number(bitcoinData.valueAtCurrentPrice)) ||
-                    Number.isNaN(Number(summaryData.totalPayment)) ||
-                    Number(summaryData.totalPayment) === 0
-                      ? 0
-                      : Number(bitcoinData.valueAtCurrentPrice) /
-                        Number(summaryData.totalPayment);
-
-                  // Determine color and message based on ratio
-                  const isHighValue = valueRatio >= 1.0;
-                  const textColor = isHighValue
-                    ? "text-green-600"
-                    : "text-slate-500";
-                  const dotColor = isHighValue
-                    ? "text-green-600"
-                    : "text-slate-500";
-                  const message = isHighValue
-                    ? "High value from mining"
-                    : "Subsidies exceed mining value";
-
-                  return (
+                </CardHeader>
+                <CardContent>
+                  {isBitcoinLoading || isSummaryLoading ? (
+                    <Skeleton className="h-12 w-36 mb-2" />
+                  ) : (
                     <>
-                      <div className={`text-2xl font-bold ${textColor}`}>
+                      <div className={`text-3xl font-bold mb-2 ${valueRatio >= 1.0 ? "text-green-600" : "text-slate-600"}`}>
                         {valueRatio === 0
                           ? "0.00×"
                           : `${valueRatio.toFixed(2)}×`}
                       </div>
-                      <div className="flex items-center mt-1">
-                        <span className={`inline-block mr-1 ${dotColor}`}>
-                          •
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {message}
-                        </span>
+                      <div className="flex items-center">
+                        <div className={`h-2 w-2 rounded-full mr-2 ${valueRatio >= 1.0 ? "bg-green-600" : "bg-slate-600"}`}></div>
+                        <p className="text-sm text-muted-foreground">
+                          {valueRatio >= 1.0 ? "High value from mining" : "Subsidies exceed mining value"}
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        {valueRatio === 0
-                          ? "No comparison data available"
-                          : isHighValue
-                            ? `Bitcoin value is ${valueRatio.toFixed(2)}× the subsidy payment`
-                            : `Subsidy payments exceed Bitcoin value by ${(1 / valueRatio).toFixed(2)}×`}
-                      </p>
+                      {valueRatio > 0 && (
+                        <p className="text-sm text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
+                          {valueRatio >= 1.0
+                            ? `Bitcoin > subsidy by ${valueRatio.toFixed(2)}×`
+                            : `Subsidy > Bitcoin by ${(1 / valueRatio).toFixed(2)}×`}
+                        </p>
+                      )}
                     </>
-                  );
-                })()}
+                  )}
+                </CardContent>
               </div>
-            )}
-          </div>
+            );
+          })()}
         </Card>
       </div>
     </div>
