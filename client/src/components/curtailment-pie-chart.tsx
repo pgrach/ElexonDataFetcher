@@ -88,7 +88,11 @@ export default function CurtailmentPieChart({
         <div className="space-y-6">
           {/* Central visualization with minimalist details */}
           <div className="flex flex-col items-center">
-            <h2 className="text-3xl font-bold mb-8">Curtailment Breakdown</h2>
+            <div className="flex items-center gap-2 mb-8">
+              <Activity className="text-primary h-6 w-6" />
+              <h2 className="text-4xl font-bold">{curtailmentPercentage.toFixed(1)}%</h2>
+              <span className="text-lg text-muted-foreground">of potential generation curtailed</span>
+            </div>
             
             {/* Main pie chart visualization - larger size */}
             <div className="mx-auto max-w-3xl w-full">
@@ -124,9 +128,9 @@ export default function CurtailmentPieChart({
               </div>
             </div>
             
-            {/* Subtle caption */}
+            {/* Subtle date stamp */}
             <div className="text-center text-muted-foreground text-sm mt-8">
-              {curtailmentPercentage.toFixed(1)}% of potential generation curtailed on {format(date, "MMMM d, yyyy")}
+              Data for {format(date, "MMMM d, yyyy")}
             </div>
           </div>
         </div>
