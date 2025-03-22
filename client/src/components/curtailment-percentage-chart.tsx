@@ -52,6 +52,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
   const [chartDescription, setChartDescription] = useState<string>("");
   const [totalPotentialGeneration, setTotalPotentialGeneration] = useState<number>(0);
   const [totalCurtailedVolume, setTotalCurtailedVolume] = useState<number>(0);
+  const [totalWindGeneration, setTotalWindGeneration] = useState<number>(0);
   const [showPieChart, setShowPieChart] = useState<boolean>(false);
 
   useEffect(() => {
@@ -223,6 +224,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
               <CurtailmentPieChart
                 totalPotentialGeneration={totalPotentialGeneration}
                 totalCurtailedVolume={totalCurtailedVolume}
+                totalWindGeneration={totalWindGeneration}
                 title={chartTitle}
                 description={chartDescription}
                 loading={loading}

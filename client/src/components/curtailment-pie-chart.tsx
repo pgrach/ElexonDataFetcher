@@ -13,6 +13,7 @@ interface CurtailmentPieChartProps {
   loading?: boolean;
   error?: string | null;
   date?: Date; // Add date prop
+  totalWindGeneration?: number; // Add wind generation prop
 }
 
 export default function CurtailmentPieChart({
@@ -22,10 +23,13 @@ export default function CurtailmentPieChart({
   description,
   loading = false,
   error = null,
-  date = new Date() // Default to current date if not provided
+  date = new Date(), // Default to current date if not provided
+  totalWindGeneration  // Optional wind generation data
 }: CurtailmentPieChartProps) {
-  // Calculate the actual generation (potential minus curtailed)
-  const actualGeneration = Math.max(totalPotentialGeneration - totalCurtailedVolume, 0);
+  // Calculate the actual generation, preferring real wind generation data if available
+  const actualGeneration = totalWindGeneration !== undefined 
+    ? totalWindGeneration 
+    : Math.max(totalPotentialGeneration - totalCurtailedVolume, 0);
   
   // Create data for the pie chart
   const data = [
