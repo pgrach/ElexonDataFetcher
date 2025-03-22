@@ -124,6 +124,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
           // Store calculated values
           setTotalCurtailedVolume(totalCurtailed);
           setTotalPotentialGeneration(totalPotential);
+          setTotalWindGeneration(totalWindGeneration);
           setShowPieChart(true);
           
           setChartTitle("Wind Farm Curtailment");

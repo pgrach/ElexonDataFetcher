@@ -40,9 +40,13 @@ export default function CurtailmentPieChart({
   // Colors for the pie chart - updated to more professional colors
   const COLORS = ['#22c55e', '#ef4444'];
   
-  // Calculate curtailment percentage
-  const curtailmentPercentage = totalPotentialGeneration > 0 
-    ? (totalCurtailedVolume / totalPotentialGeneration) * 100 
+  // Calculate curtailment percentage - recalculate using actual generation data if available
+  const totalForPercentage = totalWindGeneration !== undefined 
+    ? totalCurtailedVolume + totalWindGeneration 
+    : totalPotentialGeneration;
+    
+  const curtailmentPercentage = totalForPercentage > 0 
+    ? (totalCurtailedVolume / totalForPercentage) * 100 
     : 0;
 
   // Format large numbers with appropriate unit suffixes
@@ -65,7 +69,7 @@ export default function CurtailmentPieChart({
           <p className="text-sm mt-1">
             {formatNumber(payload[0].value)}
             <span className="text-muted-foreground ml-1">
-              ({((payload[0].value / totalPotentialGeneration) * 100).toFixed(1)}%)
+              ({((payload[0].value / totalForPercentage) * 100).toFixed(1)}%)
             </span>
           </p>
         </div>
