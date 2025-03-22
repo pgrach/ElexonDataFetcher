@@ -226,7 +226,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
               <CurtailmentPieChart
                 totalPotentialGeneration={totalPotentialGeneration}
                 totalCurtailedVolume={totalCurtailedVolume}
-                totalWindGeneration={totalWindGeneration}
+                totalWindGeneration={totalWindGeneration as number | undefined}
                 title={chartTitle}
                 description={chartDescription}
                 loading={loading}

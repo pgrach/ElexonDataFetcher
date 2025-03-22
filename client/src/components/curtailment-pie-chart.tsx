@@ -13,7 +13,7 @@ interface CurtailmentPieChartProps {
   loading?: boolean;
   error?: string | null;
   date?: Date; // Add date prop
-  totalWindGeneration?: number; // Add wind generation prop
+  totalWindGeneration?: number | null; // Add wind generation prop (can be null for days with no data)
 }
 
 export default function CurtailmentPieChart({
@@ -42,7 +42,7 @@ export default function CurtailmentPieChart({
   const COLORS = ['#22c55e', '#ef4444'];
   
   // Calculate curtailment percentage - recalculate using actual generation data if available
-  const totalForPercentage = totalWindGeneration !== undefined 
+  const totalForPercentage = totalWindGeneration !== undefined && totalWindGeneration !== null
     ? totalCurtailedVolume + totalWindGeneration 
     : totalPotentialGeneration;
     
