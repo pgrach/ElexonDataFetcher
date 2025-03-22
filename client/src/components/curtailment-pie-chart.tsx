@@ -13,7 +13,6 @@ interface CurtailmentPieChartProps {
   loading?: boolean;
   error?: string | null;
   date?: Date; // Add date prop
-  totalWindGeneration?: number | null; // Add wind generation prop (can be null for days with no data)
 }
 
 export default function CurtailmentPieChart({
@@ -23,14 +22,10 @@ export default function CurtailmentPieChart({
   description,
   loading = false,
   error = null,
-  date = new Date(), // Default to current date if not provided
-  totalWindGeneration  // Optional wind generation data
+  date = new Date() // Default to current date if not provided
 }: CurtailmentPieChartProps) {
-  // Calculate the actual generation, preferring real wind generation data if available
-  // For dates with no data, set a minimum value to avoid display issues
-  const actualGeneration = totalWindGeneration !== undefined && totalWindGeneration !== null
-    ? Math.max(totalWindGeneration, 0.01) 
-    : Math.max(totalPotentialGeneration - totalCurtailedVolume, 0.01);
+  // Calculate the actual generation (potential minus curtailed)
+  const actualGeneration = Math.max(totalPotentialGeneration - totalCurtailedVolume, 0);
   
   // Create data for the pie chart
   const data = [
@@ -41,19 +36,10 @@ export default function CurtailmentPieChart({
   // Colors for the pie chart - updated to more professional colors
   const COLORS = ['#22c55e', '#ef4444'];
   
-  // Calculate curtailment percentage - recalculate using actual generation data if available
-  const totalForPercentage = totalWindGeneration !== undefined && totalWindGeneration !== null
-    ? totalCurtailedVolume + totalWindGeneration 
-    : totalPotentialGeneration;
-    
-  // For days with no data or only curtailment data, handle percentage appropriately
-  let curtailmentPercentage = 0;
-  if (totalForPercentage > 0) {
-    curtailmentPercentage = (totalCurtailedVolume / totalForPercentage) * 100;
-  } else if (totalCurtailedVolume > 0) {
-    // If we somehow have curtailed energy but no generation data
-    curtailmentPercentage = 100;
-  }
+  // Calculate curtailment percentage
+  const curtailmentPercentage = totalPotentialGeneration > 0 
+    ? (totalCurtailedVolume / totalPotentialGeneration) * 100 
+    : 0;
 
   // Format large numbers with appropriate unit suffixes
   const formatNumber = (value: number): string => {
@@ -75,7 +61,7 @@ export default function CurtailmentPieChart({
           <p className="text-sm mt-1">
             {formatNumber(payload[0].value)}
             <span className="text-muted-foreground ml-1">
-              ({((payload[0].value / totalForPercentage) * 100).toFixed(1)}%)
+              ({((payload[0].value / totalPotentialGeneration) * 100).toFixed(1)}%)
             </span>
           </p>
         </div>

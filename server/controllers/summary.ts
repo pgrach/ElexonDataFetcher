@@ -82,9 +82,6 @@ export async function getDailySummary(req: Request, res: Response) {
         date,
         totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
         totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
-        totalWindGeneration: Number(summary.totalWindGeneration || 0),
-        windOnshoreGeneration: Number(summary.windOnshoreGeneration || 0),
-        windOffshoreGeneration: Number(summary.windOffshoreGeneration || 0),
         leadParty: null
       });
     }
@@ -188,9 +185,6 @@ export async function getMonthlySummary(req: Request, res: Response) {
       yearMonth,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
       totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
-      totalWindGeneration: Number(summary.totalWindGeneration || 0),
-      windOnshoreGeneration: Number(summary.windOnshoreGeneration || 0),
-      windOffshoreGeneration: Number(summary.windOffshoreGeneration || 0),
       dailyTotals: {
         totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
         totalPayment: Number(dailyTotals[0]?.totalPayment || 0) * -1 // Flip the sign
@@ -663,10 +657,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       .select({
         yearMonth: monthlySummaries.yearMonth,
         totalCurtailedEnergy: monthlySummaries.totalCurtailedEnergy,
-        totalPayment: sql<string>`${monthlySummaries.totalPayment}::numeric`,
-        totalWindGeneration: monthlySummaries.totalWindGeneration,
-        windOnshoreGeneration: monthlySummaries.windOnshoreGeneration,
-        windOffshoreGeneration: monthlySummaries.windOffshoreGeneration
+        totalPayment: sql<string>`${monthlySummaries.totalPayment}::numeric`
       })
       .from(monthlySummaries)
       .where(sql`TO_DATE(${monthlySummaries.yearMonth} || '-01', 'YYYY-MM-DD')::date >= DATE_TRUNC('year', TO_DATE(${year}, 'YYYY'))::date
@@ -678,17 +669,8 @@ export async function getYearlySummary(req: Request, res: Response) {
     // Calculate year totals from monthly records
     const yearTotals = monthlyTotals.reduce((acc, record) => ({
       totalCurtailedEnergy: acc.totalCurtailedEnergy + Number(record.totalCurtailedEnergy),
-      totalPayment: acc.totalPayment + Number(record.totalPayment),
-      totalWindGeneration: acc.totalWindGeneration + Number(record.totalWindGeneration || 0),
-      windOnshoreGeneration: acc.windOnshoreGeneration + Number(record.windOnshoreGeneration || 0),
-      windOffshoreGeneration: acc.windOffshoreGeneration + Number(record.windOffshoreGeneration || 0)
-    }), { 
-      totalCurtailedEnergy: 0, 
-      totalPayment: 0,
-      totalWindGeneration: 0,
-      windOnshoreGeneration: 0,
-      windOffshoreGeneration: 0
-    });
+      totalPayment: acc.totalPayment + Number(record.totalPayment)
+    }), { totalCurtailedEnergy: 0, totalPayment: 0 });
 
     // Verify against daily_summaries as a cross-check
     const dailyTotals = await db
@@ -716,10 +698,7 @@ export async function getYearlySummary(req: Request, res: Response) {
     res.json({
       year,
       totalCurtailedEnergy: yearTotals.totalCurtailedEnergy,
-      totalPayment: yearTotals.totalPayment * -1, // Flip the sign
-      totalWindGeneration: yearTotals.totalWindGeneration,
-      windOnshoreGeneration: yearTotals.windOnshoreGeneration,
-      windOffshoreGeneration: yearTotals.windOffshoreGeneration
+      totalPayment: yearTotals.totalPayment * -1 // Flip the sign
     });
   } catch (error) {
     console.error('Error fetching yearly summary:', error);
