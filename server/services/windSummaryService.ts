@@ -179,7 +179,7 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
           windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         })
-        .where(eq(monthlySummaries.yearMonth, yearMonth));
+        .where(eq(monthlySummaries.summaryMonth, yearMonth));
 
       logger.info(`Updated monthly summary with wind generation data for ${yearMonth}`, {
         module: 'windSummaryService',
@@ -192,12 +192,12 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
       await db
         .insert(monthlySummaries)
         .values({
-          yearMonth,
-          totalCurtailedEnergy: 0,
-          totalPayment: 0,
-          totalWindGeneration,
-          windOnshoreGeneration,
-          windOffshoreGeneration,
+          summaryMonth: yearMonth,
+          totalCurtailedEnergy: '0',
+          totalPayment: '0',
+          totalWindGeneration: totalWindGeneration.toString(),
+          windOnshoreGeneration: windOnshoreGeneration.toString(),
+          windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         });
 
@@ -271,7 +271,7 @@ export async function updateYearlySummary(year: string): Promise<void> {
     const existingSummary = await db
       .select()
       .from(yearlySummaries)
-      .where(eq(yearlySummaries.year, year));
+      .where(eq(yearlySummaries.summaryYear, year));
 
     if (existingSummary.length > 0) {
       // Update existing summary
@@ -283,7 +283,7 @@ export async function updateYearlySummary(year: string): Promise<void> {
           windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         })
-        .where(eq(yearlySummaries.year, year));
+        .where(eq(yearlySummaries.summaryYear, year));
 
       logger.info(`Updated yearly summary with wind generation data for ${year}`, {
         module: 'windSummaryService',
@@ -296,12 +296,12 @@ export async function updateYearlySummary(year: string): Promise<void> {
       await db
         .insert(yearlySummaries)
         .values({
-          year,
-          totalCurtailedEnergy: 0,
-          totalPayment: 0,
-          totalWindGeneration,
-          windOnshoreGeneration,
-          windOffshoreGeneration,
+          summaryYear: year,
+          totalCurtailedEnergy: '0',
+          totalPayment: '0',
+          totalWindGeneration: totalWindGeneration.toString(),
+          windOnshoreGeneration: windOnshoreGeneration.toString(),
+          windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         });
 
