@@ -186,10 +186,9 @@ export default function DashboardOverview() {
               </TabsContent>
               
               <TabsContent value="curtailment" className="space-y-8">
-                {/* Simplified view - no redundant title, pass timeframe */}
+                {/* Simplified view - no redundant title */}
                 <CurtailmentPercentageChart 
                   date={date}
-                  timeframe={timeframe}
                   leadPartyName={undefined}
                   farmId={undefined}
                 />
