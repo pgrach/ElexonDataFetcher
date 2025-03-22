@@ -58,19 +58,19 @@ export async function updateDailySummary(date: string): Promise<void> {
     const existingSummary = await db
       .select()
       .from(dailySummaries)
-      .where(eq(dailySummaries.date, date));
+      .where(eq(dailySummaries.summaryDate, date));
 
     if (existingSummary.length > 0) {
       // Update existing summary
       await db
         .update(dailySummaries)
         .set({
-          totalWindGeneration,
-          windOnshoreGeneration,
-          windOffshoreGeneration,
+          totalWindGeneration: totalWindGeneration.toString(),
+          windOnshoreGeneration: windOnshoreGeneration.toString(),
+          windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         })
-        .where(eq(dailySummaries.date, date));
+        .where(eq(dailySummaries.summaryDate, date));
 
       logger.info(`Updated daily summary with wind generation data for ${date}`, {
         module: 'windSummaryService',
@@ -83,12 +83,12 @@ export async function updateDailySummary(date: string): Promise<void> {
       await db
         .insert(dailySummaries)
         .values({
-          date,
-          totalCurtailedEnergy: 0,
-          totalPayment: 0,
-          totalWindGeneration,
-          windOnshoreGeneration,
-          windOffshoreGeneration,
+          summaryDate: date,
+          totalCurtailedEnergy: '0',
+          totalPayment: '0',
+          totalWindGeneration: totalWindGeneration.toString(),
+          windOnshoreGeneration: windOnshoreGeneration.toString(),
+          windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         });
 
@@ -174,9 +174,9 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
       await db
         .update(monthlySummaries)
         .set({
-          totalWindGeneration,
-          windOnshoreGeneration,
-          windOffshoreGeneration,
+          totalWindGeneration: totalWindGeneration.toString(),
+          windOnshoreGeneration: windOnshoreGeneration.toString(),
+          windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         })
         .where(eq(monthlySummaries.yearMonth, yearMonth));
@@ -278,9 +278,9 @@ export async function updateYearlySummary(year: string): Promise<void> {
       await db
         .update(yearlySummaries)
         .set({
-          totalWindGeneration,
-          windOnshoreGeneration,
-          windOffshoreGeneration,
+          totalWindGeneration: totalWindGeneration.toString(),
+          windOnshoreGeneration: windOnshoreGeneration.toString(),
+          windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         })
         .where(eq(yearlySummaries.year, year));
