@@ -107,43 +107,18 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
           // to ensure consistent data between dashboard summary and analysis
           const { data: summaryData } = await axios.get(`/api/summary/daily/${formattedDate}`);
           
-          // Use the daily summary data for curtailment values
+          // Use the daily summary data for curtailment and wind generation values
           const totalCurtailed = Number(summaryData.totalCurtailedEnergy);
+          const totalWindGeneration = Number(summaryData.totalWindGeneration || 0);
           
-          // We need to calculate the potential based on the curtailment percentage
-          // First, get the percentage from the endpoint designed for that
-          const { data: curtailmentData } = await axios.get(
-            `/api/production/curtailed-lead-parties`, {
-              params: { date: formattedDate }
-            }
-          );
+          // For actual vs. curtailed calculation, use the real wind generation data
+          // instead of estimating from a percentage
+          let totalPotential = totalCurtailed + totalWindGeneration;
           
-          // Default percentage if we can't get it from API
-          let overallPercentage = 11.3; // Default fallback
-          let totalPotential = 0;
-          
-          // Calculate accurate total potential generation using curtailed energy and percentage
-          if (Array.isArray(curtailmentData) && curtailmentData.length > 0) {
-            try {
-              // Get percentage data for first lead party (as sample)
-              const leadParty = curtailmentData[0];
-              const { data } = await axios.get(
-                `/api/production/curtailment-percentage/lead-party/${encodeURIComponent(leadParty.leadPartyName)}/${formattedDate}`
-              );
-              
-              overallPercentage = data.overallCurtailmentPercentage;
-              
-              // Calculate total potential based on the percentage and known curtailed value
-              totalPotential = totalCurtailed / (overallPercentage / 100);
-            } catch (err) {
-              console.warn("Could not get accurate curtailment percentage, using default value");
-              // Use totalCurtailed with default percentage to estimate potential
-              totalPotential = totalCurtailed / (overallPercentage / 100);
-            }
-          } else {
-            // If no curtailment data, calculate based on default percentage
-            totalPotential = totalCurtailed / (overallPercentage / 100);
-          }
+          // Calculate curtailment percentage from actual values
+          let overallPercentage = totalPotential > 0 
+            ? (totalCurtailed / totalPotential) * 100
+            : 0;
           
           // Store calculated values
           setTotalCurtailedVolume(totalCurtailed);

@@ -82,6 +82,9 @@ export async function getDailySummary(req: Request, res: Response) {
         date,
         totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
         totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
+        totalWindGeneration: Number(summary.totalWindGeneration || 0),
+        windOnshoreGeneration: Number(summary.windOnshoreGeneration || 0),
+        windOffshoreGeneration: Number(summary.windOffshoreGeneration || 0),
         leadParty: null
       });
     }
@@ -185,6 +188,9 @@ export async function getMonthlySummary(req: Request, res: Response) {
       yearMonth,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
       totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
+      totalWindGeneration: Number(summary.totalWindGeneration || 0),
+      windOnshoreGeneration: Number(summary.windOnshoreGeneration || 0),
+      windOffshoreGeneration: Number(summary.windOffshoreGeneration || 0),
       dailyTotals: {
         totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
         totalPayment: Number(dailyTotals[0]?.totalPayment || 0) * -1 // Flip the sign
