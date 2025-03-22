@@ -2,6 +2,8 @@
  * Wind Generation Data API Routes
  * 
  * This router provides endpoints for retrieving and managing wind generation data.
+ * It includes endpoints for retrieving wind generation data by date, checking data status,
+ * and manually triggering updates for system administrators.
  */
 
 import express, { Request, Response } from 'express';

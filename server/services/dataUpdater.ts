@@ -9,6 +9,7 @@ import type { ElexonBidOffer } from "../types/elexon";
 import { processSingleDay } from "./bitcoinService";
 import { reconcileDay } from "./historicalReconciliation";
 import { runDailyCheck } from "../../daily_reconciliation_check";
+import { getWindDataServiceStatus } from "./windDataUpdater";
 
 const UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const STARTUP_DELAY = 5000; // 5 second delay before starting data updates
