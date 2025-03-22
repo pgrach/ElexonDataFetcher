@@ -365,9 +365,9 @@ export async function recalculateAllSummaries(): Promise<void> {
 
     // Get all unique dates with wind generation data
     const dates = await db.execute(sql`
-      SELECT DISTINCT settlement_date as date
+      SELECT DISTINCT settlement_date::text as date
       FROM wind_generation_data
-      ORDER BY settlement_date
+      ORDER BY date
     `);
 
     // Get all unique year-months with wind generation data
@@ -389,21 +389,39 @@ export async function recalculateAllSummaries(): Promise<void> {
     });
 
     // Update all daily summaries
-    for (const row of dates) {
-      const date = row.date as string;
-      await updateDailySummary(date);
+    for (let i = 0; i < dates.length; i++) {
+      const row = dates[i];
+      const date = row.date || (row as any)[0]?.date;
+      if (date) {
+        logger.info(`Processing daily summary for ${date} (${i+1}/${dates.length})`, {
+          module: 'windSummaryService'
+        });
+        await updateDailySummary(date);
+      }
     }
 
     // Update all monthly summaries
-    for (const row of yearMonths) {
-      const yearMonth = row.year_month as string;
-      await updateMonthlySummary(yearMonth);
+    for (let i = 0; i < yearMonths.length; i++) {
+      const row = yearMonths[i];
+      const yearMonth = row.year_month || (row as any)[0]?.year_month;
+      if (yearMonth) {
+        logger.info(`Processing monthly summary for ${yearMonth} (${i+1}/${yearMonths.length})`, {
+          module: 'windSummaryService'
+        });
+        await updateMonthlySummary(yearMonth);
+      }
     }
 
     // Update all yearly summaries
-    for (const row of years) {
-      const year = row.year as string;
-      await updateYearlySummary(year);
+    for (let i = 0; i < years.length; i++) {
+      const row = years[i];
+      const year = row.year || (row as any)[0]?.year;
+      if (year) {
+        logger.info(`Processing yearly summary for ${year} (${i+1}/${years.length})`, {
+          module: 'windSummaryService'
+        });
+        await updateYearlySummary(year);
+      }
     }
 
     logger.info('Completed recalculation of all wind generation summaries', {
