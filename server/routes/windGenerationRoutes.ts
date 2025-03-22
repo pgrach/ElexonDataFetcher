@@ -13,10 +13,12 @@ import {
   getLatestDataDate,
   hasWindDataForDate
 } from '../services/windGenerationService';
-import { isValidDateString } from '../utils/dates';
+import { isValidDateString, isValidYear } from '../utils/dates';
 import { ValidationError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { getWindDataServiceStatus, manualUpdate } from '../services/windDataUpdater';
+import { db } from '../../db';
+import { sql } from 'drizzle-orm';
 
 const router = express.Router();
 
@@ -260,6 +262,114 @@ router.post('/process/range', async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error('Error processing wind generation data range', {
+      module: 'windGenerationRoutes',
+      error: error instanceof Error ? error.message : String(error)
+    });
+    
+    res.status(error instanceof ValidationError ? 400 : 500).json({
+      error: error instanceof Error ? error.message : 'An unexpected error occurred',
+    });
+  }
+});
+
+/**
+ * Process wind generation data for an entire year
+ * 
+ * @route POST /api/wind-generation/process/year/:year
+ * @param {string} year.path.required - Year in YYYY format
+ * @param {boolean} force.query - Force reprocessing even if data exists
+ */
+router.post('/process/year/:year', async (req: Request, res: Response) => {
+  try {
+    const { year } = req.params;
+    const force = req.query.force === 'true';
+    
+    if (!isValidYear(year)) {
+      throw new ValidationError('Invalid year format. Use YYYY format.');
+    }
+    
+    const startDate = `${year}-01-01`;
+    const endDate = `${year}-12-31`;
+    
+    logger.info(`Processing wind generation data for entire year ${year}${force ? ' (force)' : ''}`, {
+      module: 'windGenerationRoutes'
+    });
+    
+    // Check if we already have data for this year
+    const existingRecords = await db.execute(sql`
+      SELECT COUNT(*) as count
+      FROM wind_generation_data
+      WHERE EXTRACT(YEAR FROM settlement_date) = ${parseInt(year, 10)}
+    `);
+
+    const recordCount = existingRecords[0]?.count ? parseInt(existingRecords[0].count as string, 10) : 0;
+    
+    if (recordCount > 0 && !force) {
+      return res.status(409).json({
+        message: `Wind generation data for ${year} already exists (${recordCount} records). Use force=true to reprocess.`,
+        year,
+        recordCount,
+        status: 'skipped'
+      });
+    }
+    
+    // Start processing in background (using 3-month chunks to manage API rate limits)
+    const quarters = [
+      { start: `${year}-01-01`, end: `${year}-03-31` },
+      { start: `${year}-04-01`, end: `${year}-06-30` },
+      { start: `${year}-07-01`, end: `${year}-09-30` },
+      { start: `${year}-10-01`, end: `${year}-12-31` }
+    ];
+    
+    let totalRecords = 0;
+    
+    // Process each quarter with a delay between them
+    const processQuarters = async () => {
+      for (const [index, quarter] of quarters.entries()) {
+        try {
+          logger.info(`Processing Q${index + 1} ${year}: ${quarter.start} to ${quarter.end}`, {
+            module: 'windGenerationRoutes'
+          });
+          
+          const records = await processDateRange(quarter.start, quarter.end);
+          totalRecords += records;
+          
+          logger.info(`Processed ${records} records for Q${index + 1} ${year}`, {
+            module: 'windGenerationRoutes'
+          });
+          
+          // Add delay between quarters to avoid rate limiting
+          if (index < quarters.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          }
+        } catch (error) {
+          logger.error(`Error processing Q${index + 1} ${year}`, {
+            module: 'windGenerationRoutes',
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
+      
+      logger.info(`Completed processing year ${year}, total records: ${totalRecords}`, {
+        module: 'windGenerationRoutes'
+      });
+    };
+    
+    // Start the background processing
+    processQuarters().catch(error => {
+      logger.error(`Error in year processing for ${year}`, {
+        module: 'windGenerationRoutes',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+    
+    res.json({
+      message: `Started processing wind generation data for year ${year}${force ? ' (forced)' : ''}`,
+      year,
+      status: 'processing'
+    });
+  } catch (error) {
+    logger.error('Error processing wind generation data for year', {
       module: 'windGenerationRoutes',
       error: error instanceof Error ? error.message : String(error)
     });
