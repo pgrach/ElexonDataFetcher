@@ -52,7 +52,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
   const [chartDescription, setChartDescription] = useState<string>("");
   const [totalPotentialGeneration, setTotalPotentialGeneration] = useState<number>(0);
   const [totalCurtailedVolume, setTotalCurtailedVolume] = useState<number>(0);
-  const [totalWindGeneration, setTotalWindGeneration] = useState<number>(0);
+  const [totalWindGeneration, setTotalWindGeneration] = useState<number | null>(0);
   const [showPieChart, setShowPieChart] = useState<boolean>(false);
 
   useEffect(() => {
@@ -124,7 +124,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
           // Store calculated values
           setTotalCurtailedVolume(totalCurtailed);
           setTotalPotentialGeneration(totalPotential);
-          setTotalWindGeneration(totalWindGeneration);
+          setTotalWindGeneration(totalWindGeneration > 0 ? totalWindGeneration : null);
           setShowPieChart(true);
           
           setChartTitle("Wind Farm Curtailment");
@@ -219,8 +219,9 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
         </div>
       ) : (
         <div className="h-auto">
-          {!loading && showPieChart && totalPotentialGeneration > 0 ? (
+          {!loading && showPieChart ? (
             // Show improved pie chart for "All Farms" view without redundant title/description
+            // We display the pie chart even if there's no data to show "0%" curtailment
             <div>
               <CurtailmentPieChart
                 totalPotentialGeneration={totalPotentialGeneration}

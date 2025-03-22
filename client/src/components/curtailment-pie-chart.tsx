@@ -27,9 +27,10 @@ export default function CurtailmentPieChart({
   totalWindGeneration  // Optional wind generation data
 }: CurtailmentPieChartProps) {
   // Calculate the actual generation, preferring real wind generation data if available
-  const actualGeneration = totalWindGeneration !== undefined 
-    ? totalWindGeneration 
-    : Math.max(totalPotentialGeneration - totalCurtailedVolume, 0);
+  // For dates with no data, set a minimum value to avoid display issues
+  const actualGeneration = totalWindGeneration !== undefined && totalWindGeneration !== null
+    ? Math.max(totalWindGeneration, 0.01) 
+    : Math.max(totalPotentialGeneration - totalCurtailedVolume, 0.01);
   
   // Create data for the pie chart
   const data = [
@@ -45,9 +46,14 @@ export default function CurtailmentPieChart({
     ? totalCurtailedVolume + totalWindGeneration 
     : totalPotentialGeneration;
     
-  const curtailmentPercentage = totalForPercentage > 0 
-    ? (totalCurtailedVolume / totalForPercentage) * 100 
-    : 0;
+  // For days with no data or only curtailment data, handle percentage appropriately
+  let curtailmentPercentage = 0;
+  if (totalForPercentage > 0) {
+    curtailmentPercentage = (totalCurtailedVolume / totalForPercentage) * 100;
+  } else if (totalCurtailedVolume > 0) {
+    // If we somehow have curtailed energy but no generation data
+    curtailmentPercentage = 100;
+  }
 
   // Format large numbers with appropriate unit suffixes
   const formatNumber = (value: number): string => {
