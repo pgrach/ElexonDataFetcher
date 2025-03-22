@@ -4,16 +4,24 @@
  * This script retrieves and processes all wind generation data for 2024 from Elexon's B1630 API
  * and stores it in the wind_generation_data table. It processes the data month by month to stay
  * within API limits and provides detailed logging.
+ * 
+ * Usage:
+ *   npx tsx ingest_2024_wind_data.ts [--force] [--start=MM] [--end=MM]
+ *   
+ * Options:
+ *   --force        Process even if data exists
+ *   --start=MM     Start processing from month MM (1-12)
+ *   --end=MM       End processing at month MM (1-12)
  */
 
 import { processDateRange } from './server/services/windGenerationService';
 import { info, error } from './server/utils/logger';
-import { format, addMonths } from 'date-fns';
+import { format, addMonths, parse } from 'date-fns';
 import { db } from './db';
 import { sql } from 'drizzle-orm';
 
-const START_DATE = '2024-01-01';
-const END_DATE = '2024-12-31';
+const DEFAULT_START_DATE = '2024-01-01';
+const DEFAULT_END_DATE = '2024-12-31';
 
 async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -25,6 +33,36 @@ async function delay(ms: number): Promise<void> {
 async function ingest2024Data() {
   try {
     info('Starting ingestion of wind generation data for 2024', { module: 'ingest2024Data' });
+    
+    // Parse command line arguments
+    const startMonthArg = process.argv.find(arg => arg.startsWith('--start='));
+    const endMonthArg = process.argv.find(arg => arg.startsWith('--end='));
+    
+    let startMonth = 1;
+    let endMonth = 12;
+    
+    if (startMonthArg) {
+      const month = parseInt(startMonthArg.split('=')[1]);
+      if (month >= 1 && month <= 12) {
+        startMonth = month;
+        info(`Starting from month ${startMonth} (${new Date(2024, startMonth-1, 1).toLocaleString('default', { month: 'long' })})`, { module: 'ingest2024Data' });
+      }
+    }
+    
+    if (endMonthArg) {
+      const month = parseInt(endMonthArg.split('=')[1]);
+      if (month >= 1 && month <= 12) {
+        endMonth = month;
+        info(`Ending at month ${endMonth} (${new Date(2024, endMonth-1, 1).toLocaleString('default', { month: 'long' })})`, { module: 'ingest2024Data' });
+      }
+    }
+    
+    // Start date with specified month
+    const START_DATE = startMonth === 1 ? DEFAULT_START_DATE : `2024-${startMonth.toString().padStart(2, '0')}-01`;
+    
+    // End date with specified month
+    const lastDayOfEndMonth = new Date(2024, endMonth, 0);
+    const END_DATE = endMonth === 12 ? DEFAULT_END_DATE : format(lastDayOfEndMonth, 'yyyy-MM-dd');
     
     // First, check if we already have data for 2024
     const existingCount = await db.execute(
@@ -48,6 +86,7 @@ async function ingest2024Data() {
     const endDate = new Date(END_DATE);
     
     let monthCount = 0;
+    let totalMonths = endMonth - startMonth + 1;
     
     while (currentDate <= endDate) {
       const monthStart = format(currentDate, 'yyyy-MM-dd');
@@ -57,7 +96,7 @@ async function ingest2024Data() {
       
       const monthEnd = format(lastDayOfMonth, 'yyyy-MM-dd');
       
-      info(`Processing month ${monthCount + 1}/12: ${monthStart} to ${monthEnd}`, { module: 'ingest2024Data' });
+      info(`Processing month ${monthCount + 1}/${totalMonths}: ${monthStart} to ${monthEnd}`, { module: 'ingest2024Data' });
       
       try {
         // Process this month
@@ -78,11 +117,11 @@ async function ingest2024Data() {
     
     // Verify the ingestion
     const finalCount = await db.execute(
-      sql`SELECT COUNT(*) as count FROM wind_generation_data WHERE settlement_date >= '2024-01-01' AND settlement_date <= '2024-12-31'`
+      sql`SELECT COUNT(*) as count FROM wind_generation_data WHERE settlement_date >= '${START_DATE}' AND settlement_date <= '${END_DATE}'`
     );
     
     const recordCount = Number(finalCount.rows[0]?.count || 0);
-    info(`Completed ingestion of wind generation data for 2024. Total records: ${recordCount}`, { module: 'ingest2024Data' });
+    info(`Completed ingestion of wind generation data for specified period. Total records: ${recordCount}`, { module: 'ingest2024Data' });
     
   } catch (err) {
     error(`Error during 2024 data ingestion: ${err.message}`, { module: 'ingest2024Data' });
