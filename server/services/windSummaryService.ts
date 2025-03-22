@@ -365,25 +365,55 @@ export async function recalculateAllSummaries(): Promise<void> {
     });
 
     // Get all unique dates with wind generation data
-    const dates = await db.execute(sql`
+    const datesResult = await db.execute(sql`
       SELECT DISTINCT settlement_date::text as date
       FROM wind_generation_data
       ORDER BY date
     `);
+    
+    // Extract dates from result rows
+    const dates: string[] = [];
+    if (datesResult && datesResult.rows) {
+      for (const row of datesResult.rows) {
+        if (row.date) {
+          dates.push(row.date);
+        }
+      }
+    }
 
     // Get all unique year-months with wind generation data
-    const yearMonths = await db.execute(sql`
+    const yearMonthsResult = await db.execute(sql`
       SELECT DISTINCT TO_CHAR(settlement_date, 'YYYY-MM') as year_month
       FROM wind_generation_data
       ORDER BY year_month
     `);
+    
+    // Extract year-months from result rows
+    const yearMonths: string[] = [];
+    if (yearMonthsResult && yearMonthsResult.rows) {
+      for (const row of yearMonthsResult.rows) {
+        if (row.year_month) {
+          yearMonths.push(row.year_month);
+        }
+      }
+    }
 
     // Get all unique years with wind generation data
-    const years = await db.execute(sql`
+    const yearsResult = await db.execute(sql`
       SELECT DISTINCT TO_CHAR(settlement_date, 'YYYY') as year
       FROM wind_generation_data
       ORDER BY year
     `);
+    
+    // Extract years from result rows
+    const years: string[] = [];
+    if (yearsResult && yearsResult.rows) {
+      for (const row of yearsResult.rows) {
+        if (row.year) {
+          years.push(row.year);
+        }
+      }
+    }
 
     logger.info(`Found ${dates.length} dates, ${yearMonths.length} months, and ${years.length} years to process`, {
       module: 'windSummaryService'
@@ -391,38 +421,29 @@ export async function recalculateAllSummaries(): Promise<void> {
 
     // Update all daily summaries
     for (let i = 0; i < dates.length; i++) {
-      const row = dates[i];
-      const date = row.date || (row as any)[0]?.date;
-      if (date) {
-        logger.info(`Processing daily summary for ${date} (${i+1}/${dates.length})`, {
-          module: 'windSummaryService'
-        });
-        await updateDailySummary(date);
-      }
+      const date = dates[i];
+      logger.info(`Processing daily summary for ${date} (${i+1}/${dates.length})`, {
+        module: 'windSummaryService'
+      });
+      await updateDailySummary(date);
     }
 
     // Update all monthly summaries
     for (let i = 0; i < yearMonths.length; i++) {
-      const row = yearMonths[i];
-      const yearMonth = row.year_month || (row as any)[0]?.year_month;
-      if (yearMonth) {
-        logger.info(`Processing monthly summary for ${yearMonth} (${i+1}/${yearMonths.length})`, {
-          module: 'windSummaryService'
-        });
-        await updateMonthlySummary(yearMonth);
-      }
+      const yearMonth = yearMonths[i];
+      logger.info(`Processing monthly summary for ${yearMonth} (${i+1}/${yearMonths.length})`, {
+        module: 'windSummaryService'
+      });
+      await updateMonthlySummary(yearMonth);
     }
 
     // Update all yearly summaries
     for (let i = 0; i < years.length; i++) {
-      const row = years[i];
-      const year = row.year || (row as any)[0]?.year;
-      if (year) {
-        logger.info(`Processing yearly summary for ${year} (${i+1}/${years.length})`, {
-          module: 'windSummaryService'
-        });
-        await updateYearlySummary(year);
-      }
+      const year = years[i];
+      logger.info(`Processing yearly summary for ${year} (${i+1}/${years.length})`, {
+        module: 'windSummaryService'
+      });
+      await updateYearlySummary(year);
     }
 
     logger.info('Completed recalculation of all wind generation summaries', {
