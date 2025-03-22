@@ -51,23 +51,35 @@ export const dailySummaries = pgTable("daily_summaries", {
   summaryDate: date("summary_date").primaryKey(),
   totalCurtailedEnergy: numeric("total_curtailed_energy"),
   totalPayment: numeric("total_payment"),
-  createdAt: timestamp("created_at").defaultNow()
+  totalWindGeneration: numeric("total_wind_generation").default('0'),
+  windOnshoreGeneration: numeric("wind_onshore_generation").default('0'),
+  windOffshoreGeneration: numeric("wind_offshore_generation").default('0'),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastUpdated: timestamp("last_updated").defaultNow()
 });
 
 export const monthlySummaries = pgTable("monthly_summaries", {
   yearMonth: text("year_month").primaryKey(),
   totalCurtailedEnergy: numeric("total_curtailed_energy"),
   totalPayment: numeric("total_payment"),
+  totalWindGeneration: numeric("total_wind_generation").default('0'),
+  windOnshoreGeneration: numeric("wind_onshore_generation").default('0'),
+  windOffshoreGeneration: numeric("wind_offshore_generation").default('0'),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow()
+  updatedAt: timestamp("updated_at").defaultNow(),
+  lastUpdated: timestamp("last_updated").defaultNow()
 });
 
 export const yearlySummaries = pgTable("yearly_summaries", {
   year: text("year").primaryKey(),
   totalCurtailedEnergy: numeric("total_curtailed_energy"),
   totalPayment: numeric("total_payment"),
+  totalWindGeneration: numeric("total_wind_generation").default('0'),
+  windOnshoreGeneration: numeric("wind_onshore_generation").default('0'),
+  windOffshoreGeneration: numeric("wind_offshore_generation").default('0'),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow()
+  updatedAt: timestamp("updated_at").defaultNow(),
+  lastUpdated: timestamp("last_updated").defaultNow()
 });
 
 export const ingestionProgress = pgTable("ingestion_progress", {
