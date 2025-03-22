@@ -179,7 +179,7 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
           windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         })
-        .where(eq(monthlySummaries.summaryMonth, yearMonth));
+        .where(eq(monthlySummaries.yearMonth, yearMonth));
 
       logger.info(`Updated monthly summary with wind generation data for ${yearMonth}`, {
         module: 'windSummaryService',
@@ -192,7 +192,7 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
       await db
         .insert(monthlySummaries)
         .values({
-          summaryMonth: yearMonth,
+          yearMonth: yearMonth,
           totalCurtailedEnergy: '0',
           totalPayment: '0',
           totalWindGeneration: totalWindGeneration.toString(),
@@ -271,7 +271,7 @@ export async function updateYearlySummary(year: string): Promise<void> {
     const existingSummary = await db
       .select()
       .from(yearlySummaries)
-      .where(eq(yearlySummaries.summaryYear, year));
+      .where(eq(yearlySummaries.year, year));
 
     if (existingSummary.length > 0) {
       // Update existing summary
@@ -283,7 +283,7 @@ export async function updateYearlySummary(year: string): Promise<void> {
           windOffshoreGeneration: windOffshoreGeneration.toString(),
           lastUpdated: new Date()
         })
-        .where(eq(yearlySummaries.summaryYear, year));
+        .where(eq(yearlySummaries.year, year));
 
       logger.info(`Updated yearly summary with wind generation data for ${year}`, {
         module: 'windSummaryService',
@@ -296,7 +296,7 @@ export async function updateYearlySummary(year: string): Promise<void> {
       await db
         .insert(yearlySummaries)
         .values({
-          summaryYear: year,
+          year: year,
           totalCurtailedEnergy: '0',
           totalPayment: '0',
           totalWindGeneration: totalWindGeneration.toString(),
