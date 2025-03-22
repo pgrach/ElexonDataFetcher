@@ -15,20 +15,22 @@ import { format } from 'date-fns';
 
 // List of dates known to have wind data but zero values in summaries
 const KNOWN_ISSUE_DATES = [
-  '2024-09-07',
-  '2024-12-11'
+  '2024-04-07',
+  '2024-01-07',
+  '2025-03-21'
 ];
 
 // List of months with potential issues
 const KNOWN_ISSUE_MONTHS = [
-  '2024-09',
-  '2024-11',
-  '2024-12'
+  '2024-04',
+  '2024-01',
+  '2025-03'
 ];
 
 // List of years to update
 const YEARS_TO_UPDATE = [
-  '2024'
+  '2024',
+  '2025'
 ];
 
 async function fixSpecificWindSummaries() {
@@ -47,7 +49,7 @@ async function fixSpecificWindSummaries() {
           COUNT(*) as record_count,
           SUM(total_wind) as total_wind
         FROM wind_generation_data
-        WHERE settlement_date = ${date}
+        WHERE settlement_date = ${date}::date
         GROUP BY settlement_date
       `);
       

@@ -25,10 +25,11 @@ export async function updateDailySummary(date: string): Promise<void> {
     });
 
     // First check if we have wind generation data for this date
+    // Explicitly cast the input date to date type to ensure proper comparison
     const windGenDataCheck = await db.execute(sql`
       SELECT COUNT(*) as count
       FROM wind_generation_data
-      WHERE settlement_date = ${date}
+      WHERE settlement_date = ${date}::date
     `);
 
     const recordCount = parseInt(windGenDataCheck[0]?.count as string || '0', 10);
@@ -47,7 +48,7 @@ export async function updateDailySummary(date: string): Promise<void> {
         SUM(wind_onshore) as wind_onshore_generation,
         SUM(wind_offshore) as wind_offshore_generation
       FROM wind_generation_data
-      WHERE settlement_date = ${date}
+      WHERE settlement_date = ${date}::date
     `);
 
     const totalWindGeneration = parseFloat(windGenAggregates[0]?.total_wind_generation as string || '0');
@@ -137,7 +138,7 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
     const windGenDataCheck = await db.execute(sql`
       SELECT COUNT(*) as count
       FROM wind_generation_data
-      WHERE settlement_date >= ${startDate} AND settlement_date <= ${endDate}
+      WHERE settlement_date >= ${startDate}::date AND settlement_date <= ${endDate}::date
     `);
 
     const recordCount = parseInt(windGenDataCheck[0]?.count as string || '0', 10);
@@ -156,7 +157,7 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
         SUM(wind_onshore) as wind_onshore_generation,
         SUM(wind_offshore) as wind_offshore_generation
       FROM wind_generation_data
-      WHERE settlement_date >= ${startDate} AND settlement_date <= ${endDate}
+      WHERE settlement_date >= ${startDate}::date AND settlement_date <= ${endDate}::date
     `);
 
     const totalWindGeneration = parseFloat(windGenAggregates[0]?.total_wind_generation as string || '0');
@@ -241,7 +242,7 @@ export async function updateYearlySummary(year: string): Promise<void> {
     const windGenDataCheck = await db.execute(sql`
       SELECT COUNT(*) as count
       FROM wind_generation_data
-      WHERE settlement_date >= ${startDate} AND settlement_date <= ${endDate}
+      WHERE settlement_date >= ${startDate}::date AND settlement_date <= ${endDate}::date
     `);
 
     const recordCount = parseInt(windGenDataCheck[0]?.count as string || '0', 10);
@@ -260,7 +261,7 @@ export async function updateYearlySummary(year: string): Promise<void> {
         SUM(wind_onshore) as wind_onshore_generation,
         SUM(wind_offshore) as wind_offshore_generation
       FROM wind_generation_data
-      WHERE settlement_date >= ${startDate} AND settlement_date <= ${endDate}
+      WHERE settlement_date >= ${startDate}::date AND settlement_date <= ${endDate}::date
     `);
 
     const totalWindGeneration = parseFloat(windGenAggregates[0]?.total_wind_generation as string || '0');
