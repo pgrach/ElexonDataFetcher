@@ -110,7 +110,14 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
           
           // Use the daily summary data for curtailment and wind generation values
           const totalCurtailed = Number(summaryData.totalCurtailedEnergy);
-          const totalWindGeneration = Number(summaryData.totalWindGeneration || 0);
+          // Add debug logging
+          console.log("API response:", summaryData);
+          
+          // Check for wind generation data
+          const hasWindData = 'totalWindGeneration' in summaryData && summaryData.totalWindGeneration !== null;
+          console.log("Has wind data:", hasWindData, summaryData.totalWindGeneration);
+          
+          const totalWindGeneration = hasWindData ? Number(summaryData.totalWindGeneration) : 0;
           
           // For actual vs. curtailed calculation, use the real wind generation data
           // instead of estimating from a percentage
@@ -121,9 +128,15 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
             ? (totalCurtailed / totalPotential) * 100
             : 0;
           
+          console.log("Total curtailed:", totalCurtailed);
+          console.log("Total wind generation:", totalWindGeneration);
+          console.log("Total potential:", totalPotential);
+          console.log("Will use wind generation:", totalWindGeneration > 0);
+          
           // Store calculated values
           setTotalCurtailedVolume(totalCurtailed);
           setTotalPotentialGeneration(totalPotential);
+          // Only use totalWindGeneration if it's greater than 0
           setTotalWindGeneration(totalWindGeneration > 0 ? totalWindGeneration : null);
           setShowPieChart(true);
           
