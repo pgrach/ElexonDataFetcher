@@ -158,7 +158,7 @@ function loadCheckpoint(): Checkpoint | null {
 }
 
 // Main update function
-export async function runWindDataUpdate(days: number = RECENT_DAYS_TO_UPDATE, force: boolean = FORCE_UPDATE): Promise<{
+async function runWindDataUpdate(days: number = RECENT_DAYS_TO_UPDATE, force: boolean = FORCE_UPDATE): Promise<{
   dates: string[];
   updatedDates: string[];
   skippedDates: string[];
@@ -309,7 +309,9 @@ export async function runWindDataUpdate(days: number = RECENT_DAYS_TO_UPDATE, fo
 }
 
 // Run main function if called directly
-if (require.main === module) {
+// Using import.meta.url to check if this is the main module
+const isMainModule = import.meta.url.endsWith('update_wind_generation_data.ts');
+if (isMainModule) {
   runWindDataUpdate().catch(error => {
     log(`Uncaught error in wind data update: ${error}`, 'error');
     process.exit(1);

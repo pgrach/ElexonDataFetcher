@@ -171,12 +171,22 @@ export function startDataUpdateService() {
       const now = new Date();
       const status = getUpdateServiceStatus();
 
+      // Also get wind data service status
+      const windStatus = getWindDataServiceStatus();
+      
       console.log(`\n=== Service Heartbeat ===`);
       console.log(`Running Since: ${status.serviceStartTime?.toISOString()}`);
       console.log(`Current Time: ${now.toISOString()}`);
       console.log(`Last Update Attempt: ${status.lastUpdateTime?.toISOString() || 'Never'}`);
       console.log(`Last Successful Update: ${status.lastSuccessfulUpdate?.toISOString() || 'Never'}`);
       console.log(`Update In Progress: ${status.isCurrentlyUpdating}`);
+      
+      // Add wind data service status
+      console.log(`\n--- Wind Data Service Status ---`);
+      console.log(`Next Scheduled Wind Update: ${windStatus.nextScheduledRun || 'Not scheduled'}`);
+      console.log(`Last Wind Update Run: ${windStatus.lastRunTime || 'Never'}`);
+      console.log(`Wind Update Status: ${windStatus.lastUpdateStatus || 'Unknown'}`);
+      console.log(`Wind Update In Progress: ${windStatus.isRunning}`);
 
       // Alert if no successful updates in last 15 minutes
       if (status.lastSuccessfulUpdate) {

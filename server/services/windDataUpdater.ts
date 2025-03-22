@@ -3,6 +3,12 @@
  * 
  * This service regularly fetches and updates wind generation data from Elexon.
  * It runs daily updates and can process historical data on demand.
+ * 
+ * Features:
+ * - Scheduled daily updates at configurable times
+ * - Historical data processing on service startup
+ * - Robust error handling and retry mechanisms
+ * - Integration with system-wide logging
  */
 
 import schedule from 'node-schedule';
@@ -10,25 +16,29 @@ import { processRecentDays, processSingleDate, processDateRange, getLatestDataDa
 import { logger } from '../utils/logger';
 import { formatDate } from '../utils/dates';
 import { subDays, format } from 'date-fns';
+import { runWindDataUpdate } from '../../update_wind_generation_data';
 
 // Scheduling constants
 const DEFAULT_UPDATE_HOUR = 1;  // 1 AM daily
 const DEFAULT_UPDATE_MINUTE = 30;
 const HISTORICAL_DAYS_TO_PROCESS = 60; // When starting from scratch, process 60 days
+const MAX_RETRY_ATTEMPTS = 3;
 
 // Service state
 let isRunning = false;
 let lastRunTime: Date | null = null;
+let lastUpdateStatus: 'success' | 'partial' | 'failed' | null = null;
 let updateJob: schedule.Job | null = null;
 
 /**
  * Main update function - fetches and processes latest wind generation data
+ * Enhanced with comprehensive error handling and detailed logging
  */
-async function updateWindData(days: number = 2): Promise<boolean> {
+async function updateWindData(days: number = 2, force: boolean = false): Promise<boolean> {
   if (isRunning) {
-    logger.warning('Wind data update already in progress, skipping', { 
-      module: 'windDataUpdater',
-      lastRunTime: lastRunTime ? lastRunTime.toISOString() : 'never'
+    logger.warning('Wind data update already in progress, skipping. Last run: ' + 
+      (lastRunTime ? lastRunTime.toISOString() : 'never'), { 
+      module: 'windDataUpdater'
     });
     return false;
   }
@@ -37,21 +47,45 @@ async function updateWindData(days: number = 2): Promise<boolean> {
   lastRunTime = new Date();
   
   try {
-    logger.info(`Starting wind generation data update for last ${days} days`, { 
+    logger.info(`Starting enhanced wind generation data update for last ${days} days (force=${force})`, { 
       module: 'windDataUpdater'
     });
     
-    const recordsProcessed = await processRecentDays(days);
+    // Use the more robust wind data update script
+    const result = await runWindDataUpdate(days, force);
     
-    logger.info(`Wind generation data update completed, processed ${recordsProcessed} records`, { 
+    // Detailed logging of results
+    logger.info(`Wind generation data update completed with status: ${result.status}. ` +
+      `Total: ${result.dates.length}, Updated: ${result.updatedDates.length}, ` +
+      `Skipped: ${result.skippedDates.length}, Failed: ${result.failedDates.length}`, { 
       module: 'windDataUpdater'
     });
     
-    return true;
+    // Set status for service health monitoring
+    if (result.status === 'completed') {
+      lastUpdateStatus = 'success';
+    } else if (result.status === 'partial_update') {
+      lastUpdateStatus = 'partial';
+      
+      // Log specific failures for troubleshooting
+      if (result.failedDates.length > 0) {
+        logger.warning(`Failed to update wind data for dates: ${result.failedDates.join(', ')}`, {
+          module: 'windDataUpdater'
+        });
+      }
+    } else {
+      lastUpdateStatus = 'failed';
+      logger.error(`Wind data update failed completely. Failed dates: ${result.failedDates.join(', ')}`, {
+        module: 'windDataUpdater'
+      });
+    }
+    
+    return result.status !== 'failed';
   } catch (error) {
-    logger.error('Error updating wind generation data', { 
-      module: 'windDataUpdater',
-      error: error instanceof Error ? error.message : String(error)
+    lastUpdateStatus = 'failed';
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Unexpected error in wind generation data update: ${errorMessage}`, { 
+      module: 'windDataUpdater'
     });
     return false;
   } finally {
@@ -61,6 +95,7 @@ async function updateWindData(days: number = 2): Promise<boolean> {
 
 /**
  * Process historical wind data to ensure the database is populated
+ * Enhanced with retry logic and comprehensive logging
  */
 async function processHistoricalData(): Promise<void> {
   try {
@@ -83,7 +118,63 @@ async function processHistoricalData(): Promise<void> {
         module: 'windDataUpdater'
       });
       
-      await processDateRange(formattedStartDate, formattedEndDate);
+      // Process historical data in chunks to avoid timeout
+      const chunkSize = 7; // Process a week at a time
+      let currentStart = new Date(formattedStartDate);
+      const end = new Date(formattedEndDate);
+      
+      while (currentStart <= end) {
+        const chunkEnd = new Date(currentStart);
+        chunkEnd.setDate(chunkEnd.getDate() + chunkSize - 1);
+        
+        // Cap at the overall end date
+        if (chunkEnd > end) {
+          chunkEnd.setTime(end.getTime());
+        }
+        
+        const currentStartFormatted = format(currentStart, 'yyyy-MM-dd');
+        const chunkEndFormatted = format(chunkEnd, 'yyyy-MM-dd');
+        
+        logger.info(`Processing chunk from ${currentStartFormatted} to ${chunkEndFormatted}`, {
+          module: 'windDataUpdater'
+        });
+        
+        try {
+          // Try up to MAX_RETRY_ATTEMPTS times
+          let success = false;
+          let attempt = 0;
+          
+          while (!success && attempt < MAX_RETRY_ATTEMPTS) {
+            attempt++;
+            
+            try {
+              await processDateRange(currentStartFormatted, chunkEndFormatted);
+              success = true;
+            } catch (chunkError) {
+              if (attempt >= MAX_RETRY_ATTEMPTS) {
+                throw chunkError;
+              }
+              
+              // Log and retry with backoff
+              const errorMessage = chunkError instanceof Error ? chunkError.message : String(chunkError);
+              logger.warning(`Error processing chunk ${currentStartFormatted} to ${chunkEndFormatted}, attempt ${attempt}/${MAX_RETRY_ATTEMPTS}: ${errorMessage}`, {
+                module: 'windDataUpdater'
+              });
+              
+              // Exponential backoff
+              await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+            }
+          }
+        } catch (finalError) {
+          const errorMessage = finalError instanceof Error ? finalError.message : String(finalError);
+          logger.error(`Failed to process chunk ${currentStartFormatted} to ${chunkEndFormatted} after ${MAX_RETRY_ATTEMPTS} attempts: ${errorMessage}`, {
+            module: 'windDataUpdater'
+          });
+        }
+        
+        // Move to next chunk
+        currentStart.setDate(currentStart.getDate() + chunkSize);
+      }
     } else {
       // Some data exists, make sure we're up to date
       logger.info(`Wind data found up to ${latestDate}, updating to current date`, { 
@@ -103,15 +194,16 @@ async function processHistoricalData(): Promise<void> {
           module: 'windDataUpdater'
         });
         
-        await processDateRange(formattedStartDate, formattedEndDate);
+        // Use the enhanced update function with force=true to ensure all data is updated
+        await updateWindData(Math.ceil((today.getTime() - latestDateObj.getTime()) / (1000 * 60 * 60 * 24)) + 1, true);
       } else {
         logger.info('Wind generation data is already up to date', { module: 'windDataUpdater' });
       }
     }
   } catch (error) {
-    logger.error('Error processing historical wind generation data', { 
-      module: 'windDataUpdater',
-      error: error instanceof Error ? error.message : String(error)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Error processing historical wind generation data: ${errorMessage}`, { 
+      module: 'windDataUpdater'
     });
   }
 }
@@ -154,25 +246,28 @@ export function stopWindDataUpdateService(): void {
 }
 
 /**
- * Get the current status of the update service
+ * Get the current status of the update service with detailed state information
  */
 export function getWindDataServiceStatus(): {
   isRunning: boolean;
   lastRunTime: string | null;
+  lastUpdateStatus: 'success' | 'partial' | 'failed' | null;
   nextScheduledRun: string | null;
 } {
   return {
     isRunning,
     lastRunTime: lastRunTime ? lastRunTime.toISOString() : null,
+    lastUpdateStatus,
     nextScheduledRun: updateJob ? updateJob.nextInvocation().toISOString() : null
   };
 }
 
 /**
- * Manually trigger an update
+ * Manually trigger an update with optional force update parameter
  * 
  * @param days - Number of days to update (default: 2)
+ * @param force - Force update even if data exists (default: false)
  */
-export async function manualUpdate(days: number = 2): Promise<boolean> {
-  return updateWindData(days);
+export async function manualUpdate(days: number = 2, force: boolean = false): Promise<boolean> {
+  return updateWindData(days, force);
 }
