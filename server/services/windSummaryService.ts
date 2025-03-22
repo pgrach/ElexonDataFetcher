@@ -32,7 +32,8 @@ export async function updateDailySummary(date: string): Promise<void> {
       WHERE settlement_date = ${date}::date
     `);
 
-    const recordCount = parseInt(windGenDataCheck[0]?.count as string || '0', 10);
+    // Get count from the first row of the result
+    const recordCount = parseInt(windGenDataCheck.rows[0]?.count as string || '0', 10);
     
     if (recordCount === 0) {
       logger.warning(`No wind generation data found for ${date}, skipping daily summary update`, {
@@ -51,9 +52,10 @@ export async function updateDailySummary(date: string): Promise<void> {
       WHERE settlement_date = ${date}::date
     `);
 
-    const totalWindGeneration = parseFloat(windGenAggregates[0]?.total_wind_generation as string || '0');
-    const windOnshoreGeneration = parseFloat(windGenAggregates[0]?.wind_onshore_generation as string || '0');
-    const windOffshoreGeneration = parseFloat(windGenAggregates[0]?.wind_offshore_generation as string || '0');
+    // Get generation values from the first row of the result
+    const totalWindGeneration = parseFloat(windGenAggregates.rows[0]?.total_wind_generation as string || '0');
+    const windOnshoreGeneration = parseFloat(windGenAggregates.rows[0]?.wind_onshore_generation as string || '0');
+    const windOffshoreGeneration = parseFloat(windGenAggregates.rows[0]?.wind_offshore_generation as string || '0');
 
     // Check if daily summary exists for this date
     const existingSummary = await db
@@ -75,9 +77,11 @@ export async function updateDailySummary(date: string): Promise<void> {
 
       logger.info(`Updated daily summary with wind generation data for ${date}`, {
         module: 'windSummaryService',
-        totalWindGeneration,
-        windOnshoreGeneration,
-        windOffshoreGeneration
+        context: {
+          totalWindGeneration,
+          windOnshoreGeneration,
+          windOffshoreGeneration
+        }
       });
     } else {
       // Create new summary with 0 values for curtailment data (will be updated separately)
@@ -95,9 +99,11 @@ export async function updateDailySummary(date: string): Promise<void> {
 
       logger.info(`Created new daily summary with wind generation data for ${date}`, {
         module: 'windSummaryService',
-        totalWindGeneration,
-        windOnshoreGeneration,
-        windOffshoreGeneration
+        context: {
+          totalWindGeneration,
+          windOnshoreGeneration,
+          windOffshoreGeneration
+        }
       });
     }
   } catch (error) {
@@ -141,7 +147,7 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
       WHERE settlement_date >= ${startDate}::date AND settlement_date <= ${endDate}::date
     `);
 
-    const recordCount = parseInt(windGenDataCheck[0]?.count as string || '0', 10);
+    const recordCount = parseInt(windGenDataCheck.rows[0]?.count as string || '0', 10);
     
     if (recordCount === 0) {
       logger.warning(`No wind generation data found for ${yearMonth}, skipping monthly summary update`, {
@@ -160,9 +166,9 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
       WHERE settlement_date >= ${startDate}::date AND settlement_date <= ${endDate}::date
     `);
 
-    const totalWindGeneration = parseFloat(windGenAggregates[0]?.total_wind_generation as string || '0');
-    const windOnshoreGeneration = parseFloat(windGenAggregates[0]?.wind_onshore_generation as string || '0');
-    const windOffshoreGeneration = parseFloat(windGenAggregates[0]?.wind_offshore_generation as string || '0');
+    const totalWindGeneration = parseFloat(windGenAggregates.rows[0]?.total_wind_generation as string || '0');
+    const windOnshoreGeneration = parseFloat(windGenAggregates.rows[0]?.wind_onshore_generation as string || '0');
+    const windOffshoreGeneration = parseFloat(windGenAggregates.rows[0]?.wind_offshore_generation as string || '0');
 
     // Check if monthly summary exists for this month
     const existingSummary = await db
@@ -184,9 +190,11 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
 
       logger.info(`Updated monthly summary with wind generation data for ${yearMonth}`, {
         module: 'windSummaryService',
-        totalWindGeneration,
-        windOnshoreGeneration,
-        windOffshoreGeneration
+        context: {
+          totalWindGeneration,
+          windOnshoreGeneration,
+          windOffshoreGeneration
+        }
       });
     } else {
       // Create new summary with 0 values for curtailment data (will be updated separately)
@@ -204,9 +212,11 @@ export async function updateMonthlySummary(yearMonth: string): Promise<void> {
 
       logger.info(`Created new monthly summary with wind generation data for ${yearMonth}`, {
         module: 'windSummaryService',
-        totalWindGeneration,
-        windOnshoreGeneration,
-        windOffshoreGeneration
+        context: {
+          totalWindGeneration,
+          windOnshoreGeneration,
+          windOffshoreGeneration
+        }
       });
     }
   } catch (error) {
@@ -245,7 +255,7 @@ export async function updateYearlySummary(year: string): Promise<void> {
       WHERE settlement_date >= ${startDate}::date AND settlement_date <= ${endDate}::date
     `);
 
-    const recordCount = parseInt(windGenDataCheck[0]?.count as string || '0', 10);
+    const recordCount = parseInt(windGenDataCheck.rows[0]?.count as string || '0', 10);
     
     if (recordCount === 0) {
       logger.warning(`No wind generation data found for ${year}, skipping yearly summary update`, {
@@ -264,9 +274,9 @@ export async function updateYearlySummary(year: string): Promise<void> {
       WHERE settlement_date >= ${startDate}::date AND settlement_date <= ${endDate}::date
     `);
 
-    const totalWindGeneration = parseFloat(windGenAggregates[0]?.total_wind_generation as string || '0');
-    const windOnshoreGeneration = parseFloat(windGenAggregates[0]?.wind_onshore_generation as string || '0');
-    const windOffshoreGeneration = parseFloat(windGenAggregates[0]?.wind_offshore_generation as string || '0');
+    const totalWindGeneration = parseFloat(windGenAggregates.rows[0]?.total_wind_generation as string || '0');
+    const windOnshoreGeneration = parseFloat(windGenAggregates.rows[0]?.wind_onshore_generation as string || '0');
+    const windOffshoreGeneration = parseFloat(windGenAggregates.rows[0]?.wind_offshore_generation as string || '0');
 
     // Check if yearly summary exists for this year
     const existingSummary = await db
@@ -288,9 +298,11 @@ export async function updateYearlySummary(year: string): Promise<void> {
 
       logger.info(`Updated yearly summary with wind generation data for ${year}`, {
         module: 'windSummaryService',
-        totalWindGeneration,
-        windOnshoreGeneration,
-        windOffshoreGeneration
+        context: {
+          totalWindGeneration,
+          windOnshoreGeneration,
+          windOffshoreGeneration
+        }
       });
     } else {
       // Create new summary with 0 values for curtailment data (will be updated separately)
@@ -308,9 +320,11 @@ export async function updateYearlySummary(year: string): Promise<void> {
 
       logger.info(`Created new yearly summary with wind generation data for ${year}`, {
         module: 'windSummaryService',
-        totalWindGeneration,
-        windOnshoreGeneration,
-        windOffshoreGeneration
+        context: {
+          totalWindGeneration,
+          windOnshoreGeneration,
+          windOffshoreGeneration
+        }
       });
     }
   } catch (error) {
