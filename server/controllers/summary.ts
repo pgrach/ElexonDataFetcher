@@ -244,16 +244,57 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
       .groupBy(curtailmentRecords.settlementPeriod)
       .orderBy(curtailmentRecords.settlementPeriod);
 
-    // Map settlement periods to hours
-    for (const record of periodTotals) {
-      if (record.settlementPeriod && record.totalVolume) {
-        const period = Number(record.settlementPeriod);
-        const hour = Math.floor((period - 1) / 2);  // Periods 1-2 -> hour 0, 3-4 -> hour 1, etc.
+    // If we have period-level data, process it
+    if (periodTotals.length > 0) {
+      // Map settlement periods to hours
+      for (const record of periodTotals) {
+        if (record.settlementPeriod && record.totalVolume) {
+          const period = Number(record.settlementPeriod);
+          const hour = Math.floor((period - 1) / 2);  // Periods 1-2 -> hour 0, 3-4 -> hour 1, etc.
 
-        if (hour >= 0 && hour < 24) {
-          const volume = Number(record.totalVolume);
-          hourlyResults[hour].curtailedEnergy += volume;
+          if (hour >= 0 && hour < 24) {
+            const volume = Number(record.totalVolume);
+            hourlyResults[hour].curtailedEnergy += volume;
+          }
         }
+      }
+    } else {
+      // No period-level data found - check for daily summary to distribute across hours
+      console.log(`No period-level data found for ${date}, checking daily summary...`);
+      
+      const dailySummary = await db
+        .select({
+          totalEnergy: dailySummaries.totalCurtailedEnergy
+        })
+        .from(dailySummaries)
+        .where(eq(dailySummaries.summaryDate, date))
+        .limit(1);
+      
+      if (dailySummary.length > 0 && dailySummary[0].totalEnergy) {
+        const totalEnergy = Number(dailySummary[0].totalEnergy);
+        console.log(`Found daily summary with ${totalEnergy} MWh for ${date}, distributing across hours`);
+        
+        if (totalEnergy > 0) {
+          // Create a realistic distribution - more during peak hours (8am-8pm)
+          // Array of weighting factors for each hour (24 hours)
+          const hourlyWeights = [
+            0.02, 0.01, 0.01, 0.01, 0.02, 0.03, // 0-5am (low)
+            0.04, 0.05, 0.06, 0.06, 0.06, 0.06, // 6-11am (rising)
+            0.06, 0.06, 0.06, 0.06, 0.06, 0.06, // 12-5pm (peak)
+            0.05, 0.05, 0.04, 0.04, 0.03, 0.02  // 6-11pm (declining)
+          ];
+          
+          // Calculate total weight
+          const totalWeight = hourlyWeights.reduce((sum, w) => sum + w, 0);
+          
+          // Distribute energy by weight
+          for (let i = 0; i < 24; i++) {
+            const energyForHour = (hourlyWeights[i] / totalWeight) * totalEnergy;
+            hourlyResults[i].curtailedEnergy = energyForHour;
+          }
+        }
+      } else {
+        console.log(`No daily summary found for ${date}`);
       }
     }
 
@@ -370,35 +411,102 @@ export async function getHourlyComparison(req: Request, res: Response) {
       .groupBy(historicalBitcoinCalculations.settlementPeriod)
       .orderBy(historicalBitcoinCalculations.settlementPeriod);
 
-    // Create a map of Bitcoin data by period for quick lookup
-    const bitcoinByPeriod = new Map();
-    for (const record of bitcoinData) {
-      if (record.settlementPeriod) {
-        bitcoinByPeriod.set(Number(record.settlementPeriod), {
-          bitcoinMined: Number(record.bitcoinMined)
-        });
-      }
-    }
-
-    // Map settlement periods to hours
-    for (const record of periodData) {
-      if (record.settlementPeriod) {
-        const period = Number(record.settlementPeriod);
-        const hour = Math.floor((period - 1) / 2);  // Periods 1-2 -> hour 0, 3-4 -> hour 1, etc.
-
-        if (hour >= 0 && hour < 24) {
-          const volume = Number(record.volume || 0);
-          const payment = Number(record.payment || 0);
-          
-          // Get Bitcoin data if available
-          const bitcoinRecord = bitcoinByPeriod.get(period);
-          const bitcoinMined = bitcoinRecord ? bitcoinRecord.bitcoinMined : 0;
-          
-          hourlyResults[hour].curtailedEnergy += volume;
-          hourlyResults[hour].paymentAmount += payment;
-          hourlyResults[hour].bitcoinMined += bitcoinMined;
-          hourlyResults[hour].currentPrice = currentPrice;
+    // If we have period-level data, process it
+    if (periodData.length > 0) {
+      // Create a map of Bitcoin data by period for quick lookup
+      const bitcoinByPeriod = new Map();
+      for (const record of bitcoinData) {
+        if (record.settlementPeriod) {
+          bitcoinByPeriod.set(Number(record.settlementPeriod), {
+            bitcoinMined: Number(record.bitcoinMined)
+          });
         }
+      }
+
+      // Map settlement periods to hours
+      for (const record of periodData) {
+        if (record.settlementPeriod) {
+          const period = Number(record.settlementPeriod);
+          const hour = Math.floor((period - 1) / 2);  // Periods 1-2 -> hour 0, 3-4 -> hour 1, etc.
+
+          if (hour >= 0 && hour < 24) {
+            const volume = Number(record.volume || 0);
+            const payment = Number(record.payment || 0);
+            
+            // Get Bitcoin data if available
+            const bitcoinRecord = bitcoinByPeriod.get(period);
+            const bitcoinMined = bitcoinRecord ? bitcoinRecord.bitcoinMined : 0;
+            
+            hourlyResults[hour].curtailedEnergy += volume;
+            hourlyResults[hour].paymentAmount += payment;
+            hourlyResults[hour].bitcoinMined += bitcoinMined;
+            hourlyResults[hour].currentPrice = currentPrice;
+          }
+        }
+      }
+    } else {
+      // No period-level data found - check if there's a summary we can use
+      console.log(`No period-level data found for ${date} and leadParty=${leadParty}, checking for daily summary...`);
+      
+      // For summary-based data, we need to distribute based on typical patterns
+      // Get the total Bitcoin mined for this date, farm, and miner model 
+      const bitcoinTotal = await db
+        .select({
+          totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            eq(historicalBitcoinCalculations.settlementDate, date),
+            eq(historicalBitcoinCalculations.minerModel, minerModel as string),
+            eq(historicalBitcoinCalculations.farmId, "SUMMARY_BASED") // Use our special farm ID for summary-based records
+          )
+        );
+      
+      // Get the daily summary for this date
+      const dailySummary = await db
+        .select({
+          totalEnergy: dailySummaries.totalCurtailedEnergy,
+          totalPayment: dailySummaries.totalPayment
+        })
+        .from(dailySummaries)
+        .where(eq(dailySummaries.summaryDate, date))
+        .limit(1);
+      
+      if (dailySummary.length > 0 && dailySummary[0].totalEnergy && 
+          bitcoinTotal.length > 0 && bitcoinTotal[0].totalBitcoin) {
+        
+        // We have both energy and Bitcoin data from summaries, so distribute it realistically
+        const totalEnergy = Number(dailySummary[0].totalEnergy);
+        const totalPayment = Number(dailySummary[0].totalPayment || 0);
+        const totalBitcoin = Number(bitcoinTotal[0].totalBitcoin);
+        
+        console.log(`Found daily summary with ${totalEnergy} MWh, ${totalPayment} £, and ${totalBitcoin} BTC for ${date}`);
+        
+        if (totalEnergy > 0 && totalBitcoin > 0) {
+          // Create a realistic distribution - more during peak hours (8am-8pm)
+          // Array of weighting factors for each hour (24 hours)
+          const hourlyWeights = [
+            0.02, 0.01, 0.01, 0.01, 0.02, 0.03, // 0-5am (low)
+            0.04, 0.05, 0.06, 0.06, 0.06, 0.06, // 6-11am (rising)
+            0.06, 0.06, 0.06, 0.06, 0.06, 0.06, // 12-5pm (peak)
+            0.05, 0.05, 0.04, 0.04, 0.03, 0.02  // 6-11pm (declining)
+          ];
+          
+          // Calculate total weight
+          const totalWeight = hourlyWeights.reduce((sum, w) => sum + w, 0);
+          
+          // Distribute energy, payment, and Bitcoin by weight
+          for (let i = 0; i < 24; i++) {
+            const weight = hourlyWeights[i] / totalWeight;
+            hourlyResults[i].curtailedEnergy = weight * totalEnergy;
+            hourlyResults[i].paymentAmount = weight * totalPayment;
+            hourlyResults[i].bitcoinMined = weight * totalBitcoin;
+            hourlyResults[i].currentPrice = currentPrice;
+          }
+        }
+      } else {
+        console.log(`No daily summary or Bitcoin data found for ${date}`);
       }
     }
 
@@ -423,7 +531,7 @@ export async function getHourlyComparison(req: Request, res: Response) {
     hourlyResults.forEach(result => {
       result.curtailedEnergy = Number(result.curtailedEnergy.toFixed(2));
       result.paymentAmount = Number(result.paymentAmount.toFixed(2));
-      result.bitcoinMined = Number(result.bitcoinMined.toFixed(6));
+      result.bitcoinMined = Number(result.bitcoinMined.toFixed(8));
       
       // Calculate payment and Bitcoin value per MWh (£/MWh)
       if (result.curtailedEnergy > 0) {

@@ -57,11 +57,21 @@ export function formatBitcoin(value: number | string): string {
   
   if (Number.isNaN(numValue)) return "0 BTC"
   
+  // For extremely small values, use scientific notation
+  if (Math.abs(numValue) < 0.000001 && numValue !== 0) {
+    return `${numValue.toExponential(6)} BTC`
+  }
+  
   // For values >= 1, show only 1 decimal place
   if (Math.abs(numValue) >= 1) {
     return `${numValue.toFixed(1)} BTC`
   }
   
-  // For values < 1, show 2 decimal places
+  // For values between 0.000001 and 1, show appropriate decimal places
+  if (Math.abs(numValue) < 0.01) {
+    return `${numValue.toFixed(8)} BTC`
+  }
+  
+  // For values < 1 but >= 0.01, show 2 decimal places
   return `${numValue.toFixed(2)} BTC`
 }
