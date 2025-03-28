@@ -57,23 +57,11 @@ export function formatBitcoin(value: number | string): string {
   
   if (Number.isNaN(numValue)) return "0 BTC"
   
-  // For extremely small values, use a friendly format
-  if (Math.abs(numValue) < 0.000001 && numValue !== 0) {
-    // Format very small numbers in "sats" (satoshis) which is 1/100,000,000 of a Bitcoin
-    const sats = numValue * 100000000
-    return `${sats.toFixed(2)} sats`
-  }
-  
   // For values >= 1, show only 1 decimal place
   if (Math.abs(numValue) >= 1) {
     return `${numValue.toFixed(1)} BTC`
   }
   
-  // For values between 0.000001 and 1, show appropriate decimal places
-  if (Math.abs(numValue) < 0.01) {
-    return `${numValue.toFixed(8)} BTC`
-  }
-  
-  // For values < 1 but >= 0.01, show 2 decimal places
+  // For values < 1, show 2 decimal places
   return `${numValue.toFixed(2)} BTC`
 }
