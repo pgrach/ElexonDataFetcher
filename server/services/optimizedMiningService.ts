@@ -58,33 +58,11 @@ export async function getDailyMiningPotential(date: string, minerModel: string, 
       );
       
     const curtailmentResults = await curtailmentQuery;
-    let totalCurtailedEnergy = Number(curtailmentResults[0]?.totalCurtailedEnergy || 0);
-    
-    // If no curtailment records were found and no specific farm is requested,
-    // fallback to daily_summaries table
-    if (totalCurtailedEnergy === 0 && !farmId) {
-      console.log(`No curtailment records found for ${date}, checking daily_summaries`);
-      
-      // Import daily_summaries from schema
-      const { dailySummaries } = await import("../../db/schema");
-      
-      const dailySummaryQuery = await db
-        .select({
-          totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy
-        })
-        .from(dailySummaries)
-        .where(eq(dailySummaries.summaryDate, date));
-      
-      if (dailySummaryQuery.length > 0) {
-        totalCurtailedEnergy = Number(dailySummaryQuery[0].totalCurtailedEnergy || 0);
-        console.log(`Found daily summary data: ${totalCurtailedEnergy} MWh`);
-      }
-    }
     
     // Return consolidated results
     return {
       date,
-      totalCurtailedEnergy: totalCurtailedEnergy,
+      totalCurtailedEnergy: Number(curtailmentResults[0]?.totalCurtailedEnergy || 0),
       totalBitcoinMined: Number(bitcoinResults[0]?.totalBitcoinMined || 0),
       difficulty: Number(bitcoinResults[0]?.difficulty || 0)
     };
