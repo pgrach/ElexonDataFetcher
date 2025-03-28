@@ -57,6 +57,26 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
   console.log("Selected month for highlighting:", selectedMonth);
   
   // Fetch hourly data for daily view
+  // Fetch daily summary totals for the selected date
+  const { data: dailySummary = { totalCurtailedEnergy: 0 }, isLoading: isDailySummaryLoading } = useQuery({
+    queryKey: [`/api/summary/daily/${formattedDate}`, farmId],
+    queryFn: async () => {
+      const url = new URL(`/api/summary/daily/${formattedDate}`, window.location.origin);
+      if (farmId) {
+        url.searchParams.set("leadParty", farmId);
+      }
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        return { totalCurtailedEnergy: 0 };
+      }
+      
+      return response.json();
+    },
+    enabled: timeframe === "daily" // Only fetch when in daily view
+  });
+  
+  // Fetch hourly data for daily view
   const { data: hourlyData = [], isLoading: isHourlyLoading } = useQuery({
     queryKey: [`/api/curtailment/hourly/${formattedDate}`, farmId],
     queryFn: async () => {
@@ -187,25 +207,56 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
   });
   
   const isLoading = 
-    (timeframe === "daily" && (isHourlyLoading || isBitcoinLoading)) || 
+    (timeframe === "daily" && (isHourlyLoading || isBitcoinLoading || isDailySummaryLoading)) || 
     (timeframe === "monthly" && isMonthlyLoading);
   
   // Process data for the daily chart
-  const dailyChartData = hourlyData.map((item: any) => {
-    const curtailedEnergy = Number(item.curtailedEnergy);
-    const totalEnergy = hourlyData.reduce((sum: number, h: any) => sum + Number(h.curtailedEnergy), 0);
+  const dailyChartData = useMemo(() => {
+    // First check if we have hourly data with non-zero values
+    const hasValidHourlyData = hourlyData.some((item: any) => Number(item.curtailedEnergy) > 0);
     
-    // Calculate Bitcoin for this hour based on proportion of energy
-    const bitcoinPotential = totalEnergy > 0 
-      ? (curtailedEnergy / totalEnergy) * dailyBitcoin.bitcoinMined
-      : 0;
+    if (hasValidHourlyData) {
+      // Use hourly data as normal
+      return hourlyData.map((item: any) => {
+        const curtailedEnergy = Number(item.curtailedEnergy);
+        const totalEnergy = hourlyData.reduce((sum: number, h: any) => sum + Number(h.curtailedEnergy), 0);
+        
+        // Calculate Bitcoin for this hour based on proportion of energy
+        const bitcoinPotential = totalEnergy > 0 
+          ? (curtailedEnergy / totalEnergy) * dailyBitcoin.bitcoinMined
+          : 0;
+          
+        return {
+          hour: item.hour,
+          curtailedEnergy,
+          bitcoinPotential
+        };
+      });
+    } else if (hourlyData.length > 0 && dailySummary && dailySummary.totalCurtailedEnergy > 0) {
+      // We have empty hourly data but have a valid daily summary total
+      // Create evenly distributed data across hours
+      const totalEnergy = Number(dailySummary.totalCurtailedEnergy);
+      const hourlyEnergy = totalEnergy / 24; // Distribute evenly across 24 hours
       
-    return {
-      hour: item.hour,
-      curtailedEnergy,
-      bitcoinPotential
-    };
-  });
+      // Create data with evenly distributed values
+      return hourlyData.map((item: any) => {
+        return {
+          hour: item.hour,
+          curtailedEnergy: hourlyEnergy,
+          bitcoinPotential: dailyBitcoin.bitcoinMined / 24 // Distribute Bitcoin evenly
+        };
+      });
+    } else {
+      // No valid data
+      return hourlyData.map((item: any) => {
+        return {
+          hour: item.hour,
+          curtailedEnergy: 0,
+          bitcoinPotential: 0
+        };
+      });
+    }
+  }, [hourlyData, dailySummary, dailyBitcoin.bitcoinMined]);
   
   // Process data for the monthly chart
   console.log("Monthly data before processing:", monthlyData);
