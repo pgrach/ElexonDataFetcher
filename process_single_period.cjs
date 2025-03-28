@@ -10,7 +10,7 @@ const { Pool } = require('pg');
 
 // Configuration
 const SETTLEMENT_DATE = '2025-03-27';
-const PERIOD = 46; // Just process this one period
+const PERIOD = 48; // Just process this one period
 const ELEXON_BASE_URL = 'https://data.elexon.co.uk/bmrs/api/v1';
 const BMU_MAPPING_PATH = path.join('server', 'data', 'bmuMapping.json');
 
