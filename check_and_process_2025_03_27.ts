@@ -1,28 +1,22 @@
 /**
- * Optimized Critical Date Processor
+ * Script to check and process data for 2025-03-27
  * 
- * This script provides a streamlined way to reingest and fix Elexon API data for specific
- * settlement periods on any date. It handles multiple records for the same farm within a period
- * correctly and ensures all Bitcoin calculations are updated.
- * 
- * Features:
- * - Bulk clearing and insertion for better handling of duplicate farm records
- * - Efficient batch processing to avoid timeouts
- * - Comprehensive logging and verification
- * - Simple command-line interface
- * 
- * Usage:
- *   npx tsx optimized_critical_date_processor.ts <date> [start_period] [end_period]
- * 
- * Example:
- *   npx tsx optimized_critical_date_processor.ts 2025-03-09 44 48
+ * This script checks the original data from Elexon API for 2025-03-27
+ * and compares it with existing data in the database. It will process
+ * any missing periods (specifically 35-48) for this date.
  */
 
-// Force ESM module mode
+// Add TypeScript ES modules configuration
+// @ts-check
+/// <reference types="node" />
+/// <reference types="vite/client" />
+/// <reference types="typescript" />
+
+// Force this file to be treated as an ES module
 export {};
 
 import { db } from './db';
-import { and, between, eq } from 'drizzle-orm';
+import { and, between, eq, sql } from 'drizzle-orm';
 import { curtailmentRecords } from './db/schema';
 import axios from 'axios';
 import fs from 'fs/promises';
@@ -37,16 +31,15 @@ const __dirname = path.dirname(__filename);
 // Configuration
 const API_BASE_URL = 'https://data.elexon.co.uk/bmrs/api/v1';
 const BMU_MAPPING_PATH = path.join(__dirname, 'server', 'data', 'bmuMapping.json');
-const LOG_FILE = `process_critical_date_${new Date().toISOString().split('T')[0]}.log`;
+const LOG_FILE = `process_2025_03_27_${new Date().toISOString().split('T')[0]}.log`;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000; // 5 seconds
 const BATCH_SIZE = 5; // Number of periods to process in a batch
 
-// Parse command line arguments
-const [dateArg, startPeriodArg, endPeriodArg] = process.argv.slice(2);
-const date = dateArg || new Date().toISOString().split('T')[0];
-const startPeriod = startPeriodArg ? parseInt(startPeriodArg, 10) : 1;
-const endPeriod = endPeriodArg ? parseInt(endPeriodArg, 10) : 48;
+// Set target date
+const targetDate = '2025-03-27';
+const startPeriod = 35; // We'll process periods 35-48
+const endPeriod = 48;
 
 // Logging utility
 async function logToFile(message: string): Promise<void> {
@@ -107,6 +100,66 @@ async function loadBmuMappings(): Promise<{
   }
 }
 
+// Get current status from database
+async function checkDatabaseStatus(): Promise<{
+  earliestPeriod: number | null;
+  latestPeriod: number | null;
+  recordCount: number;
+  periodCount: number;
+  missingPeriods: number[];
+}> {
+  try {
+    // Get a summary of existing records
+    const result = await db.execute(sql`
+      SELECT 
+        MIN(settlement_period) as min_period,
+        MAX(settlement_period) as max_period,
+        COUNT(*) as record_count,
+        COUNT(DISTINCT settlement_period) as period_count
+      FROM 
+        curtailment_records
+      WHERE 
+        settlement_date = ${targetDate}
+    `);
+
+    const row = result.rows[0];
+    const min_period = row.min_period ? row.min_period.toString() : null;
+    const max_period = row.max_period ? row.max_period.toString() : null;
+    const record_count = row.record_count ? row.record_count.toString() : '0';
+    const period_count = row.period_count ? row.period_count.toString() : '0';
+    
+    // Find missing periods (if any)
+    const periodsResult = await db.execute(sql`
+      SELECT settlement_period 
+      FROM curtailment_records 
+      WHERE settlement_date = ${targetDate} 
+      GROUP BY settlement_period 
+      ORDER BY settlement_period
+    `);
+    
+    const existingPeriods = periodsResult.rows.map(row => parseInt(row.settlement_period.toString(), 10));
+    const allPeriods = Array.from({ length: 48 }, (_, i) => i + 1);
+    const missingPeriods = allPeriods.filter(p => !existingPeriods.includes(p));
+    
+    return {
+      earliestPeriod: min_period ? parseInt(min_period, 10) : null,
+      latestPeriod: max_period ? parseInt(max_period, 10) : null,
+      recordCount: parseInt(record_count, 10),
+      periodCount: parseInt(period_count, 10),
+      missingPeriods
+    };
+  } catch (error) {
+    log(`Error checking database status: ${error}`, "error");
+    return {
+      earliestPeriod: null,
+      latestPeriod: null,
+      recordCount: 0,
+      periodCount: 0,
+      missingPeriods: Array.from({ length: 48 }, (_, i) => i + 1)
+    };
+  }
+}
+
 // Process a single settlement period
 async function processPeriod(
   period: number,
@@ -123,11 +176,8 @@ async function processPeriod(
   
   try {
     // Fetch data from the Elexon API
-    const response = await axios.get(`${API_BASE_URL}/balancing/bid-offer/accepted/settlement-period/${period}/settlement-date/${date}`);
+    const response = await axios.get(`${API_BASE_URL}/balancing/bid-offer/accepted/settlement-period/${period}/settlement-date/${targetDate}`);
     const data = response.data.data || [];
-    
-    console.log(`Loading BMU mapping from: ${BMU_MAPPING_PATH}`);
-    console.log(`Loaded ${windFarmIds.size} wind farm BMU IDs`);
     
     // Filter to keep only valid wind farm records
     const validRecords = data.filter((record: any) => {
@@ -137,7 +187,7 @@ async function processPeriod(
     const totalVolume = validRecords.reduce((sum: number, record: any) => sum + Math.abs(record.volume), 0);
     const totalPayment = validRecords.reduce((sum: number, record: any) => sum + (Math.abs(record.volume) * record.originalPrice), 0);
     
-    console.log(`[${date} P${period}] Records: ${validRecords.length} (${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)})`);
+    log(`[${targetDate} P${period}] Records: ${validRecords.length} (${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)})`);
     log(`Period ${period}: Found ${validRecords.length} valid records`, "success");
     
     let recordsAdded = 0;
@@ -153,7 +203,7 @@ async function processPeriod(
       const deleteResult = await db.delete(curtailmentRecords)
         .where(
           and(
-            eq(curtailmentRecords.settlementDate, date),
+            eq(curtailmentRecords.settlementDate, targetDate),
             eq(curtailmentRecords.settlementPeriod, period)
           )
         );
@@ -173,7 +223,7 @@ async function processPeriod(
       totalPaymentAdded += payment;
       
       return {
-        settlementDate: date,
+        settlementDate: targetDate,
         settlementPeriod: period,
         farmId: record.id,
         leadPartyName: bmuLeadPartyMap.get(record.id) || 'Unknown',
@@ -290,130 +340,123 @@ async function processBatch(
   };
 }
 
-// Process a specific date with small batches
-async function processDate(): Promise<void> {
+// Trigger Bitcoin calculation update
+async function runReconciliation(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    log(`Running reconciliation for ${targetDate}...`, "info");
+    
+    const reconciliationProcess = spawn('npx', ['tsx', 'optimized_critical_date_processor.ts', targetDate, '35', '48']);
+    
+    reconciliationProcess.stdout.on('data', (data) => {
+      console.log(`${data}`);
+    });
+    
+    reconciliationProcess.stderr.on('data', (data) => {
+      console.error(`${data}`);
+    });
+    
+    reconciliationProcess.on('close', (code) => {
+      if (code === 0) {
+        log(`Reconciliation completed successfully for ${targetDate}`, "success");
+        resolve();
+      } else {
+        log(`Reconciliation process exited with code ${code}`, "error");
+        resolve(); // Resolve anyway to continue with our process
+      }
+    });
+    
+    // Add timeout to prevent hanging
+    setTimeout(() => {
+      log(`Reconciliation timed out after 120 seconds, continuing anyway`, "warning");
+      resolve();
+    }, 120000);
+  });
+}
+
+// Main function
+async function main() {
   try {
-    log(`Starting critical date processing for ${date}`, "info");
-    log(`Target periods: ${startPeriod}-${endPeriod}`, "info");
+    log(`=== Starting data check and processing for ${targetDate} ===`, "info");
     
     // Initialize log file
-    await fs.writeFile(LOG_FILE, `=== Critical Date Processing: ${date} (Periods ${startPeriod}-${endPeriod}) ===\n`);
+    await fs.writeFile(LOG_FILE, `=== Data Check and Processing: ${targetDate} ===\n`);
     
-    // Load BMU mappings once
-    const { windFarmIds, bmuLeadPartyMap } = await loadBmuMappings();
+    // Check current database status
+    const status = await checkDatabaseStatus();
+    log(`Current database status for ${targetDate}:`, "info");
+    log(`- Record count: ${status.recordCount}`, "info");
+    log(`- Period count: ${status.periodCount}/48`, "info");
+    log(`- Earliest period: ${status.earliestPeriod || 'None'}`, "info");
+    log(`- Latest period: ${status.latestPeriod || 'None'}`, "info");
     
-    // First check if we need to clear existing records
-    try {
-      log(`Checking for existing records for periods ${startPeriod}-${endPeriod}...`, "info");
+    if (status.missingPeriods.length > 0) {
+      log(`Missing periods: ${status.missingPeriods.join(', ')}`, "warning");
+      
+      // Load BMU mappings once
+      const { windFarmIds, bmuLeadPartyMap } = await loadBmuMappings();
+      
+      // Process periods in small batches to avoid timeouts
+      let totalProcessed = 0;
+      let totalRecords = 0;
+      let totalVolume = 0;
+      let totalPayment = 0;
+      
+      for (let batchStart = startPeriod; batchStart <= endPeriod; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, endPeriod);
         
-      // Clear any existing records
-      const deleteResult = await db.delete(curtailmentRecords)
-        .where(
-          and(
-            eq(curtailmentRecords.settlementDate, date),
-            between(curtailmentRecords.settlementPeriod, startPeriod, endPeriod)
-          )
-        )
-        .returning({ id: curtailmentRecords.id });
-          
-      if (deleteResult.length > 0) {
-        log(`Cleared ${deleteResult.length} existing records for periods ${startPeriod}-${endPeriod}`, "success");
-      } else {
-        log(`No existing records found for periods ${startPeriod}-${endPeriod}`, "info");
+        const batchResult = await processBatch(
+          batchStart,
+          batchEnd,
+          windFarmIds,
+          bmuLeadPartyMap
+        );
+        
+        totalProcessed += batchResult.processed;
+        totalRecords += batchResult.records;
+        totalVolume += batchResult.volume;
+        totalPayment += batchResult.payment;
+        
+        // Add a longer delay between batches
+        log(`Pausing between batches...`, "info");
+        await delay(3000);
       }
-    } catch (error) {
-      log(`Error clearing existing records: ${error}`, "error");
-      // Continue with processing anyway
+      
+      // Final summary
+      const totalPeriods = endPeriod - startPeriod + 1;
+      const successRate = (totalProcessed / totalPeriods) * 100;
+      
+      log(`=== Processing complete for ${targetDate} ===`, successRate === 100 ? "success" : "warning");
+      log(`- Periods processed: ${totalProcessed}/${totalPeriods} (${successRate.toFixed(1)}%)`, "info");
+      log(`- Records added: ${totalRecords}`, "info");
+      log(`- Total volume: ${totalVolume.toFixed(2)} MWh`, "info");
+      log(`- Total payment: £${totalPayment.toFixed(2)}`, "info");
+      
+      // Run reconciliation to update Bitcoin calculations
+      log(`Running reconciliation to update Bitcoin calculations...`, "info");
+      await runReconciliation();
+      
+      // Final verification
+      const finalStatus = await checkDatabaseStatus();
+      log(`Final database status for ${targetDate}:`, "info");
+      log(`- Record count: ${finalStatus.recordCount}`, "info");
+      log(`- Period count: ${finalStatus.periodCount}/48`, "info");
+      
+      if (finalStatus.missingPeriods.length > 0) {
+        log(`Still missing periods: ${finalStatus.missingPeriods.join(', ')}`, "warning");
+      } else {
+        log(`All 48 periods now processed for ${targetDate}`, "success");
+      }
+    } else {
+      log(`All 48 periods already exist for ${targetDate}`, "success");
     }
     
-    // Process periods in small batches to avoid timeouts
-    let totalProcessed = 0;
-    let totalRecords = 0;
-    let totalVolume = 0;
-    let totalPayment = 0;
-    
-    for (let batchStart = startPeriod; batchStart <= endPeriod; batchStart += BATCH_SIZE) {
-      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, endPeriod);
-      
-      const batchResult = await processBatch(
-        batchStart,
-        batchEnd,
-        windFarmIds,
-        bmuLeadPartyMap
-      );
-      
-      totalProcessed += batchResult.processed;
-      totalRecords += batchResult.records;
-      totalVolume += batchResult.volume;
-      totalPayment += batchResult.payment;
-      
-      // Add a longer delay between batches
-      log(`Pausing between batches...`, "info");
-      await delay(3000);
-    }
-    
-    // Final summary
-    const totalPeriods = endPeriod - startPeriod + 1;
-    const successRate = (totalProcessed / totalPeriods) * 100;
-    
-    log(`=== Processing complete for ${date} ===`, successRate === 100 ? "success" : "warning");
-    log(`- Periods processed: ${totalProcessed}/${totalPeriods} (${successRate.toFixed(1)}%)`, "info");
-    log(`- Records added: ${totalRecords}`, "info");
-    log(`- Total volume: ${totalVolume.toFixed(2)} MWh`, "info");
-    log(`- Total payment: £${totalPayment.toFixed(2)}`, "info");
-    
-    // Run reconciliation to update Bitcoin calculations
-    log(`Running reconciliation to update Bitcoin calculations...`, "info");
-    await runReconciliation();
-    
-    // Final status
     log(`=== Complete ===`, "success");
-    log(`Data reingestion and reconciliation completed for ${date}`, "success");
     
   } catch (error) {
     log(`Fatal error during processing: ${error}`, "error");
     await logToFile(`Fatal error during processing: ${error}`);
     process.exit(1);
   }
-}
-
-// Run reconciliation to update Bitcoin calculations
-async function runReconciliation(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    log(`Running reconciliation for ${date}...`, "info");
-    
-    const reconciliation = spawn('npx', ['tsx', 'unified_reconciliation.ts', 'date', date]);
-    
-    reconciliation.stdout.on('data', (data) => {
-      console.log(`${data}`);
-    });
-    
-    reconciliation.stderr.on('data', (data) => {
-      console.error(`${data}`);
-    });
-    
-    reconciliation.on('close', (code) => {
-      if (code === 0) {
-        log(`Reconciliation completed successfully for ${date}`, "success");
-        resolve();
-      } else {
-        log(`Reconciliation failed with code ${code}`, "error");
-        resolve(); // Resolve anyway to continue
-      }
-    });
-    
-    // Add timeout to prevent hanging
-    setTimeout(() => {
-      log(`Reconciliation timed out after 60 seconds, continuing anyway`, "warning");
-      resolve();
-    }, 60000);
-  });
-}
-
-// Main function
-async function main() {  
-  await processDate();
-  process.exit(0);
 }
 
 // Run the script
