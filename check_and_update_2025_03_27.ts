@@ -11,6 +11,7 @@ import { and, between, eq } from 'drizzle-orm';
 import { curtailmentRecords } from './db/schema';
 import axios, { AxiosResponse } from 'axios';
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -22,7 +23,10 @@ const __dirname = dirname(__filename);
 
 // Configuration
 const API_BASE_URL = 'https://data.elexon.co.uk/bmrs/api/v1';
-const BMU_MAPPING_PATH = path.join(__dirname, 'server', 'data', 'bmuMapping.json');
+// Try both possible locations
+const BMU_MAPPING_PATH = existsSync(path.join(__dirname, 'data', 'bmu_mapping.json')) 
+  ? path.join(__dirname, 'data', 'bmu_mapping.json')
+  : path.join(__dirname, 'server', 'data', 'bmuMapping.json');
 const LOG_FILE = `check_update_2025_03_27_${new Date().toISOString().split('T')[0]}.log`;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000; // 5 seconds

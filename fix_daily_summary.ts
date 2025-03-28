@@ -55,13 +55,13 @@ async function fixDailySummary(date: string): Promise<void> {
       summaryDate: date,
       totalCurtailedEnergy: totalVolume.toString(),
       totalPayment: totalPayment.toString(),
-      last_updated: new Date()
+      lastUpdated: new Date()
     }).onConflictDoUpdate({
       target: [dailySummaries.summaryDate],
       set: {
         totalCurtailedEnergy: totalVolume.toString(),
         totalPayment: totalPayment.toString(),
-        last_updated: new Date()
+        lastUpdated: new Date()
       }
     });
     

@@ -81,7 +81,7 @@ export async function getDailySummary(req: Request, res: Response) {
       return res.json({
         date,
         totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-        totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
+        totalPayment: Number(summary.totalPayment), // Keep the original sign
         leadParty: null
       });
     }
@@ -109,7 +109,7 @@ export async function getDailySummary(req: Request, res: Response) {
     res.json({
       date,
       totalCurtailedEnergy: Math.abs(Number(recordTotals[0].totalVolume)), // Keep absolute for energy
-      totalPayment: Number(recordTotals[0].totalPayment) * -1, // Flip the sign
+      totalPayment: Number(recordTotals[0].totalPayment), // Keep the original sign
       leadParty
     });
 
@@ -157,7 +157,7 @@ export async function getMonthlySummary(req: Request, res: Response) {
       return res.json({
         yearMonth,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Number(farmTotals[0].totalPayment) * -1, // Flip the sign
+        totalPayment: Number(farmTotals[0].totalPayment), // Keep the original sign
       });
     }
 
@@ -184,10 +184,10 @@ export async function getMonthlySummary(req: Request, res: Response) {
     res.json({
       yearMonth,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
+      totalPayment: Number(summary.totalPayment), // Keep original sign
       dailyTotals: {
         totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
-        totalPayment: Number(dailyTotals[0]?.totalPayment || 0) * -1 // Flip the sign
+        totalPayment: Number(dailyTotals[0]?.totalPayment || 0) // Keep original sign
       }
     });
   } catch (error) {
@@ -648,7 +648,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       return res.json({
         year,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Number(farmTotals[0].totalPayment) * -1 // Flip the sign
+        totalPayment: Number(farmTotals[0].totalPayment) // Keep original sign
       });
     }
 
@@ -698,7 +698,7 @@ export async function getYearlySummary(req: Request, res: Response) {
     res.json({
       year,
       totalCurtailedEnergy: yearTotals.totalCurtailedEnergy,
-      totalPayment: yearTotals.totalPayment * -1 // Flip the sign
+      totalPayment: yearTotals.totalPayment // Keep original sign
     });
   } catch (error) {
     console.error('Error fetching yearly summary:', error);
