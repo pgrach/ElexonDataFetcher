@@ -55,6 +55,11 @@ export async function getCurtailedLeadParties(req: Request, res: Response) {
 
 export async function getDailySummary(req: Request, res: Response) {
   try {
+    // Set cache control headers to prevent caching
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const { date } = req.params;
     const { leadParty } = req.query;
 
@@ -200,6 +205,11 @@ export async function getMonthlySummary(req: Request, res: Response) {
 
 export async function getHourlyCurtailment(req: Request, res: Response) {
   try {
+    // Set cache control headers to prevent caching
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const { date } = req.params;
     const { leadParty } = req.query;
 
@@ -279,6 +289,11 @@ export async function getHourlyCurtailment(req: Request, res: Response) {
 
 export async function getHourlyComparison(req: Request, res: Response) {
   try {
+    // Set cache control headers to prevent caching
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     const { date } = req.params;
     const { leadParty, minerModel = 'S19J_PRO' } = req.query;
 

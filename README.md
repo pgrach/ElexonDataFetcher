@@ -71,6 +71,21 @@ npx tsx optimized_critical_date_processor.ts 2025-03-09 44 48
 
 This script includes improved handling of duplicate farm records and bulk processing functionality.
 
+### Handling Missing Periods
+
+For dates where certain settlement periods (particularly periods 35-48) may not be available through the default API endpoint, use the missing periods processor:
+
+```bash
+# Process specific periods for a date
+npx tsx process_missing_periods.ts 2025-03-27 35 48
+```
+
+This script automatically switches to alternate Elexon API endpoints when needed:
+- For periods 1-34: Uses the standard `balancing/bid-offer/accepted` endpoint
+- For periods 35-48: Uses the `balancing/settlement/stack/all/bid` endpoint which contains the same curtailment data for wind farms
+
+The system will automatically detect which endpoint to use based on the period number and will properly format and filter the data consistently regardless of the source endpoint.
+
 ## Technical Details
 
 ### Database Schema

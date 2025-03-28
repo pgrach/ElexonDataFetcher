@@ -86,8 +86,16 @@ async function loadBmuMappings(): Promise<{
     const bmuLeadPartyMap = new Map<string, string>();
     
     for (const bmu of bmuMapping) {
-      windFarmIds.add(bmu.id);
-      bmuLeadPartyMap.set(bmu.id, bmu.leadPartyName);
+      // Use the elexonBmUnit field as the ID for wind farms
+      if (bmu.elexonBmUnit) {
+        windFarmIds.add(bmu.elexonBmUnit);
+        bmuLeadPartyMap.set(bmu.elexonBmUnit, bmu.leadPartyName);
+        
+        // Log some sample mappings for debugging
+        if (windFarmIds.size <= 5) {
+          log(`  Mapping: ${bmu.elexonBmUnit} -> ${bmu.leadPartyName}`, "info");
+        }
+      }
     }
     
     log(`Found ${windFarmIds.size} wind farm BMUs`, "success");
@@ -113,13 +121,37 @@ async function processPeriod(
   log(`Processing period ${period} (attempt ${attempt})`, "info");
   
   try {
-    // Fetch data from the Elexon API
-    const response = await axios.get(`${API_BASE_URL}/balancing/bid-offer/accepted/settlement-period/${period}/settlement-date/${date}`);
-    const data = response.data.data || [];
+    // Determine which API endpoint to use based on the period
+    // For periods 35-48, use the bid-offer stack endpoint which has data
+    // For periods 1-34, use the original endpoint
+    let response;
+    let data;
     
-    // Filter to keep only valid wind farm records
+    if (period >= 35 && period <= 48) {
+      // Use the Bid-Offer Stack endpoint for periods 35-48
+      log(`Using alternative Bid-Offer Stack endpoint for period ${period}`, "info");
+      response = await axios.get(`${API_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`);
+      data = response.data.data || [];
+    } else {
+      // Use the original endpoint for periods 1-34
+      log(`Using original Bid-Offer Accepted endpoint for period ${period}`, "info");
+      response = await axios.get(`${API_BASE_URL}/balancing/bid-offer/accepted/settlement-period/${period}/settlement-date/${date}`);
+      data = response.data.data || [];
+    }
+    
+    // Filter to keep only valid wind farm records - handle both API formats
     const validRecords = data.filter((record: any) => {
-      return windFarmIds.has(record.id) && record.volume < 0; // Negative volume indicates curtailment
+      // For bid-offer stack endpoint, negative volume indicates curtailment
+      const farmId = record.id;
+      // Check if volume is negative (curtailment)
+      const volume = record.volume;
+      
+      // Log first 10 negative volume records as examples
+      if (period === 35 && record.volume < 0 && data.filter(r => r.volume < 0).indexOf(record) < 10) {
+        log(`Record in period ${period}: ID=${farmId}, Volume=${volume}, Original price=${record.originalPrice}`, "info");
+      }
+      
+      return windFarmIds.has(farmId) && volume < 0;
     });
     
     const totalVolume = validRecords.reduce((sum: number, record: any) => sum + Math.abs(record.volume), 0);
@@ -179,11 +211,37 @@ async function processPeriod(
         await db.insert(curtailmentRecords).values(recordsToInsert);
         recordsAdded = recordsToInsert.length;
         
-        // Log individual records for visibility
-        for (const record of validRecords) {
+        // Log a summary of records by farm
+        const farmSummary = validRecords.reduce((summary: Record<string, { count: number, volume: number, payment: number }>, record: any) => {
+          const farmId = record.id;
           const volume = Math.abs(record.volume);
           const payment = volume * record.originalPrice;
-          log(`Period ${period}: Added ${record.id} (${volume.toFixed(2)} MWh, £${payment.toFixed(2)})`, "success");
+          
+          if (!summary[farmId]) {
+            summary[farmId] = { count: 0, volume: 0, payment: 0 };
+          }
+          
+          summary[farmId].count++;
+          summary[farmId].volume += volume;
+          summary[farmId].payment += payment;
+          
+          return summary;
+        }, {});
+        
+        // Log farm summaries for the period
+        log(`Period ${period}: Added records for ${Object.keys(farmSummary).length} farms:`, "success");
+        
+        // Log top 5 farms by volume
+        const topFarms = Object.entries(farmSummary)
+          .sort((a, b) => b[1].volume - a[1].volume)
+          .slice(0, 5);
+          
+        for (const [farmId, data] of topFarms) {
+          log(`  ${farmId}: ${data.count} records, ${data.volume.toFixed(2)} MWh, £${data.payment.toFixed(2)}`, "success");
+        }
+        
+        if (Object.keys(farmSummary).length > 5) {
+          log(`  ... and ${Object.keys(farmSummary).length - 5} more farms`, "success");
         }
         
       } catch (error) {
