@@ -18,9 +18,6 @@
  *   npx tsx optimized_critical_date_processor.ts 2025-03-09 44 48
  */
 
-// Force ESM module mode
-export {};
-
 import { db } from './db';
 import { and, between, eq } from 'drizzle-orm';
 import { curtailmentRecords } from './db/schema';
@@ -28,11 +25,6 @@ import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
-import { fileURLToPath } from 'url';
-
-// Get the directory name using ES module approach
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Configuration
 const API_BASE_URL = 'https://data.elexon.co.uk/bmrs/api/v1';
