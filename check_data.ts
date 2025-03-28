@@ -1,5 +1,5 @@
 /**
- * Simple script to check 2025-03-18 data
+ * Simple script to check curtailment data for a specific date
  */
 
 import { db } from './db';
@@ -7,8 +7,8 @@ import { sql } from 'drizzle-orm';
 import { curtailmentRecords } from './db/schema';
 import { eq } from 'drizzle-orm';
 
-// Target date
-const TARGET_DATE = '2025-03-18';
+// Target date - updated to check our newly processed date
+const TARGET_DATE = '2025-03-27';
 
 async function checkData() {
   try {
