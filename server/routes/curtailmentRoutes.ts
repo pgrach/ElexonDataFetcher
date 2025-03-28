@@ -171,7 +171,33 @@ router.get('/mining-potential', async (req, res) => {
         )
       );
 
-    const totalEnergy = Number(curtailmentTotal[0]?.totalEnergy) || 0;
+    let totalEnergy = Number(curtailmentTotal[0]?.totalEnergy) || 0;
+
+    // If no data in curtailment_records but energy is provided via query param, use that
+    if (totalEnergy === 0 && req.query.energy) {
+      totalEnergy = Number(req.query.energy);
+      console.log(`Using energy provided via query param: ${totalEnergy} MWh`);
+    }
+    
+    // If still no energy and we're not filtering by farm/lead party, check daily_summaries
+    if (totalEnergy === 0 && !leadParty && !farmId) {
+      console.log(`No curtailment records found for ${formattedDate}, checking daily_summaries`);
+      
+      // Import dailySummaries from schema
+      const { dailySummaries } = await import("../../db/schema");
+      
+      const dailySummaryQuery = await db
+        .select({
+          totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy
+        })
+        .from(dailySummaries)
+        .where(eq(dailySummaries.summaryDate, formattedDate));
+      
+      if (dailySummaryQuery.length > 0) {
+        totalEnergy = Number(dailySummaryQuery[0].totalCurtailedEnergy || 0);
+        console.log(`Found daily summary data: ${totalEnergy} MWh`);
+      }
+    }
 
     if (totalEnergy === 0) {
       return res.json({
