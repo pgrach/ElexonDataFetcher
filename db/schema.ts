@@ -47,17 +47,6 @@ export const bitcoinYearlySummaries = pgTable("bitcoin_yearly_summaries", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const bitcoinDailySummaries = pgTable("bitcoin_daily_summaries", {
-  id: serial("id").primaryKey(),
-  summaryDate: date("summary_date").notNull(),
-  minerModel: text("miner_model").notNull(),
-  bitcoinMined: numeric("bitcoin_mined").notNull(),
-  valueAtMining: numeric("value_at_mining").notNull(),
-  averageDifficulty: numeric("average_difficulty"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
 export const dailySummaries = pgTable("daily_summaries", {
   summaryDate: date("summary_date").primaryKey(),
   totalCurtailedEnergy: numeric("total_curtailed_energy"),
@@ -164,8 +153,6 @@ export const insertBitcoinMonthlySummarySchema = createInsertSchema(bitcoinMonth
 export const selectBitcoinMonthlySummarySchema = createSelectSchema(bitcoinMonthlySummaries);
 export const insertBitcoinYearlySummarySchema = createInsertSchema(bitcoinYearlySummaries);
 export const selectBitcoinYearlySummarySchema = createSelectSchema(bitcoinYearlySummaries);
-export const insertBitcoinDailySummarySchema = createInsertSchema(bitcoinDailySummaries);
-export const selectBitcoinDailySummarySchema = createSelectSchema(bitcoinDailySummaries);
 
 // @deprecated - Schemas for materialized view tables
 // Keeping these for backward compatibility
@@ -211,8 +198,6 @@ export type BitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferSelect;
 export type InsertBitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferInsert;
 export type BitcoinYearlySummary = typeof bitcoinYearlySummaries.$inferSelect;
 export type InsertBitcoinYearlySummary = typeof bitcoinYearlySummaries.$inferInsert;
-export type BitcoinDailySummary = typeof bitcoinDailySummaries.$inferSelect;
-export type InsertBitcoinDailySummary = typeof bitcoinDailySummaries.$inferInsert;
 
 // @deprecated - Types for materialized view tables
 // Keeping these for backward compatibility
