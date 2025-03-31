@@ -8,291 +8,306 @@
  *   npx tsx process_bitcoin_calculations_simple_2025-03-29.ts
  */
 
-import { db } from "./db";
-import { curtailmentRecords, historicalBitcoinCalculations } from "./db/schema";
-import { eq, and, inArray, sql } from "drizzle-orm";
-import fs from "fs";
-import path from "path";
+import { db } from './db';
+import fs from 'fs';
+import path from 'path';
+import { format } from 'date-fns';
+import { sql, eq, and, desc } from 'drizzle-orm';
+import { curtailmentRecords, historicalBitcoinCalculations, bitcoinDailySummaries, bitcoinMonthlySummaries } from './db/schema';
 
-// Constants
-const TARGET_DATE = "2025-03-29";
-const MINER_MODELS = ["S19J_PRO", "S9", "M20S"];
-const DIFFICULTY = "55633605879865"; // Use a fixed difficulty value based on March 28
-const LOG_FILE = `process_bitcoin_calculations_simple_${TARGET_DATE}.log`;
-
-// Miner models data
-const minerModels = {
-  S19J_PRO: { hashrate: 100, power: 3050 },  // 100 TH/s @ 3050W
-  S9: { hashrate: 14, power: 1350 },          // 14 TH/s @ 1350W
-  M20S: { hashrate: 68, power: 3360 }         // 68 TH/s @ 3360W
-};
-
-// Bitcoin calculation constants
-const BLOCK_REWARD = 3.125;
-const SETTLEMENT_PERIOD_MINUTES = 30;
-const BLOCKS_PER_SETTLEMENT_PERIOD = 3;
-
-// Create log directory if it doesn't exist
-const logDir = path.join(process.cwd(), "logs");
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
-}
-
-// Logging utility
 async function log(message: string, level: "info" | "error" | "warning" | "success" = "info"): Promise<void> {
   const timestamp = new Date().toISOString();
-  const formattedMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+  const prefix = level === "info" 
+    ? "\x1b[37m[INFO]" 
+    : level === "error" 
+      ? "\x1b[31m[ERROR]" 
+      : level === "warning" 
+        ? "\x1b[33m[WARNING]" 
+        : "\x1b[32m[SUCCESS]";
   
-  // Log to console with color
-  const colors = {
-    info: "\x1b[36m", // Cyan
-    error: "\x1b[31m", // Red
-    warning: "\x1b[33m", // Yellow
-    success: "\x1b[32m" // Green
-  };
-  console.log(`${colors[level]}${formattedMessage}\x1b[0m`);
+  console.log(`[${timestamp}] ${prefix} ${message}\x1b[0m`);
   
-  // Log to file
-  const logPath = path.join(logDir, LOG_FILE);
-  fs.appendFileSync(logPath, formattedMessage + "\n");
+  // Also log to file
+  const logDir = path.join(process.cwd(), 'logs');
+  const logFile = path.join(logDir, `process_bitcoin_calculations_simple_2025-03-29.log`);
+  
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  
+  fs.appendFileSync(
+    logFile, 
+    `[${timestamp}] [${level.toUpperCase()}] ${message}\n`
+  );
 }
 
-// Delay utility
 async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Calculate Bitcoin for BMU
 function calculateBitcoinForBMU(
-  curtailedMwh: number,
-  minerModel: string,
-  difficulty: number | string
+  volume: number, 
+  difficulty: number, 
+  minerModel: string
 ): number {
-  const miner = minerModels[minerModel];
-  if (!miner) throw new Error(`Invalid miner model: ${minerModel}`);
-
-  const curtailedKwh = curtailedMwh * 1000;
-  const minerConsumptionKwh = (miner.power / 1000) * (SETTLEMENT_PERIOD_MINUTES / 60);
-  const potentialMiners = Math.floor(curtailedKwh / minerConsumptionKwh);
-  const difficultyNum = typeof difficulty === 'string' ? parseFloat(difficulty) : difficulty;
-  const hashesPerBlock = difficultyNum * Math.pow(2, 32);
-  const networkHashRate = hashesPerBlock / 600;
-  const networkHashRateTH = networkHashRate / 1e12;
-  const totalHashPower = potentialMiners * miner.hashrate;
-  const ourNetworkShare = totalHashPower / networkHashRateTH;
-  return Number((ourNetworkShare * BLOCK_REWARD * BLOCKS_PER_SETTLEMENT_PERIOD).toFixed(8));
+  // Constants for different miner models (hash rate in TH/s and power in W)
+  const MINER_SPECS: Record<string, { hashRate: number; power: number }> = {
+    S19J_PRO: { hashRate: 104, power: 3068 },
+    S9: { hashRate: 13.5, power: 1323 },
+    M20S: { hashRate: 68, power: 3360 }
+  };
+  
+  if (!MINER_SPECS[minerModel]) {
+    throw new Error(`Unknown miner model: ${minerModel}`);
+  }
+  
+  const { hashRate, power } = MINER_SPECS[minerModel];
+  
+  // Convert volume from MWh to Wh and then calculate how many miners can run
+  const volumeWh = Math.abs(volume) * 1_000_000;
+  const minerCount = volumeWh / power;
+  
+  // Calculate how much Bitcoin can be mined
+  // Formula: (hashRate * minerCount * 3600) / (difficulty * 2^32) * 6.25
+  const bitcoinMined = (hashRate * minerCount * 3600) / (difficulty * Math.pow(2, 32)) * 6.25;
+  
+  return bitcoinMined;
 }
 
-// Process the Bitcoin calculations for a single day and miner model
 async function processSingleDay(date: string, minerModel: string): Promise<void> {
   try {
-    await log(`Processing ${date} with ${minerModel} using fixed difficulty ${DIFFICULTY}`, "info");
-
-    return await db.transaction(async (tx) => {
-      const curtailmentData = await tx
-        .select({
-          periods: sql<number[]>`array_agg(DISTINCT settlement_period)`,
-          farmIds: sql<string[]>`array_agg(DISTINCT farm_id)`
-        })
-        .from(curtailmentRecords)
-        .where(
-          and(
-            eq(curtailmentRecords.settlementDate, date),
-            sql`ABS(volume::numeric) > 0`
-          )
-        );
-
-      if (!curtailmentData[0] || !curtailmentData[0].periods || curtailmentData[0].periods.length === 0) {
-        await log(`No curtailment records with volume for ${date}`, "error");
-        return;
+    // Use the current network difficulty (from March 2025)
+    const difficulty = 113757508810853; // Fixed as of March 2025
+    
+    log(`Processing ${date} with difficulty ${difficulty}`);
+    
+    // 1. Get all curtailment records for the target date
+    const curtailmentData = await db
+      .select({
+        farmId: curtailmentRecords.farmId,
+        settlementPeriod: curtailmentRecords.settlementPeriod,
+        volume: curtailmentRecords.volume
+      })
+      .from(curtailmentRecords)
+      .where(sql`${curtailmentRecords.settlementDate} = ${date}`);
+    
+    // Check if we have data to process
+    if (!curtailmentData.length) {
+      log(`No curtailment data found for ${date}`, "warning");
+      return;
+    }
+    
+    log(`Found ${curtailmentData.length} curtailment records across ${new Set(curtailmentData.map(r => r.settlementPeriod)).size} periods and ${new Set(curtailmentData.map(r => r.farmId)).size} farms`);
+    
+    // 2. Delete any existing Bitcoin calculations for this date and model
+    log(`Deleting existing Bitcoin calculations for ${date} ${minerModel}...`);
+    
+    try {
+      const result = await db.execute(
+        sql`DELETE FROM historical_bitcoin_calculations 
+            WHERE settlement_date = ${date} 
+            AND miner_model = ${minerModel}`
+      );
+      log(`Deleted existing Bitcoin calculations: ${result}`);
+    } catch (error) {
+      log(`Error deleting existing calculations: ${error}`, "warning");
+    }
+    
+    // 3. Process each curtailment record
+    const calculationRecords = [];
+    
+    for (const record of curtailmentData) {
+      // Skip positive volumes (not curtailed)
+      if (Number(record.volume) >= 0) continue;
+      
+      // Calculate Bitcoin potential
+      const bitcoinMined = calculateBitcoinForBMU(
+        Number(record.volume), 
+        difficulty,
+        minerModel
+      );
+      
+      // Add to batch
+      calculationRecords.push({
+        settlementDate: date,
+        settlementPeriod: record.settlementPeriod,
+        farmId: record.farmId,
+        minerModel: minerModel,
+        bitcoinMined: bitcoinMined.toString(),
+        difficulty: difficulty.toString(),
+        calculatedAt: new Date()
+      });
+    }
+    
+    // 4. Insert historical Bitcoin calculations in chunks
+    const chunkSize = 100;
+    
+    if (calculationRecords.length > 0) {
+      for (let i = 0; i < calculationRecords.length; i += chunkSize) {
+        const chunk = calculationRecords.slice(i, i + chunkSize);
+        
+        // Use raw SQL insert to avoid type issues
+        const values = chunk.map(record => {
+          return `(
+            '${record.settlementDate}', 
+            ${record.settlementPeriod}, 
+            '${record.farmId}', 
+            '${record.minerModel}', 
+            ${record.bitcoinMined}, 
+            ${record.difficulty}, 
+            '${new Date().toISOString()}'
+          )`;
+        }).join(',');
+        
+        await db.execute(sql`
+          INSERT INTO historical_bitcoin_calculations 
+          (settlement_date, settlement_period, farm_id, miner_model, bitcoin_mined, difficulty, calculated_at)
+          VALUES ${sql.raw(values)}
+          ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
+          DO UPDATE SET 
+            bitcoin_mined = EXCLUDED.bitcoin_mined,
+            difficulty = EXCLUDED.difficulty,
+            calculated_at = EXCLUDED.calculated_at
+        `);
       }
-
-      const periods = curtailmentData[0].periods;
-      const farmIds = curtailmentData[0].farmIds;
-
-      await tx.delete(historicalBitcoinCalculations)
-        .where(
-          and(
-            eq(historicalBitcoinCalculations.settlementDate, date),
-            eq(historicalBitcoinCalculations.minerModel, minerModel)
-          )
-        );
-
-      const records = await tx
-        .select()
-        .from(curtailmentRecords)
-        .where(
-          and(
-            eq(curtailmentRecords.settlementDate, date),
-            inArray(curtailmentRecords.settlementPeriod, periods),
-            sql`ABS(volume::numeric) > 0`
-          )
-        );
-
-      await log(`Found ${records.length} curtailment records across ${periods.length} periods and ${farmIds.length} farms`, "info");
-
-      const periodGroups = new Map<number, { totalVolume: number; farms: Map<string, number> }>();
-
-      for (const record of records) {
-        if (!periodGroups.has(record.settlementPeriod)) {
-          periodGroups.set(record.settlementPeriod, {
-            totalVolume: 0,
-            farms: new Map<string, number>()
-          });
-        }
-
-        const group = periodGroups.get(record.settlementPeriod)!;
-        const absVolume = Math.abs(Number(record.volume));
-        group.totalVolume += absVolume;
-        group.farms.set(
-          record.farmId,
-          (group.farms.get(record.farmId) || 0) + absVolume
-        );
-      }
-
-      const bulkInsertData: Array<{
-        settlementDate: string;
-        settlementPeriod: number;
-        farmId: string;
-        minerModel: string;
-        bitcoinMined: string;
-        difficulty: string;
-        calculatedAt: Date;
-      }> = [];
-
-      for (const [period, data] of periodGroups) {
-        const periodBitcoin = calculateBitcoinForBMU(
-          data.totalVolume,
-          minerModel,
-          DIFFICULTY
-        );
-
-        for (const [farmId, farmVolume] of data.farms) {
-          const bitcoinShare = (periodBitcoin * farmVolume) / data.totalVolume;
-          bulkInsertData.push({
-            settlementDate: date,
-            settlementPeriod: period,
-            farmId,
-            minerModel,
-            bitcoinMined: bitcoinShare.toFixed(8),
-            difficulty: DIFFICULTY,
-            calculatedAt: new Date()
-          });
-        }
-      }
-
-      if (bulkInsertData.length > 0) {
-        await tx.insert(historicalBitcoinCalculations)
-          .values(bulkInsertData);
-
-        await log(`Inserted ${bulkInsertData.length} Bitcoin calculation records for ${date} with model ${minerModel}`, "success");
-      } else {
-        await log(`No records to insert for ${date} with model ${minerModel}`, "warning");
-      }
-    });
+    }
+    
+    log(`Inserted ${calculationRecords.length} records for ${date} ${minerModel}`);
+    
+    // Get unique periods processed
+    const processedPeriods = [...new Set(calculationRecords.map(r => r.settlementPeriod))].sort((a, b) => a - b);
+    log(`Processed periods: ${processedPeriods.join(', ')}`);
+    
+    // 5. Create/Update the daily summary
+    const dailyTotal = await db
+      .select({
+        totalBitcoin: sql`SUM(${historicalBitcoinCalculations.bitcoinMined})`,
+        avgDifficulty: sql`AVG(${historicalBitcoinCalculations.difficulty})`
+      })
+      .from(historicalBitcoinCalculations)
+      .where(and(
+        sql`${historicalBitcoinCalculations.settlementDate} = ${date}`,
+        eq(historicalBitcoinCalculations.minerModel, minerModel)
+      ));
+    
+    const totalBitcoin = Number(dailyTotal[0]?.totalBitcoin || 0);
+    const avgDifficulty = Number(dailyTotal[0]?.avgDifficulty || difficulty);
+    
+    // Check if a daily summary already exists
+    const existingSummary = await db
+      .select()
+      .from(bitcoinDailySummaries)
+      .where(and(
+        sql`${bitcoinDailySummaries.summaryDate} = ${date}`,
+        eq(bitcoinDailySummaries.minerModel, minerModel)
+      ))
+      .limit(1);
+    
+    // Update or insert daily summary using UPSERT
+    const now = new Date().toISOString();
+    await db.execute(sql`
+      INSERT INTO bitcoin_daily_summaries 
+      (summary_date, miner_model, bitcoin_mined, value_at_mining, average_difficulty, created_at, updated_at)
+      VALUES (
+        ${date},
+        ${minerModel},
+        ${totalBitcoin.toString()},
+        ${(totalBitcoin * 65000).toString()},
+        ${avgDifficulty.toString()},
+        ${now},
+        ${now}
+      )
+      ON CONFLICT (summary_date, miner_model) 
+      DO UPDATE SET 
+        bitcoin_mined = EXCLUDED.bitcoin_mined,
+        value_at_mining = EXCLUDED.value_at_mining,
+        average_difficulty = EXCLUDED.average_difficulty,
+        updated_at = EXCLUDED.updated_at
+    `);
+    
+    log(`Upserted daily summary for ${date} ${minerModel}: ${totalBitcoin.toFixed(8)} BTC`, "success");
+    
   } catch (error) {
-    await log(`Error processing ${date} for ${minerModel}: ${error}`, "error");
+    log(`Error processing ${date} with ${minerModel}: ${error}`, "error");
     throw error;
   }
 }
 
-// Process the Bitcoin calculations for the target date
 async function processTargetDate(): Promise<void> {
   try {
-    await log(`\n=== Starting Bitcoin Calculations for ${TARGET_DATE} ===\n`, "info");
+    log("=== Starting Bitcoin Calculations for 2025-03-29 ===");
     
-    // First, verify we have curtailment records for this date
-    const recordCount = await db
-      .select({ 
-        count: sql<string>`COUNT(*)` 
-      })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+    // Process for each miner model
+    const date = '2025-03-29';
+    const minerModels = ['S19J_PRO', 'S9', 'M20S'];
     
-    const count = Number(recordCount[0]?.count || "0");
-    
-    if (count === 0) {
-      await log(`No curtailment records found for ${TARGET_DATE}. Cannot proceed with Bitcoin calculations.`, "error");
-      return;
+    for (const model of minerModels) {
+      await processSingleDay(date, model);
+      // Add a small delay to prevent database overload
+      await delay(500);
     }
     
-    await log(`Found ${count} curtailment records for ${TARGET_DATE}. Proceeding with Bitcoin calculations.`, "success");
+    // Update monthly summary for March 2025
+    log(`Updating monthly Bitcoin summary for 2025-03...`);
     
-    // Process each miner model
-    for (const minerModel of MINER_MODELS) {
-      try {
-        await processSingleDay(TARGET_DATE, minerModel);
-      } catch (error) {
-        await log(`Error processing ${TARGET_DATE} with ${minerModel}: ${error}`, "error");
-      }
+    for (const model of minerModels) {
+      log(`Calculating monthly Bitcoin summary for 2025-03 with ${model}`);
       
-      // Add a small delay between processing different miner models
-      await delay(2000);
-    }
-    
-    // Verify the calculations were successful
-    await log(`\nVerifying Bitcoin calculations for ${TARGET_DATE}...`, "info");
-    
-    // Check the calculation results
-    const verificationResults = await db
-      .select({
-        minerModel: historicalBitcoinCalculations.minerModel,
-        recordCount: sql<number>`COUNT(*)`,
-        periodCount: sql<number>`COUNT(DISTINCT ${historicalBitcoinCalculations.settlementPeriod})`,
-        farmCount: sql<number>`COUNT(DISTINCT ${historicalBitcoinCalculations.farmId})`,
-        totalBitcoin: sql<string>`SUM(${historicalBitcoinCalculations.bitcoinMined}::numeric)`
-      })
-      .from(historicalBitcoinCalculations)
-      .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE))
-      .groupBy(historicalBitcoinCalculations.minerModel);
-    
-    if (verificationResults.length === 0) {
-      await log(`No Bitcoin calculation results found for ${TARGET_DATE} after processing.`, "error");
-    } else {
-      await log(`Bitcoin calculation results for ${TARGET_DATE}:`, "success");
-      for (const result of verificationResults) {
-        await log(`- ${result.minerModel}: ${result.recordCount} records across ${result.periodCount} periods and ${result.farmCount} farms, total: ${Number(result.totalBitcoin).toFixed(8)} BTC`, "success");
-      }
-    }
-    
-    // Run manual script to update the monthly summary
-    await log(`\nUpdating monthly Bitcoin summary for 2025-03...`, "info");
-    
-    try {
-      const { exec } = require("child_process");
+      const monthlyTotal = await db
+        .select({
+          totalBitcoin: sql`SUM(${bitcoinDailySummaries.bitcoinMined})`
+        })
+        .from(bitcoinDailySummaries)
+        .where(and(
+          sql`EXTRACT(YEAR FROM ${bitcoinDailySummaries.summaryDate}::DATE) = 2025`,
+          sql`EXTRACT(MONTH FROM ${bitcoinDailySummaries.summaryDate}::DATE) = 3`,
+          eq(bitcoinDailySummaries.minerModel, model)
+        ));
       
-      await new Promise<void>((resolve, reject) => {
-        exec("npx tsx server/services/bitcoinService.ts --update-monthly 2025-03", (error: Error | null, stdout: string, stderr: string) => {
-          if (error) {
-            log(`Error updating monthly summary: ${error}`, "error");
-            log(stderr, "error");
-            reject(error);
-            return;
-          }
-          
-          log(stdout, "info");
-          resolve();
-        });
-      });
+      const totalMonthlyBitcoin = Number(monthlyTotal[0]?.totalBitcoin || 0);
       
-      await log(`Monthly Bitcoin summary updated successfully`, "success");
-    } catch (error) {
-      await log(`Error updating monthly summary: ${error}`, "error");
+      // Check if monthly summary exists
+      const existingMonthlySummary = await db
+        .select()
+        .from(bitcoinMonthlySummaries)
+        .where(and(
+          eq(bitcoinMonthlySummaries.yearMonth, '2025-03'),
+          eq(bitcoinMonthlySummaries.minerModel, model)
+        ))
+        .limit(1);
+      
+      // Update or insert monthly summary using UPSERT
+      const now = new Date().toISOString();
+      await db.execute(sql`
+        INSERT INTO bitcoin_monthly_summaries 
+        (year_month, miner_model, bitcoin_mined, value_at_mining, created_at, updated_at)
+        VALUES (
+          '2025-03',
+          ${model},
+          ${totalMonthlyBitcoin.toString()},
+          ${(totalMonthlyBitcoin * 65000).toString()},
+          ${now},
+          ${now}
+        )
+        ON CONFLICT (year_month, miner_model) 
+        DO UPDATE SET 
+          bitcoin_mined = EXCLUDED.bitcoin_mined,
+          value_at_mining = EXCLUDED.value_at_mining,
+          updated_at = EXCLUDED.updated_at
+      `);
+      
+      log(`Upserted monthly summary for 2025-03 with ${model}: ${totalMonthlyBitcoin.toFixed(8)} BTC`, "success");
     }
     
-    await log(`\n=== Bitcoin Calculations Completed for ${TARGET_DATE} ===\n`, "success");
+    log("=== Bitcoin Calculations Complete ===", "success");
   } catch (error) {
-    await log(`Unhandled error during processing: ${error}`, "error");
+    log(`Fatal error in Bitcoin calculations: ${error}`, "error");
+    throw error;
   }
 }
 
-// Run the script
-processTargetDate()
-  .then(() => {
-    console.log(`\nProcess completed. See ${LOG_FILE} for details.`);
-    process.exit(0);
-  })
-  .catch(error => {
-    console.error(`\nUnhandled error: ${error}`);
-    process.exit(1);
-  });
+// Run the main function
+processTargetDate().catch(error => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});

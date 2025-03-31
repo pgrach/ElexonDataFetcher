@@ -8,126 +8,126 @@
  *   npx tsx create_daily_summary_2025-03-29.ts
  */
 
-import { db } from "@db";
-import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "@db/schema";
-import { eq, sql } from "drizzle-orm";
+import { db } from './db';
+import fs from 'fs';
+import path from 'path';
+import { format } from 'date-fns';
+import { sql, eq, and, desc } from 'drizzle-orm';
+import { curtailmentRecords, dailySummaries } from './db/schema';
 
-const TARGET_DATE = "2025-03-29";
+async function log(message: string, level: "info" | "error" | "warning" | "success" = "info"): Promise<void> {
+  const timestamp = new Date().toISOString();
+  const prefix = level === "info" 
+    ? "\x1b[37m[INFO]" 
+    : level === "error" 
+      ? "\x1b[31m[ERROR]" 
+      : level === "warning" 
+        ? "\x1b[33m[WARNING]" 
+        : "\x1b[32m[SUCCESS]";
+  
+  console.log(`[${timestamp}] ${prefix} ${message}\x1b[0m`);
+  
+  // Also log to file
+  const logDir = path.join(process.cwd(), 'logs');
+  const logFile = path.join(logDir, `create_daily_summary_2025-03-29.log`);
+  
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  
+  fs.appendFileSync(
+    logFile, 
+    `[${timestamp}] [${level.toUpperCase()}] ${message}\n`
+  );
+}
 
 async function createDailySummary(): Promise<void> {
   try {
-    console.log(`Creating daily summary for ${TARGET_DATE}`);
+    log("=== Starting Daily Summary Creation for 2025-03-29 ===");
     
-    // Calculate totals from curtailment records
+    // 1. Get the totals from curtailment records
     const totals = await db
       .select({
-        totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))::text`,
-        totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)::text`,
-        recordCount: sql<number>`COUNT(*)`
+        recordCount: sql`COUNT(*)`,
+        periodCount: sql`COUNT(DISTINCT ${curtailmentRecords.settlementPeriod})`,
+        farmCount: sql`COUNT(DISTINCT ${curtailmentRecords.farmId})`,
+        totalVolume: sql`SUM(${curtailmentRecords.volume})`,
+        totalPayment: sql`SUM(${curtailmentRecords.payment})`
       })
       .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+      .where(sql`${curtailmentRecords.settlementDate} = ${'2025-03-29'}`);
     
-    const { totalCurtailedEnergy, totalPayment, recordCount } = totals[0];
-    
-    console.log(`Found ${recordCount} records with totals:`, {
-      energy: totalCurtailedEnergy ? Number(totalCurtailedEnergy).toFixed(2) + " MWh" : "0 MWh",
-      payment: totalPayment ? "£" + Number(totalPayment).toFixed(2) : "£0.00"
-    });
-    
-    if (!totalCurtailedEnergy || !totalPayment || recordCount === 0) {
-      console.error("No valid data to create summary");
-      return;
+    if (!totals.length || !totals[0].totalVolume || !totals[0].totalPayment) {
+      throw new Error("Failed to retrieve totals from curtailment records");
     }
     
-    // Check if summary already exists
-    const existingSummary = await db.query.dailySummaries.findFirst({
-      where: eq(dailySummaries.summaryDate, TARGET_DATE)
-    });
+    const { recordCount, periodCount, farmCount, totalVolume, totalPayment } = totals[0];
     
-    if (existingSummary) {
-      console.log(`Updating existing summary for ${TARGET_DATE}`);
+    // 2. Check if there's an existing daily summary
+    const existingSummary = await db
+      .select()
+      .from(dailySummaries)
+      .where(sql`${dailySummaries.summaryDate} = ${'2025-03-29'}`)
+      .limit(1);
+    
+    if (existingSummary.length > 0) {
+      // 3a. Update the existing summary
+      log(`Found existing summary for 2025-03-29, updating...`);
       
-      await db.update(dailySummaries)
+      await db
+        .update(dailySummaries)
         .set({
-          totalCurtailedEnergy,
-          totalPayment
+          totalCurtailedEnergy: totalVolume.toString(),
+          totalPayment: totalPayment.toString(),
+          lastUpdated: new Date()
         })
-        .where(eq(dailySummaries.summaryDate, TARGET_DATE));
+        .where(sql`${dailySummaries.summaryDate} = ${'2025-03-29'}`);
+      
+      log(`Updated daily summary for 2025-03-29`, "success");
     } else {
-      console.log(`Creating new summary for ${TARGET_DATE}`);
+      // 3b. Create a new daily summary
+      log(`No existing summary found for 2025-03-29, creating new record...`);
       
-      await db.insert(dailySummaries).values({
-        summaryDate: TARGET_DATE,
-        totalCurtailedEnergy,
-        totalPayment
-      });
+      await db
+        .insert(dailySummaries)
+        .values({
+          summaryDate: '2025-03-29',
+          totalCurtailedEnergy: totalVolume.toString(),
+          totalPayment: totalPayment.toString(),
+          totalWindGeneration: '0',
+          windOnshoreGeneration: '0',
+          windOffshoreGeneration: '0',
+          createdAt: new Date(),
+          lastUpdated: new Date()
+        });
+      
+      log(`Created new daily summary for 2025-03-29`, "success");
     }
     
-    console.log("Daily summary created/updated successfully");
-    
-    // Update monthly summary
-    const yearMonth = TARGET_DATE.substring(0, 7);
-    const monthlyTotals = await db
-      .select({
-        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)::text`,
-        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)::text`
-      })
+    // 4. Verify the daily summary
+    const verifiedSummary = await db
+      .select()
       .from(dailySummaries)
-      .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${TARGET_DATE}::date)`);
+      .where(sql`${dailySummaries.summaryDate} = ${'2025-03-29'}`)
+      .limit(1);
     
-    if (monthlyTotals[0].totalCurtailedEnergy && monthlyTotals[0].totalPayment) {
-      console.log(`Updating monthly summary for ${yearMonth}`);
-      
-      await db.insert(monthlySummaries).values({
-        yearMonth,
-        totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
-        totalPayment: monthlyTotals[0].totalPayment,
-        updatedAt: new Date()
-      }).onConflictDoUpdate({
-        target: [monthlySummaries.yearMonth],
-        set: {
-          totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
-          totalPayment: monthlyTotals[0].totalPayment,
-          updatedAt: new Date()
-        }
-      });
+    if (verifiedSummary.length > 0) {
+      const summary = verifiedSummary[0];
+      log(`Verified daily summary: ${Math.abs(Number(summary.totalCurtailedEnergy)).toFixed(2)} MWh, £${Math.abs(Number(summary.totalPayment)).toFixed(2)}`, "success");
+      log(`Record counts from query: ${recordCount} records, ${periodCount} periods, ${farmCount} farms`, "success");
+    } else {
+      log(`Failed to verify daily summary for 2025-03-29`, "error");
     }
     
-    // Update yearly summary
-    const year = TARGET_DATE.substring(0, 4);
-    const yearlyTotals = await db
-      .select({
-        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)::text`,
-        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)::text`
-      })
-      .from(dailySummaries)
-      .where(sql`date_trunc('year', ${dailySummaries.summaryDate}::date) = date_trunc('year', ${TARGET_DATE}::date)`);
-    
-    if (yearlyTotals[0].totalCurtailedEnergy && yearlyTotals[0].totalPayment) {
-      console.log(`Updating yearly summary for ${year}`);
-      
-      await db.insert(yearlySummaries).values({
-        year,
-        totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
-        totalPayment: yearlyTotals[0].totalPayment,
-        updatedAt: new Date()
-      }).onConflictDoUpdate({
-        target: [yearlySummaries.year],
-        set: {
-          totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
-          totalPayment: yearlyTotals[0].totalPayment,
-          updatedAt: new Date()
-        }
-      });
-    }
-    
-    console.log("All summaries updated successfully");
-    
+    log("=== Daily Summary Creation Complete ===", "success");
   } catch (error) {
-    console.error("Error creating daily summary:", error);
-    process.exit(1);
+    log(`Error in daily summary creation: ${error}`, "error");
+    throw error;
   }
 }
 
-createDailySummary();
+// Run the function
+createDailySummary().catch(error => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});
