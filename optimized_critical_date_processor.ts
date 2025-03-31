@@ -24,7 +24,12 @@ import { curtailmentRecords } from './db/schema';
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+
+// Get directory path for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuration
 const API_BASE_URL = 'https://data.elexon.co.uk/bmrs/api/v1';
@@ -371,35 +376,36 @@ async function processDate(): Promise<void> {
 
 // Run reconciliation to update Bitcoin calculations
 async function runReconciliation(): Promise<void> {
-  return new Promise((resolve, reject) => {
+  try {
     log(`Running reconciliation for ${date}...`, "info");
     
-    const reconciliation = spawn('npx', ['tsx', 'unified_reconciliation.ts', 'date', date]);
+    // Import the reconciliation service
+    const { processSingleDay } = await import('./server/services/bitcoinService');
+    const MINER_MODEL_LIST = ['S19J_PRO', 'S9', 'M20S']; // Standard miner models
+
+    // Process each miner model
+    log(`Processing ${date} with miner models: ${MINER_MODEL_LIST.join(', ')}`, "info");
     
-    reconciliation.stdout.on('data', (data) => {
-      console.log(`${data}`);
-    });
-    
-    reconciliation.stderr.on('data', (data) => {
-      console.error(`${data}`);
-    });
-    
-    reconciliation.on('close', (code) => {
-      if (code === 0) {
-        log(`Reconciliation completed successfully for ${date}`, "success");
-        resolve();
-      } else {
-        log(`Reconciliation failed with code ${code}`, "error");
-        resolve(); // Resolve anyway to continue
+    for (const minerModel of MINER_MODEL_LIST) {
+      log(`Processing ${date} with ${minerModel}...`, "info");
+      try {
+        await processSingleDay(date, minerModel);
+        log(`Completed processing for ${date} with ${minerModel}`, "success");
+      } catch (error) {
+        log(`Error processing ${date} with ${minerModel}: ${error}`, "error");
       }
-    });
+      
+      // Add a small delay between processing different miner models
+      await delay(2000);
+    }
     
-    // Add timeout to prevent hanging
-    setTimeout(() => {
-      log(`Reconciliation timed out after 60 seconds, continuing anyway`, "warning");
-      resolve();
-    }, 60000);
-  });
+    log(`Reconciliation completed successfully for ${date}`, "success");
+    return;
+  } catch (error) {
+    log(`Error during reconciliation: ${error}`, "error");
+    // Continue with the rest of the process
+    return;
+  }
 }
 
 // Main function
