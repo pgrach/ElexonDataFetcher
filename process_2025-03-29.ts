@@ -109,14 +109,9 @@ async function processPeriod(
   log(`Processing period ${period} (attempt ${attempt})`, "info");
   
   try {
-    // Fetch data from the Elexon API
-    const response = await axios.get(`${API_BASE_URL}/balancing/bid-offer/accepted/settlement-period/${period}/settlement-date/${date}`);
-    const data = response.data.data || [];
-    
-    // Filter to keep only valid wind farm records
-    const validRecords = data.filter((record: any) => {
-      return windFarmIds.has(record.id) && record.volume < 0; // Negative volume indicates curtailment
-    });
+    // Import the fetchBidsOffers function from the existing service
+    const { fetchBidsOffers } = await import('./server/services/elexon');
+    const validRecords = await fetchBidsOffers(date, period);
     
     const totalVolume = validRecords.reduce((sum: number, record: any) => sum + Math.abs(record.volume), 0);
     const totalPayment = validRecords.reduce((sum: number, record: any) => sum + (Math.abs(record.volume) * record.originalPrice), 0);
@@ -335,6 +330,17 @@ async function processDate(): Promise<void> {
     log(`- Records added: ${totalRecords}`, "info");
     log(`- Total volume: ${totalVolume.toFixed(2)} MWh`, "info");
     log(`- Total payment: £${totalPayment.toFixed(2)}`, "info");
+    
+    // Update daily summary using curtailment service
+    try {
+      log('Using processDailyCurtailment to regenerate summaries', "info");
+      const { processDailyCurtailment } = await import('./server/services/curtailment');
+      await processDailyCurtailment(date);
+      log('Daily summary updated successfully', "success");
+    } catch (error) {
+      log(`Error updating daily summary: ${error}`, "error");
+      // Continue even if summary update fails - it's not critical
+    }
     
     // Run reconciliation to update Bitcoin calculations
     log(`Updating Bitcoin calculations...`, "info");
