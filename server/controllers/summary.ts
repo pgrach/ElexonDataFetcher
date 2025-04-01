@@ -652,7 +652,26 @@ export async function getYearlySummary(req: Request, res: Response) {
       });
     }
 
-    // Get monthly records for the year
+    // First, check if there's a yearly summary available
+    const yearSummary = await db.query.yearlySummaries.findFirst({
+      where: eq(yearlySummaries.year, year)
+    });
+
+    if (yearSummary) {
+      console.log(`Found yearly summary for ${year}:`, yearSummary);
+      
+      return res.json({
+        year,
+        totalCurtailedEnergy: Number(yearSummary.totalCurtailedEnergy),
+        totalPayment: Number(yearSummary.totalPayment) * -1, // Flip the sign
+        totalWindGeneration: Number(yearSummary.totalWindGeneration || 0),
+        windOnshoreGeneration: Number(yearSummary.windOnshoreGeneration || 0),
+        windOffshoreGeneration: Number(yearSummary.windOffshoreGeneration || 0),
+        lastUpdated: yearSummary.lastUpdated || new Date()
+      });
+    }
+    
+    // Fallback: Get monthly records for the year
     const monthlyTotals = await db
       .select({
         yearMonth: monthlySummaries.yearMonth,
