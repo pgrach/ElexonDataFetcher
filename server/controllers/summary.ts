@@ -78,10 +78,15 @@ export async function getDailySummary(req: Request, res: Response) {
         });
       }
 
+      // The payment value is already stored as negative in the database
+      // The API needs to present it as positive to users
+      let paymentValue = Number(summary.totalPayment);
+      paymentValue = Math.abs(paymentValue); // Always return positive value
+      
       return res.json({
         date,
         totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-        totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
+        totalPayment: paymentValue, // Return as positive value
         leadParty: null
       });
     }
@@ -181,13 +186,20 @@ export async function getMonthlySummary(req: Request, res: Response) {
       .from(dailySummaries)
       .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${yearMonth + '-01'}::date)`);
 
+    // For monthly summary, payment is already stored as negative in database
+    let paymentValue = Number(summary.totalPayment);
+    paymentValue = Math.abs(paymentValue); // Return as positive
+
+    let dailyPaymentValue = Number(dailyTotals[0]?.totalPayment || 0);
+    dailyPaymentValue = Math.abs(dailyPaymentValue); // Return as positive
+    
     res.json({
       yearMonth,
       totalCurtailedEnergy: Number(summary.totalCurtailedEnergy),
-      totalPayment: Number(summary.totalPayment) * -1, // Flip the sign
+      totalPayment: paymentValue, // Use the absolute value
       dailyTotals: {
         totalCurtailedEnergy: Number(dailyTotals[0]?.totalCurtailedEnergy || 0),
-        totalPayment: Number(dailyTotals[0]?.totalPayment || 0) * -1 // Flip the sign
+        totalPayment: dailyPaymentValue // Use the absolute value
       }
     });
   } catch (error) {
@@ -660,10 +672,15 @@ export async function getYearlySummary(req: Request, res: Response) {
     if (yearSummary) {
       console.log(`Found yearly summary for ${year}:`, yearSummary);
       
+      // The payment value is already stored as negative in the database
+      // The API needs to present it as positive to users
+      let paymentValue = Number(yearSummary.totalPayment);
+      paymentValue = Math.abs(paymentValue); // Always return positive value
+      
       return res.json({
         year,
         totalCurtailedEnergy: Number(yearSummary.totalCurtailedEnergy),
-        totalPayment: Number(yearSummary.totalPayment) * -1, // Flip the sign
+        totalPayment: paymentValue, // Return as positive value
         totalWindGeneration: Number(yearSummary.totalWindGeneration || 0),
         windOnshoreGeneration: Number(yearSummary.windOnshoreGeneration || 0),
         windOffshoreGeneration: Number(yearSummary.windOffshoreGeneration || 0),

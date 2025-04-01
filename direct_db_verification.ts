@@ -180,7 +180,9 @@ async function verifySummaries() {
     console.log('\nDaily Summaries:');
     if (dailySummaries.rows.length > 0) {
       for (const summary of dailySummaries.rows) {
-        console.log(`${summary.summary_date}: ${parseFloat(summary.total_curtailed_energy).toFixed(2)} MWh, £${Math.abs(parseFloat(summary.total_payment)).toFixed(2)}`);
+        // Payment values stored in DB are negative, but displayed positive in API
+        const payment = Math.abs(parseFloat(summary.total_payment));
+        console.log(`${summary.summary_date}: ${parseFloat(summary.total_curtailed_energy).toFixed(2)} MWh, £${payment.toFixed(2)}`);
       }
     } else {
       console.log('No daily summaries found');
@@ -198,7 +200,9 @@ async function verifySummaries() {
     
     console.log('\nMonthly Summary:');
     if (monthlySummary.rows.length > 0) {
-      console.log(`${monthlySummary.rows[0].year_month}: ${parseFloat(monthlySummary.rows[0].total_curtailed_energy).toFixed(2)} MWh, £${Math.abs(parseFloat(monthlySummary.rows[0].total_payment)).toFixed(2)}`);
+      // Payment values stored in DB are negative, but displayed positive in API
+      const payment = Math.abs(parseFloat(monthlySummary.rows[0].total_payment));
+      console.log(`${monthlySummary.rows[0].year_month}: ${parseFloat(monthlySummary.rows[0].total_curtailed_energy).toFixed(2)} MWh, £${payment.toFixed(2)}`);
     } else {
       console.log('No monthly summary found for 2025-03');
     }
@@ -215,7 +219,11 @@ async function verifySummaries() {
     
     console.log('\nYearly Summary:');
     if (yearlySummary.rows.length > 0) {
-      console.log(`${yearlySummary.rows[0].year}: ${parseFloat(yearlySummary.rows[0].total_curtailed_energy).toFixed(2)} MWh, £${Math.abs(parseFloat(yearlySummary.rows[0].total_payment)).toFixed(2)}`);
+      // Payment values stored in DB are negative, but displayed positive in API
+      const payment = Math.abs(parseFloat(yearlySummary.rows[0].total_payment));
+      console.log(`${yearlySummary.rows[0].year}: ${parseFloat(yearlySummary.rows[0].total_curtailed_energy).toFixed(2)} MWh, £${payment.toFixed(2)}`);
+      console.log(`Database stored value (negative): £${parseFloat(yearlySummary.rows[0].total_payment).toFixed(2)}`);
+      console.log(`API displayed value (positive): £${payment.toFixed(2)}`);
     } else {
       console.log('No yearly summary found for 2025');
     }
