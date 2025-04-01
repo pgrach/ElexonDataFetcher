@@ -88,21 +88,26 @@ async function comprehensiveFix() {
         WHERE rn > 1
       `);
       
-      // Delete records in batches of 500 to avoid overwhelming the database
-      const BATCH_SIZE = 500;
-      const ids = duplicateIds.rows.map(r => r.id);
+      // Delete duplicate records using a CTE approach
+      await db.execute(sql`
+        WITH records_with_rownum AS (
+          SELECT 
+            id,
+            settlement_period,
+            farm_id,
+            created_at,
+            ROW_NUMBER() OVER (PARTITION BY settlement_period, farm_id ORDER BY created_at DESC) as rn
+          FROM curtailment_records
+          WHERE settlement_date = ${DATE_TO_FIX}
+        )
+        DELETE FROM curtailment_records
+        WHERE id IN (
+          SELECT id FROM records_with_rownum WHERE rn > 1
+        )
+      `);
       
-      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-        const batch = ids.slice(i, i + BATCH_SIZE);
-        const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(', ');
-        
-        await db.execute(sql.raw(
-          `DELETE FROM curtailment_records WHERE id IN (${placeholders})`,
-          ...batch
-        ));
-        
-        await logToFile(`  Deleted batch ${i/BATCH_SIZE + 1}/${Math.ceil(ids.length/BATCH_SIZE)} (${batch.length} records)`);
-      }
+      await logToFile(`  Deleted ${duplicateCount} duplicate records`);
+      
       
       await logToFile(`Completed deletion of ${duplicateCount} duplicate records`);
     }
@@ -127,15 +132,15 @@ async function comprehensiveFix() {
     await db.insert(dailySummaries)
       .values({
         summaryDate: DATE_TO_FIX,
-        totalCurtailedEnergy: dedupTotals.total_energy,
-        totalPayment: dedupTotals.total_payment,
+        totalCurtailedEnergy: String(dedupTotals.total_energy),
+        totalPayment: String(dedupTotals.total_payment),
         lastUpdated: new Date()
       })
       .onConflictDoUpdate({
         target: [dailySummaries.summaryDate],
         set: {
-          totalCurtailedEnergy: dedupTotals.total_energy,
-          totalPayment: dedupTotals.total_payment,
+          totalCurtailedEnergy: String(dedupTotals.total_energy),
+          totalPayment: String(dedupTotals.total_payment),
           lastUpdated: new Date()
         }
       });
@@ -160,15 +165,15 @@ async function comprehensiveFix() {
       await db.insert(monthlySummaries)
         .values({
           yearMonth,
-          totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
-          totalPayment: monthlyTotals[0].totalPayment,
+          totalCurtailedEnergy: String(monthlyTotals[0].totalCurtailedEnergy),
+          totalPayment: String(monthlyTotals[0].totalPayment),
           updatedAt: new Date()
         })
         .onConflictDoUpdate({
           target: [monthlySummaries.yearMonth],
           set: {
-            totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
-            totalPayment: monthlyTotals[0].totalPayment,
+            totalCurtailedEnergy: String(monthlyTotals[0].totalCurtailedEnergy),
+            totalPayment: String(monthlyTotals[0].totalPayment),
             updatedAt: new Date()
           }
         });
@@ -195,15 +200,15 @@ async function comprehensiveFix() {
       await db.insert(yearlySummaries)
         .values({
           year,
-          totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
-          totalPayment: yearlyTotals[0].totalPayment,
+          totalCurtailedEnergy: String(yearlyTotals[0].totalCurtailedEnergy),
+          totalPayment: String(yearlyTotals[0].totalPayment),
           updatedAt: new Date()
         })
         .onConflictDoUpdate({
           target: [yearlySummaries.year],
           set: {
-            totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
-            totalPayment: yearlyTotals[0].totalPayment,
+            totalCurtailedEnergy: String(yearlyTotals[0].totalCurtailedEnergy),
+            totalPayment: String(yearlyTotals[0].totalPayment),
             updatedAt: new Date()
           }
         });
@@ -224,17 +229,17 @@ async function comprehensiveFix() {
     const finalState = finalStateQuery.rows[0];
     await logToFile(`\nFinal state for ${DATE_TO_FIX}:`);
     await logToFile(`  Total records: ${finalState.total_records}`);
-    await logToFile(`  Daily summary energy: ${finalState.summary_energy} MWh`);
-    await logToFile(`  Daily summary payment: £${finalState.summary_payment}`);
+    await logToFile(`  Daily summary energy: ${String(finalState.summary_energy)} MWh`);
+    await logToFile(`  Daily summary payment: £${String(finalState.summary_payment)}`);
     
     // Step 8: Note expected value from Elexon API
     await logToFile(`\nExpected Elexon API payment: £3,784,089.62`);
-    const actualPayment = Math.abs(parseFloat(finalState.summary_payment));
+    const actualPayment = Math.abs(parseFloat(String(finalState.summary_payment)));
     const percentageOfExpected = ((actualPayment / 3784089.62) * 100).toFixed(2);
     await logToFile(`Current payment after fix: £${actualPayment.toFixed(2)} (${percentageOfExpected}% of expected)`);
     
     // Check if there's still a significant discrepancy
-    if (percentageOfExpected < 95) {
+    if (parseFloat(percentageOfExpected) < 95) {
       await logToFile(`\nNOTE: There's still a significant discrepancy with the expected Elexon API total.`);
       await logToFile(`This suggests we may be missing records or there could be calculation differences.`);
       await logToFile(`Consider re-fetching the full data from Elexon API for this date.`);
