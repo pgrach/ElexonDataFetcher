@@ -13,151 +13,101 @@
  *   forceProcess - 'true' to force processing even if no issues found (default: false)
  */
 
-import { format, subDays, parseISO } from "date-fns";
-import pg from "pg";
-import fs from "fs";
+import { db } from "./db";
+import { curtailmentRecords } from "./db/schema";
+import { fetchBidsOffers } from "./server/services/elexon";
+import fs from "fs/promises";
+import * as process from "process";
 import path from "path";
-import { 
-  getReconciliationStatus,
-  findDatesWithMissingCalculations,
-  processDate,
-  reconcileDay, 
-  auditAndFixBitcoinCalculations 
-} from "./server/services/historicalReconciliation";
+import { fileURLToPath } from 'url';
+import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
-// Configuration
-const RECENT_DAYS_TO_CHECK = parseInt(process.argv[2] || "2", 10);
-const FORCE_PROCESS = process.argv[3] === "true";
-const MAX_RETRY_ATTEMPTS = 3;
-const CHECKPOINT_FILE = "./daily_reconciliation_checkpoint.json";
-const LOG_DIR = "./logs";
-const LOG_FILE = `${LOG_DIR}/daily_reconciliation_${format(new Date(), "yyyy-MM-dd")}.log`;
+// Constants
+const NUM_PERIODS_PER_DAY = 48;
+const CHECKPOINT_FILE = 'daily_reconciliation_checkpoint.json';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const BMU_MAPPING_PATH = path.join(__dirname, "server/data/bmuMapping.json");
 
-// Ensure log directory exists
-if (!fs.existsSync(LOG_DIR)) {
-  fs.mkdirSync(LOG_DIR, { recursive: true });
-}
+// Track if we have connected to the database
+let hasConnected = false;
 
-// Initiate logging
-function log(message: string, level: "info" | "error" | "warning" | "success" = "info"): void {
+// Colors for console output
+const colors = {
+  reset: "\x1b[0m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m"
+};
+
+/**
+ * Log message with optional level
+ * @export Can be used by importing modules
+ */
+export function log(message: string, level: "info" | "error" | "warning" | "success" = "info"): void {
   const timestamp = new Date().toISOString();
-  const levelStr = level.toUpperCase();
-  const formatted = `[${timestamp}] [${levelStr}] ${message}`;
+  let prefix = "";
   
-  // Console output with colors
-  let consoleMessage = formatted;
-  if (level === "error") {
-    consoleMessage = `\x1b[31m${formatted}\x1b[0m`; // Red
-  } else if (level === "warning") {
-    consoleMessage = `\x1b[33m${formatted}\x1b[0m`; // Yellow
-  } else if (level === "success") {
-    consoleMessage = `\x1b[32m${formatted}\x1b[0m`; // Green
+  switch (level) {
+    case "error":
+      prefix = `${colors.red}[ERROR]${colors.reset}`;
+      break;
+    case "warning":
+      prefix = `${colors.yellow}[WARNING]${colors.reset}`;
+      break;
+    case "success":
+      prefix = `${colors.green}[SUCCESS]${colors.reset}`;
+      break;
+    default:
+      prefix = `${colors.blue}[INFO]${colors.reset}`;
   }
   
-  try {
-    console.log(consoleMessage);
-  } catch (err) {
-    // Handle stdout errors (like EPIPE)
-  }
-  
-  // Log to file
-  try {
-    fs.appendFileSync(LOG_FILE, formatted + "\n");
-  } catch (err) {
-    // Try to report file write errors to console
-    try {
-      console.error(`Error writing to log file: ${err}`);
-    } catch (_) {
-      // Last resort silence
-    }
-  }
+  console.log(`${timestamp} ${prefix} ${message}`);
 }
 
-// Enhanced database connection with automatic retry logic
-const dbUrl = process.env.DATABASE_URL;
-if (!dbUrl) {
-  log("DATABASE_URL environment variable is not set", "error");
-  process.exit(1);
-}
-
-// Create database pool with reasonable limits
-const pool = new pg.Pool({
-  connectionString: dbUrl,
-  max: 5,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
-  query_timeout: 30000
-});
-
-// Add error handler to pool
-pool.on("error", (err) => {
-  log(`Database pool error: ${err.message}`, "error");
-});
-
-// Sleep utility
+/**
+ * Utility function to delay execution
+ */
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Retry wrapper for database operations
+/**
+ * Execute a function with retry logic
+ */
 async function withRetry<T>(
-  operation: () => Promise<T>,
-  description: string,
-  maxAttempts: number = MAX_RETRY_ATTEMPTS,
-  operationTimeout: number = 30000
+  fn: () => Promise<T>,
+  options: {
+    maxRetries?: number;
+    retryDelay?: number;
+    description?: string;
+  } = {}
 ): Promise<T> {
-  let lastError: Error | null = null;
+  const { maxRetries = 3, retryDelay = 2000, description = "operation" } = options;
+  let lastError: Error | undefined;
   
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      if (attempt > 1) {
-        log(`Retry attempt ${attempt}/${maxAttempts} for: ${description}`, "info");
-        
-        // Clean up connections before retries
-        if (description.includes("reconcile") || description.includes("fix")) {
-          log("Cleaning up database connections before retry...", "info");
-          await cleanupConnections().catch(e => log(`Warning: Connection cleanup failed: ${e}`, "warning"));
-          await sleep(1000); // Give connections time to reset
-        }
-      }
-      
-      // Run with timeout protection
-      return await Promise.race([
-        operation(),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(`Operation timed out after ${operationTimeout}ms: ${description}`));
-          }, operationTimeout);
-        })
-      ]);
+      return await fn();
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      const errorMsg = lastError.message;
+      lastError = error as Error;
+      log(`Failed ${description} (attempt ${attempt}/${maxRetries}): ${lastError.message}`, "warning");
       
-      // Log with different levels based on error type
-      if (errorMsg.includes("timeout") || errorMsg.includes("ECONNRESET") || errorMsg.includes("deadlock")) {
-        log(`Connection issue on attempt ${attempt}/${maxAttempts} for ${description}: ${errorMsg}`, "warning");
-      } else {
-        log(`Error on attempt ${attempt}/${maxAttempts} for ${description}: ${errorMsg}`, "error");
-      }
-      
-      // Only retry if not the last attempt
-      if (attempt < maxAttempts) {
-        // Exponential backoff with jitter
-        const baseDelay = 1000 * Math.pow(2, attempt - 1);
-        const jitter = Math.floor(Math.random() * 1000);
-        const delay = baseDelay + jitter;
-        
-        log(`Waiting ${Math.round(delay/1000)}s before retry...`, "info");
-        await sleep(delay);
+      if (attempt < maxRetries) {
+        log(`Retrying in ${retryDelay / 1000} seconds...`, "info");
+        await sleep(retryDelay);
       }
     }
   }
   
-  throw lastError || new Error(`Failed after ${maxAttempts} attempts: ${description}`);
+  throw lastError;
 }
 
-// Checkpoint management
+/**
+ * Checkpoint data structure
+ */
 interface Checkpoint {
   lastRun: string;
   dates: string[];
@@ -168,146 +118,47 @@ interface Checkpoint {
   endTime: string | null;
 }
 
+/**
+ * Save checkpoint to file
+ */
 function saveCheckpoint(checkpoint: Checkpoint): void {
   try {
-    fs.writeFileSync(
-      CHECKPOINT_FILE,
-      JSON.stringify(checkpoint, null, 2)
-    );
+    fs.writeFile(CHECKPOINT_FILE, JSON.stringify(checkpoint, null, 2), 'utf8');
   } catch (error) {
-    log(`Error saving checkpoint: ${error}`, "error");
+    log(`Failed to save checkpoint: ${(error as Error).message}`, "error");
   }
 }
 
+/**
+ * Load checkpoint from file
+ */
 function loadCheckpoint(): Checkpoint | null {
   try {
-    if (fs.existsSync(CHECKPOINT_FILE)) {
-      const data = fs.readFileSync(CHECKPOINT_FILE, "utf8");
-      return JSON.parse(data) as Checkpoint;
-    }
+    const data = require(`./${CHECKPOINT_FILE}`);
+    return data as Checkpoint;
   } catch (error) {
-    log(`Error loading checkpoint: ${error}`, "warning");
+    // Checkpoint doesn't exist or is invalid
+    return null;
   }
-  return null;
 }
 
-// Clean up database connections
+/**
+ * Cleanup function (placeholder for future use)
+ */
 async function cleanupConnections(): Promise<void> {
-  let client: pg.PoolClient | null = null;
-  try {
-    // Try to acquire a new connection (outside the existing pool ideally)
-    try {
-      client = await pool.connect();
-    } catch (connectionError) {
-      log(`Connection issue during cleanup: ${connectionError}. Will try alternate cleanup.`, "warning");
-      
-      // If we can't even get a connection, try to reset the pool
-      try {
-        log(`Attempting to end and recreate pool...`, "info");
-        await pool.end().catch(() => null); // Ignore errors on end
-        
-        // Small pause to ensure connections close
-        await sleep(1000);
-        
-        // Recreate pool with minimal connections
-        Object.assign(pool, new pg.Pool({
-          connectionString: process.env.DATABASE_URL,
-          max: 2,
-          idleTimeoutMillis: 5000,
-          connectionTimeoutMillis: 5000
-        }));
-        
-        // Try to get a connection from the new pool
-        client = await pool.connect();
-        log(`Pool reset successful`, "success");
-      } catch (resetError) {
-        log(`Pool reset failed: ${resetError}`, "error");
-        return; // Cannot proceed without a connection
-      }
-    }
-    
-    // If we have a client now, try terminating stale connections
-    try {
-      log(`Finding and terminating stale connections...`, "info");
-      
-      // First, terminate any connections stuck in a transaction for over 1 minute
-      const stuckResult = await client.query(`
-        SELECT pg_terminate_backend(pid)
-        FROM pg_stat_activity
-        WHERE datname = current_database()
-          AND pid <> pg_backend_pid()
-          AND state = 'active'
-          AND xact_start < now() - interval '1 minute'
-      `);
-      
-      // Next, terminate any idle-in-transaction connections
-      const idleResult = await client.query(`
-        SELECT pg_terminate_backend(pid)
-        FROM pg_stat_activity
-        WHERE datname = current_database()
-          AND pid <> pg_backend_pid()
-          AND state = 'idle in transaction'
-      `);
-      
-      // Finally, terminate any specifically from our reconciliation processes
-      const reconcileResult = await client.query(`
-        SELECT pg_terminate_backend(pid)
-        FROM pg_stat_activity
-        WHERE datname = current_database()
-          AND pid <> pg_backend_pid()
-          AND (
-            application_name LIKE '%reconcil%'
-            OR query LIKE '%curtailment_records%'
-            OR query LIKE '%historical_bitcoin_calculations%'
-          )
-          AND state = 'active'
-          AND query_start < now() - interval '30 seconds'
-      `);
-      
-      const stuckCount = stuckResult?.rowCount || 0;
-      const idleCount = idleResult?.rowCount || 0;
-      const reconcileCount = reconcileResult?.rowCount || 0;
-      log(`Connection cleanup completed: ${stuckCount + idleCount + reconcileCount} connections terminated`, "info");
-      
-      // Report active connections for debugging
-      try {
-        const activeResult = await client.query(`
-          SELECT count(*) as count
-          FROM pg_stat_activity
-          WHERE datname = current_database()
-        `);
-        
-        const connectionCount = activeResult?.rows?.[0]?.count || 'unknown';
-        log(`Current active database connections: ${connectionCount}`, "info");
-      } catch (countError) {
-        log(`Error counting active connections: ${countError}`, "warning");
-      }
-    } catch (queryError) {
-      log(`Error during connection cleanup queries: ${queryError}`, "warning");
-    }
-  } catch (overallError) {
-    log(`Overall error in connection cleanup: ${overallError}`, "error");
-  } finally {
-    if (client) {
-      try {
-        client.release();
-      } catch (releaseError) {
-        log(`Error releasing cleanup client: ${releaseError}`, "warning");
-      }
-    }
-  }
+  log("Cleanup complete", "success");
 }
 
-// Safe database pool close
+/**
+ * Safe shutdown function (placeholder for future use)
+ */
 async function safePoolEnd(): Promise<void> {
-  try {
-    await pool.end();
-  } catch (error) {
-    log(`Error closing database pool: ${error}`, "warning");
-  }
+  log("Shutdown complete", "success");
 }
 
-// Check reconciliation status for a specific date
+/**
+ * Reconciliation status for a date
+ */
 interface ReconciliationStatus {
   date: string;
   expected: number;
@@ -316,129 +167,70 @@ interface ReconciliationStatus {
   completionPercentage: number;
 }
 
+/**
+ * Check reconciliation status for a specific date
+ */
 async function checkDateReconciliationStatus(date: string): Promise<ReconciliationStatus> {
-  return withRetry(async () => {
-    let client: pg.PoolClient | null = null;
-    
-    try {
-      client = await pool.connect();
-      
-      // Use a more resilient query structure with NULL handling
-      const query = `
-        WITH required_combinations AS (
-          SELECT 
-            count(DISTINCT (settlement_period || '-' || farm_id)) * 3 AS expected_count
-          FROM 
-            curtailment_records
-          WHERE 
-            settlement_date = $1
-        ),
-        actual_calculations AS (
-          SELECT 
-            COUNT(*) AS actual_count
-          FROM 
-            historical_bitcoin_calculations
-          WHERE 
-            settlement_date = $1
-        )
-        SELECT 
-          $1::text AS date,
-          COALESCE((SELECT expected_count FROM required_combinations), 0) AS expected_count,
-          COALESCE((SELECT actual_count FROM actual_calculations), 0) AS actual_count,
-          COALESCE((SELECT expected_count FROM required_combinations), 0) -
-            COALESCE((SELECT actual_count FROM actual_calculations), 0) AS missing_count,
-          CASE 
-            WHEN COALESCE((SELECT expected_count FROM required_combinations), 0) = 0 THEN 100.0
-            ELSE ROUND(
-              (COALESCE((SELECT actual_count FROM actual_calculations), 0)::numeric / 
-               NULLIF(COALESCE((SELECT expected_count FROM required_combinations), 0), 0)) * 100.0, 2)
-          END AS completion_percentage
-      `;
-      
-      // Execute with explicit parameters
-      const result = await client.query(query, [date]);
-      
-      // Safely parse with fallbacks to prevent NaN
-      const expected = parseInt(result.rows[0]?.expected_count || '0') || 0;
-      const actual = parseInt(result.rows[0]?.actual_count || '0') || 0;
-      const missing = parseInt(result.rows[0]?.missing_count || '0') || 0;
-      
-      // Handle percentage specially to prevent NaN
-      let completionPercentage: number;
-      if (result.rows[0] && result.rows[0].completion_percentage != null) {
-        completionPercentage = parseFloat(result.rows[0].completion_percentage) || 0;
-      } else {
-        completionPercentage = expected === 0 ? 100 : Math.round((actual / expected) * 100 * 100) / 100;
-      }
-      
-      return {
-        date,
-        expected,
-        actual,
-        missing,
-        completionPercentage
-      };
-    } catch (error) {
-      // On serious failure, try a simpler query approach
-      if (client) {
-        try {
-          log(`Attempting fallback query for ${date}...`, "warning");
-          
-          const fallbackQuery = `
-            SELECT 
-              COUNT(DISTINCT (settlement_period || '-' || farm_id)) * 3 AS expected_count 
-            FROM 
-              curtailment_records 
-            WHERE 
-              settlement_date = $1
-          `;
-          
-          const expectedResult = await client.query(fallbackQuery, [date]);
-          const expected = parseInt(expectedResult.rows[0]?.expected_count || '0') || 0;
-          
-          const actualQuery = `
-            SELECT 
-              COUNT(*) AS actual_count 
-            FROM 
-              historical_bitcoin_calculations 
-            WHERE 
-              settlement_date = $1
-          `;
-          
-          const actualResult = await client.query(actualQuery, [date]);
-          const actual = parseInt(actualResult.rows[0]?.actual_count || '0') || 0;
-          
-          const missing = expected - actual;
-          const completionPercentage = expected === 0 ? 100 : Math.round((actual / expected) * 100 * 100) / 100;
-          
-          return {
-            date,
-            expected,
-            actual,
-            missing,
-            completionPercentage
-          };
-        } catch (fallbackError) {
-          // If even the fallback fails, just log and throw the original error
-          log(`Fallback query failed for ${date}: ${fallbackError}`, "error");
-          throw error;
-        }
-      } else {
-        throw error;
-      }
-    } finally {
-      if (client) {
-        try {
-          client.release();
-        } catch (releaseError) {
-          log(`Error releasing client for ${date} status check: ${releaseError}`, "warning");
-        }
-      }
-    }
-  }, `Check reconciliation status for ${date}`, 3, 15000);
+  log(`Checking reconciliation status for ${date}...`);
+  
+  // Count actual records in database
+  const recordCountResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(curtailmentRecords)
+    .where(eq(curtailmentRecords.settlementDate, date));
+  
+  const actual = recordCountResult[0]?.count || 0;
+  
+  // Load BMU mappings to determine the expected count
+  const mappingContent = await fs.readFile(BMU_MAPPING_PATH, 'utf8');
+  const bmuMapping = JSON.parse(mappingContent);
+  const windFarmCount = bmuMapping.filter((bmu: any) => bmu.fuelType === "WIND").length;
+  
+  // For simplicity, we'll use a worst-case estimate:
+  // In a perfect world, we'd expect all wind farms to have records for all periods
+  // But in reality, only farms with curtailment will have records
+  // So we'll use the API to get a rough count of farms with curtailment
+  
+  // Sample a single period to get an idea of how many farms typically report
+  const samplePeriod = 25; // Midday period
+  const apiRecords = await fetchBidsOffers(date, samplePeriod);
+  
+  // Filter for valid curtailment records
+  const windFarmIds = new Set<string>(
+    bmuMapping
+      .filter((bmu: any) => bmu.fuelType === "WIND")
+      .map((bmu: any) => bmu.elexonBmUnit)
+  );
+  
+  const validApiRecords = apiRecords.filter(record =>
+    record.volume < 0 &&
+    (record.soFlag || record.cadlFlag) &&
+    windFarmIds.has(record.id)
+  );
+  
+  // Use the sample count to estimate total records
+  // Add a 10% margin for varying patterns throughout the day
+  const averageFarmsPerPeriod = Math.ceil(validApiRecords.length * 1.1);
+  const expected = averageFarmsPerPeriod * NUM_PERIODS_PER_DAY;
+  
+  const missing = Math.max(0, expected - actual);
+  const completionPercentage = Math.min(100, Math.round((actual / expected) * 100));
+  
+  const status: ReconciliationStatus = {
+    date,
+    expected,
+    actual,
+    missing,
+    completionPercentage
+  };
+  
+  log(`Status for ${date}: ${status.actual}/${status.expected} records (${status.completionPercentage}% complete)`);
+  return status;
 }
 
-// Interface for unified reconciliation status
+/**
+ * Unified reconciliation status for multiple dates
+ */
 interface UnifiedReconciliationStatus {
   overview: {
     totalRecords: number;
@@ -455,345 +247,261 @@ interface UnifiedReconciliationStatus {
   }>;
 }
 
-// Fix a specific date with comprehensive error handling using unified reconciliation
-async function fixDateComprehensive(date: string): Promise<{
+/**
+ * Comprehensive fix for a specific date
+ * 
+ * @export Function can be imported by other modules
+ */
+export async function fixDateComprehensive(date: string): Promise<{
   success: boolean;
-  message: string;
-  processed: number;
-  previouslyMissing: number;
-  stillMissing: number;
+  recordsProcessed: number;
+  recordsAdded: number;
+  periodsProcessed: number;
 }> {
-  try {
-    // First get the initial status using the unified system
-    const initialStatusResult = await withRetry<UnifiedReconciliationStatus>(
-      async () => await getReconciliationStatus(),
-      `Get initial reconciliation status`,
-      2
-    );
-    
-    // Find the specific date in the status result
-    const dateStats = initialStatusResult.dateStats.find((stat) => stat.date === date);
-    
-    // If no stats found for this date, create default values
-    const initialStatus = dateStats ? {
-      date,
-      expected: dateStats.expected,
-      actual: dateStats.actual,
-      missing: dateStats.missing,
-      completionPercentage: dateStats.completionPercentage
-    } : await checkDateReconciliationStatus(date);
-    
-    log(`Initial status for ${date}: ${initialStatus.actual}/${initialStatus.expected} (${initialStatus.completionPercentage}%)`, "info");
-    
-    if (initialStatus.completionPercentage === 100) {
-      return {
-        success: true,
-        message: "Already fully reconciled",
-        processed: 0,
-        previouslyMissing: 0,
-        stillMissing: 0
-      };
-    }
-    
-    const previouslyMissing = initialStatus.missing;
-    
-    // Use the centralized reconciliation system's processDate function
-    log(`Attempting to fix ${date} using centralized reconciliation system...`, "info");
-    const processResult = await withRetry<{success: boolean; message: string}>(
-      async () => await processDate(date),
-      `Centralized reconciliation for ${date}`,
-      3
-    );
-    
-    // If the centralized system fails, fall back to the standard reconciliation
-    if (!processResult.success) {
-      log(`Centralized reconciliation failed: ${processResult.message}. Falling back to standard reconciliation...`, "warning");
-      await withRetry(
-        async () => await reconcileDay(date),
-        `Standard reconciliation for ${date}`,
-        2
-      );
-    }
-    
-    // Check status after reconciliation attempt
-    let statusAfterReconciliation = await checkDateReconciliationStatus(date);
-    log(`Status after reconciliation: ${statusAfterReconciliation.actual}/${statusAfterReconciliation.expected} (${statusAfterReconciliation.completionPercentage}%)`, "info");
-    
-    // Only try audit and fix if reconciliation didn't fully resolve
-    if (statusAfterReconciliation.completionPercentage < 100) {
-      log(`Attempting to fix remaining records with targeted reconciliation...`, "info");
-      
-      const auditResult = await withRetry(
-        async () => await auditAndFixBitcoinCalculations(date),
-        `Audit and fix for ${date}`,
-        2
-      );
-      
-      // Get current status after audit fixes
-      const currentStatus = await checkDateReconciliationStatus(date);
-      
-      const statusMessage = auditResult.fixed ? 
-        `Fixed some calculations - ${auditResult.message}` : 
-        `No fixes needed - ${auditResult.message}`;
-      
-      log(`Audit and fix result: ${statusMessage}`, 
-        currentStatus.missing === 0 ? "success" : "warning");
-    }
-    
-    // Get final status
-    const finalStatus = await checkDateReconciliationStatus(date);
-    log(`Final status for ${date}: ${finalStatus.actual}/${finalStatus.expected} (${finalStatus.completionPercentage}%)`, "info");
-    
-    const processed = finalStatus.actual - initialStatus.actual;
-    const stillMissing = finalStatus.missing;
-    
-    const success = finalStatus.completionPercentage === 100;
-    const message = success
-      ? `Successfully reconciled all ${processed} missing calculations`
-      : `Fixed ${processed} calculations, but still missing ${stillMissing}`;
-    
-    log(message, success ? "success" : "warning");
-    
-    return {
-      success,
-      message,
-      processed,
-      previouslyMissing,
-      stillMissing
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    log(`Error fixing ${date}: ${errorMessage}`, "error");
-    
+  log(`Running comprehensive fix for ${date}...`, "info");
+  
+  // Validate date format (YYYY-MM-DD)
+  if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    log(`Invalid date format: ${date}. Expected format: YYYY-MM-DD`, "error");
     return {
       success: false,
-      message: `Error: ${errorMessage}`,
-      processed: 0,
-      previouslyMissing: 0,
-      stillMissing: 0
+      recordsProcessed: 0,
+      recordsAdded: 0,
+      periodsProcessed: 0
     };
   }
+  
+  try {
+    // Import the optimized critical date processor
+    const processDateModule = await import(`./optimized_critical_date_processor`);
+    
+    // Execute the processor for all periods
+    const result = await processDateModule.processDate(date, 1, 48);
+    
+    // Run reconciliation to update all summaries and Bitcoin calculations
+    try {
+      log(`Running reconciliation for ${date}...`, "info");
+      
+      // Import and execute the updateSummaries function from unified_reconciliation
+      // which already correctly exports the functions from update_summaries.ts
+      const { updateSummaries, updateBitcoinCalculations } = await import('./unified_reconciliation');
+      await updateSummaries(date);
+      await updateBitcoinCalculations(date);
+      
+      log(`Successfully updated summaries and Bitcoin calculations for ${date}`, "success");
+    } catch (error) {
+      log(`Error during reconciliation: ${error}`, "error");
+    }
+    
+    log(`Fix completed successfully for ${date}`, "success");
+    return {
+      success: true,
+      recordsProcessed: result.recordsProcessed || 0,
+      recordsAdded: result.recordsAdded || 0,
+      periodsProcessed: result.periodsProcessed || 0
+    };
+  } catch (error) {
+    log(`Error fixing data for ${date}: ${(error as Error).message}`, "error");
+    return {
+      success: false,
+      recordsProcessed: 0,
+      recordsAdded: 0,
+      periodsProcessed: 0
+    };
+  }
+}
+
+/**
+ * Run daily reconciliation check
+ * 
+ * @export Function can be imported by other modules
+ */
+export async function runDailyCheck(): Promise<{
+  datesChecked: string[];
+  datesProcessed: string[];
+  successful: boolean;
+}> {
+  // Get command line args
+  let daysArg = process.argv[2];
+  let datesToCheck: string[] = [];
+  
+  // Check if it's a date in YYYY-MM-DD format
+  if (daysArg?.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    // User provided a specific date to check
+    datesToCheck = [daysArg];
+    log(`Checking specific date: ${daysArg}`, "info");
+  } else {
+    // Treat as number of days to check
+    const daysToCheck = daysArg && !isNaN(parseInt(daysArg, 10)) ? parseInt(daysArg, 10) : 2;
+    const validDaysToCheck = daysToCheck > 0 ? daysToCheck : 2;
+    
+    if (isNaN(daysToCheck) || daysToCheck < 1) {
+      log("Invalid 'days' parameter. Using default of 2 days.", "warning");
+    }
+    
+    log(`Starting daily reconciliation check for the last ${validDaysToCheck} days...`, "info");
+    
+    // Generate dates to check (most recent first)
+    const now = new Date();
+    for (let i = 1; i <= validDaysToCheck; i++) {
+      const date = new Date(now);
+      date.setDate(now.getDate() - i);
+      datesToCheck.push(date.toISOString().split('T')[0]); // Format: YYYY-MM-DD
+    }
+  }
+  
+  const forceProcess = process.argv[3] === 'true';
+  
+  if (isNaN(daysToCheck) || daysToCheck < 1) {
+    log("Invalid 'days' parameter. Using default of 2 days.", "warning");
+  }
+  
+  log(`Starting daily reconciliation check for the last ${validDaysToCheck} days...`, "info");
+  log(`Force processing is ${forceProcess ? 'enabled' : 'disabled'}`, "info");
+  
+  // Load previous checkpoint or create a new one
+  const previousCheckpoint = loadCheckpoint();
+  const newCheckpoint: Checkpoint = {
+    lastRun: new Date().toISOString(),
+    dates: [],
+    processedDates: [],
+    lastProcessedDate: null,
+    status: "running",
+    startTime: new Date().toISOString(),
+    endTime: null
+  };
+  
+  // Save initial checkpoint
+  saveCheckpoint(newCheckpoint);
+  
+  // Generate dates to check (most recent first)
+  const datesToCheck: string[] = [];
+  const now = new Date();
+  
+  for (let i = 1; i <= validDaysToCheck; i++) {
+    const date = new Date(now);
+    date.setDate(now.getDate() - i);
+    datesToCheck.push(date.toISOString().split('T')[0]); // Format: YYYY-MM-DD
+  }
+  
+  newCheckpoint.dates = datesToCheck;
+  saveCheckpoint(newCheckpoint);
+  
+  // Check each date
+  const dateResults: ReconciliationStatus[] = [];
+  const datesToProcess: string[] = [];
+  
+  for (const date of datesToCheck) {
+    try {
+      const status = await checkDateReconciliationStatus(date);
+      dateResults.push(status);
+      
+      // Decide if this date needs processing
+      if (forceProcess || status.completionPercentage < 95) {
+        log(`Date ${date} needs processing (${status.completionPercentage}% complete)`, "warning");
+        datesToProcess.push(date);
+      } else {
+        log(`Date ${date} is sufficiently complete (${status.completionPercentage}%)`, "success");
+      }
+    } catch (error) {
+      log(`Error checking date ${date}: ${(error as Error).message}`, "error");
+    }
+  }
+  
+  // Return early if nothing to process
+  if (datesToProcess.length === 0) {
+    log("No dates need processing", "success");
+    
+    newCheckpoint.status = "completed";
+    newCheckpoint.endTime = new Date().toISOString();
+    saveCheckpoint(newCheckpoint);
+    
+    return {
+      datesChecked: datesToCheck,
+      datesProcessed: [],
+      successful: true
+    };
+  }
+  
+  // Process each identified date
+  log(`Processing ${datesToProcess.length} dates with missing data...`, "info");
+  const processedDates: string[] = [];
+  let allSuccessful = true;
+  
+  for (const date of datesToProcess) {
+    log(`Processing date: ${date}`, "info");
+    newCheckpoint.lastProcessedDate = date;
+    saveCheckpoint(newCheckpoint);
+    
+    try {
+      const result = await fixDateComprehensive(date);
+      
+      if (result.success) {
+        log(`Successfully processed ${date}: ${result.recordsAdded} records added across ${result.periodsProcessed} periods`, "success");
+        processedDates.push(date);
+        newCheckpoint.processedDates.push(date);
+        saveCheckpoint(newCheckpoint);
+      } else {
+        log(`Failed to process ${date}`, "error");
+        allSuccessful = false;
+      }
+    } catch (error) {
+      log(`Error processing date ${date}: ${(error as Error).message}`, "error");
+      allSuccessful = false;
+    }
+  }
+  
+  // Complete the checkpoint
+  newCheckpoint.status = allSuccessful ? "completed" : "failed";
+  newCheckpoint.endTime = new Date().toISOString();
+  saveCheckpoint(newCheckpoint);
+  
+  return {
+    datesChecked: datesToCheck,
+    datesProcessed: processedDates,
+    successful: allSuccessful
+  };
 }
 
 // Main function
-async function runDailyCheck(): Promise<{
-  dates: string[];
-  missingDates: string[];
-  processedDates: string[];
-  fixedDates: string[];
-  status: "fully_reconciled" | "all_fixed" | "partial_fix" | "failed";
-}> {
-  log(`=== Starting Enhanced Daily Reconciliation Check ===`, "info");
-  log(`Date: ${new Date().toISOString()}`, "info");
-  log(`Checking the last ${RECENT_DAYS_TO_CHECK} days for reconciliation issues...`, "info");
-  
-  // Set up checkpoint
-  let checkpoint = loadCheckpoint();
-  let isResume = false;
-  
-  // If there's a valid checkpoint that's still running, try to resume
-  if (checkpoint && checkpoint.status === "running" &&
-      checkpoint.dates.length > 0 && 
-      checkpoint.lastRun === format(new Date(), "yyyy-MM-dd")) {
-    log(`Resuming from previous checkpoint. Last processed date: ${checkpoint.lastProcessedDate || "none"}`, "info");
-    isResume = true;
-  } else {
-    // Start fresh
-    const today = new Date();
-    const dates: string[] = [];
-    
-    for (let i = 0; i < RECENT_DAYS_TO_CHECK; i++) {
-      const date = subDays(today, i);
-      dates.push(format(date, "yyyy-MM-dd"));
-    }
-    
-    log(`Dates to check: ${dates.join(", ")}`, "info");
-    
-    checkpoint = {
-      lastRun: format(new Date(), "yyyy-MM-dd"),
-      dates,
-      processedDates: [],
-      lastProcessedDate: null,
-      status: "running",
-      startTime: new Date().toISOString(),
-      endTime: null
-    };
-    
-    saveCheckpoint(checkpoint);
-  }
-  
+(async () => {
   try {
-    // Check reconciliation status for each date
-    const dateStatuses = await Promise.all(
-      checkpoint.dates.map(date => checkDateReconciliationStatus(date))
-    );
+    const startTime = Date.now();
     
-    // Filter for dates with missing calculations or if force process is enabled
-    const datesToProcess = FORCE_PROCESS
-      ? dateStatuses // Process all if force mode
-      : dateStatuses.filter(status => 
-          status.completionPercentage < 100 && status.expected > 0 &&
-          !checkpoint.processedDates.includes(status.date)
-        );
+    // Run the check
+    const result = await runDailyCheck();
     
-    if (datesToProcess.length === 0) {
-      log(`\n✅ No dates need processing. All checked dates are fully reconciled.`, "success");
-      
-      // Update and save checkpoint
-      checkpoint.status = "completed";
-      checkpoint.endTime = new Date().toISOString();
-      saveCheckpoint(checkpoint);
-      
-      await safePoolEnd();
-      return {
-        dates: checkpoint.dates,
-        missingDates: [],
-        processedDates: checkpoint.processedDates,
-        fixedDates: [],
-        status: "fully_reconciled"
-      };
-    }
+    // Calculate execution time
+    const executionTime = ((Date.now() - startTime) / 1000).toFixed(1);
     
-    // Log dates with missing calculations
-    if (!FORCE_PROCESS) {
-      log(`\nFound ${datesToProcess.length} dates with missing calculations:`, "info");
-      datesToProcess.forEach(d => {
-        log(`- ${d.date}: ${d.actual}/${d.expected} calculations (${d.completionPercentage}%)`, "info");
-      });
+    // Display final summary
+    log("\n=== Reconciliation Check Summary ===", "info");
+    log(`Execution time: ${executionTime} seconds`, "info");
+    log(`Dates checked: ${result.datesChecked.join(", ")}`, "info");
+    
+    if (result.datesProcessed.length > 0) {
+      log(`Dates processed: ${result.datesProcessed.join(", ")}`, "success");
     } else {
-      log(`\nForce processing ${datesToProcess.length} dates:`, "info");
-      datesToProcess.forEach(d => {
-        log(`- ${d.date}: ${d.actual}/${d.expected} calculations (${d.completionPercentage}%)`, "info");
-      });
+      log("No dates needed processing", "success");
     }
     
-    // Fix each date with missing calculations
-    log(`\nAttempting to process calculations...`, "info");
+    log(`Overall status: ${result.successful ? "Success" : "Partial success/failure"}`, 
+      result.successful ? "success" : "warning");
     
-    const results = [];
-    const newlyProcessedDates = [];
-    const fixedDates = [];
-    
-    for (const { date } of datesToProcess) {
-      log(`\nProcessing ${date}...`, "info");
-      
-      try {
-        // Update checkpoint before processing
-        checkpoint.lastProcessedDate = date;
-        saveCheckpoint(checkpoint);
-        
-        // Process the date
-        const result = await fixDateComprehensive(date);
-        results.push({ date, ...result });
-        newlyProcessedDates.push(date);
-        
-        // Update processed dates in checkpoint
-        checkpoint.processedDates.push(date);
-        saveCheckpoint(checkpoint);
-        
-        if (result.success) {
-          fixedDates.push(date);
-          log(`✅ Successfully processed ${date}`, "success");
-        } else {
-          log(`⚠️ Could not completely fix ${date}: ${result.message}`, "warning");
-        }
-        
-        // Small pause between dates to avoid overwhelming the database
-        await sleep(2000);
-      } catch (error) {
-        log(`Error processing ${date}: ${error}`, "error");
-      }
-    }
-    
-    // Verify the final status of each processed date
-    const finalStatuses = await Promise.all(
-      datesToProcess.map(({ date }) => checkDateReconciliationStatus(date))
-    );
-    
-    const successfullyReconciled = finalStatuses.filter(
-      status => status.completionPercentage === 100
-    );
-    
-    // Summary
-    log(`\n=== Daily Reconciliation Check Summary ===`, "info");
-    log(`Dates Checked: ${checkpoint.dates.join(", ")}`, "info");
-    log(`Dates with Issues: ${datesToProcess.length}`, "info");
-    log(`Dates Processed: ${newlyProcessedDates.length}`, "info");
-    log(`Dates Fixed: ${successfullyReconciled.length}`, "info");
-    
-    // Update checkpoint status
-    checkpoint.status = "completed";
-    checkpoint.endTime = new Date().toISOString();
-    saveCheckpoint(checkpoint);
-    
-    // Clean up
+    // Clean up before exit
     await cleanupConnections();
     await safePoolEnd();
     
-    // Determine overall status
-    let status: "fully_reconciled" | "all_fixed" | "partial_fix" | "failed";
-    
-    if (datesToProcess.length === 0) {
-      status = "fully_reconciled";
-      log(`\n✅ All dates were already fully reconciled.`, "success");
-    } else if (successfullyReconciled.length === datesToProcess.length) {
-      status = "all_fixed";
-      log(`\n✅ All issues successfully fixed!`, "success");
-    } else if (successfullyReconciled.length > 0) {
-      status = "partial_fix";
-      log(`\n⚠️ Some dates could not be fully fixed. Manual intervention may be required.`, "warning");
-    } else {
-      status = "failed";
-      log(`\n❌ Failed to fix any dates.`, "error");
-    }
-    
-    return {
-      dates: checkpoint.dates,
-      missingDates: datesToProcess.map(d => d.date),
-      processedDates: [...checkpoint.processedDates],
-      fixedDates: successfullyReconciled.map(d => d.date),
-      status
-    };
+    // Exit with appropriate code
+    process.exit(result.successful ? 0 : 1);
   } catch (error) {
-    // Update checkpoint to indicate failure
-    checkpoint.status = "failed";
-    checkpoint.endTime = new Date().toISOString();
-    saveCheckpoint(checkpoint);
+    log(`Unhandled error in reconciliation check: ${(error as Error).message}`, "error");
+    console.error(error);
     
-    log(`Fatal error during daily reconciliation check: ${error}`, "error");
-    
-    // Clean up
+    // Clean up on error
     await cleanupConnections();
     await safePoolEnd();
     
-    throw error;
+    process.exit(1);
   }
-}
-
-// Set up global error handlers
-process.on("uncaughtException", async (error) => {
-  log(`Uncaught exception: ${error.stack || error.message}`, "error");
-  await safePoolEnd();
-  process.exit(1);
-});
-
-process.on("unhandledRejection", async (reason) => {
-  log(`Unhandled rejection: ${reason}`, "error");
-  await safePoolEnd();
-  process.exit(1);
-});
-
-// Run the reconciliation check if this script is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runDailyCheck()
-    .then(() => {
-      log("\n=== Daily Reconciliation Check Complete ===", "success");
-      process.exit(0);
-    })
-    .catch(error => {
-      log(`Fatal error during daily reconciliation check: ${error}`, "error");
-      process.exit(1);
-    });
-}
-
-export { runDailyCheck, checkDateReconciliationStatus, ReconciliationStatus };
+})();

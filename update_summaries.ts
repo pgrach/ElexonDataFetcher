@@ -1,19 +1,36 @@
 /**
- * Update Summary Tables for March 28, 2025
+ * Update Summary Tables
  * 
  * This script calculates and updates the daily, monthly, and yearly summaries
- * based on the curtailment records for March 28, 2025.
+ * based on the curtailment records for a specific date. By default, it uses
+ * March 28, 2025 if no date is provided.
  */
 
 import { db } from "./db";
-import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries, historicalBitcoinCalculations } from "./db/schema";
-import { eq, sql } from "drizzle-orm";
+import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "./db/schema";
+import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm/sql";
 
-const TARGET_DATE = '2025-03-28';
+// Get date from command line arguments or use default
+const DEFAULT_DATE = '2025-03-28';
+const args = process.argv.slice(2);
+const DATE_ARG = args.length > 0 ? args[0] : DEFAULT_DATE;
 
-async function updateSummaries(): Promise<void> {
+/**
+ * Update all summary tables: daily, monthly, and yearly
+ * 
+ * @export Can be imported by other modules
+ * @param targetDate Optional date to update, defaults to command line argument or default date
+ */
+export async function updateSummaries(targetDate: string = DATE_ARG): Promise<void> {
   try {
-    console.log(`Updating summary records for ${TARGET_DATE}...`);
+    // Validate date format (YYYY-MM-DD)
+    if (!targetDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      console.error(`Invalid date format: ${targetDate}. Expected format: YYYY-MM-DD`);
+      return;
+    }
+    
+    console.log(`Updating summary records for ${targetDate}...`);
     
     // Calculate totals from curtailment records
     const totals = await db
@@ -22,7 +39,7 @@ async function updateSummaries(): Promise<void> {
         totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
       })
       .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+      .where(eq(curtailmentRecords.settlementDate, targetDate));
     
     if (!totals[0] || !totals[0].totalCurtailedEnergy) {
       console.error('Error: No curtailment records found to create summary');
@@ -31,7 +48,7 @@ async function updateSummaries(): Promise<void> {
     
     // Update daily summary
     await db.insert(dailySummaries).values({
-      summaryDate: TARGET_DATE,
+      summaryDate: targetDate,
       totalCurtailedEnergy: totals[0].totalCurtailedEnergy,
       totalPayment: totals[0].totalPayment,
       totalWindGeneration: '0',
@@ -47,12 +64,12 @@ async function updateSummaries(): Promise<void> {
       }
     });
     
-    console.log(`Daily summary updated for ${TARGET_DATE}:`);
+    console.log(`Daily summary updated for ${targetDate}:`);
     console.log(`- Energy: ${totals[0].totalCurtailedEnergy} MWh`);
     console.log(`- Payment: £${totals[0].totalPayment}`);
     
     // Update monthly summary
-    const yearMonth = TARGET_DATE.substring(0, 7);
+    const yearMonth = targetDate.substring(0, 7);
     const monthlyTotals = await db
       .select({
         totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
@@ -82,7 +99,7 @@ async function updateSummaries(): Promise<void> {
     }
     
     // Update yearly summary
-    const year = TARGET_DATE.substring(0, 4);
+    const year = targetDate.substring(0, 4);
     const yearlyTotals = await db
       .select({
         totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
@@ -116,17 +133,28 @@ async function updateSummaries(): Promise<void> {
   }
 }
 
-// Update Bitcoin calculations for the date
-async function updateBitcoinCalculations(): Promise<void> {
-  console.log(`Updating Bitcoin calculations for ${TARGET_DATE}...`);
+/**
+ * Update Bitcoin mining calculations for the date
+ * 
+ * @export Can be imported by other modules
+ * @param targetDate Optional date to update, defaults to command line argument or default date
+ */
+export async function updateBitcoinCalculations(targetDate: string = DATE_ARG): Promise<void> {
+  // Validate date format (YYYY-MM-DD)
+  if (!targetDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    console.error(`Invalid date format: ${targetDate}. Expected format: YYYY-MM-DD`);
+    return;
+  }
+  
+  console.log(`\nUpdating Bitcoin calculations for ${targetDate}...`);
   
   try {
     const minerModels = ['S19J_PRO', 'S9', 'M20S'];
     const { processSingleDay } = await import('./server/services/bitcoinService');
     
     for (const minerModel of minerModels) {
-      await processSingleDay(TARGET_DATE, minerModel);
-      console.log(`- Processed ${minerModel}`);
+      await processSingleDay(targetDate, minerModel);
+      console.log(`- Processed ${minerModel} model calculations`);
     }
     
     console.log('Bitcoin calculations updated successfully');
@@ -136,23 +164,28 @@ async function updateBitcoinCalculations(): Promise<void> {
   }
 }
 
+/**
+ * Main function to execute the script
+ */
 async function main(): Promise<void> {
+  console.log(`=== Updating Summaries for ${DATE_ARG} ===`);
+  console.log(`Started at: ${new Date().toISOString()}`);
+  
   try {
-    console.log('Starting summary updates...');
+    // Update the summary tables
+    await updateSummaries(DATE_ARG);
     
-    // Step 1: Update all summary tables
-    await updateSummaries();
+    // Update Bitcoin calculations
+    await updateBitcoinCalculations(DATE_ARG);
     
-    // Step 2: Update Bitcoin calculations
-    await updateBitcoinCalculations();
-    
-    console.log('Summary update completed successfully');
+    console.log(`\nSummary updates completed successfully at ${new Date().toISOString()}`);
   } catch (error) {
-    console.error('Error during summary update:', error);
+    console.error('Error during summary update process:', error);
     process.exit(1);
   }
 }
 
+// Run the script
 main().catch(error => {
   console.error('Unhandled error:', error);
   process.exit(1);
