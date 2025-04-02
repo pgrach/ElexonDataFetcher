@@ -25,10 +25,15 @@ import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+
+// ES module support for __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuration
 const API_BASE_URL = 'https://data.elexon.co.uk/bmrs/api/v1';
-const BMU_MAPPING_PATH = path.join(__dirname, 'server', 'data', 'bmuMapping.json');
+const BMU_MAPPING_PATH = path.join(__dirname, 'data', 'bmu_mapping.json');
 const LOG_FILE = `process_critical_date_${new Date().toISOString().split('T')[0]}.log`;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000; // 5 seconds
@@ -87,8 +92,8 @@ async function loadBmuMappings(): Promise<{
     const bmuLeadPartyMap = new Map<string, string>();
     
     for (const bmu of bmuMapping) {
-      windFarmIds.add(bmu.id);
-      bmuLeadPartyMap.set(bmu.id, bmu.leadPartyName);
+      windFarmIds.add(bmu.elexonBmUnit);
+      bmuLeadPartyMap.set(bmu.elexonBmUnit, bmu.leadPartyName);
     }
     
     log(`Found ${windFarmIds.size} wind farm BMUs`, "success");
@@ -114,16 +119,29 @@ async function processPeriod(
   log(`Processing period ${period} (attempt ${attempt})`, "info");
   
   try {
-    // Fetch data from the Elexon API
-    const response = await axios.get(`${API_BASE_URL}/balancing/bid-offer/accepted/settlement-period/${period}/settlement-date/${date}`);
-    const data = response.data.data || [];
+    // Fetch data from the Elexon API - make parallel requests for bids and offers
+    const [bidsResponse, offersResponse] = await Promise.all([
+      axios.get(`${API_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`, {
+        headers: { 'Accept': 'application/json' },
+        timeout: 30000
+      }),
+      axios.get(`${API_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`, {
+        headers: { 'Accept': 'application/json' },
+        timeout: 30000
+      })
+    ]);
+
+    // Combine both datasets
+    const bidsData = bidsResponse.data.data || [];
+    const offersData = offersResponse.data.data || [];
+    const data = [...bidsData, ...offersData];
     
     console.log(`Loading BMU mapping from: ${BMU_MAPPING_PATH}`);
     console.log(`Loaded ${windFarmIds.size} wind farm BMU IDs`);
     
     // Filter to keep only valid wind farm records
     const validRecords = data.filter((record: any) => {
-      return windFarmIds.has(record.id) && record.volume < 0; // Negative volume indicates curtailment
+      return windFarmIds.has(record.id) && record.volume < 0 && record.soFlag; // Negative volume indicates curtailment
     });
     
     const totalVolume = validRecords.reduce((sum: number, record: any) => sum + Math.abs(record.volume), 0);
@@ -173,8 +191,8 @@ async function processPeriod(
         payment: payment.toString(),
         originalPrice: record.originalPrice.toString(),
         finalPrice: record.finalPrice.toString(),
-        soFlag: record.soFlag,
-        cadlFlag: record.cadlFlag
+        soFlag: record.soFlag || false,
+        cadlFlag: record.cadlFlag || false
       };
     });
     
