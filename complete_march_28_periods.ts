@@ -23,8 +23,8 @@ const __dirname = path.dirname(__filename);
 const TARGET_DATE = '2025-03-28';
 // Set these to control which periods to process (for batch processing)
 // Process just a few periods at a time
-const START_PERIOD = 36; 
-const END_PERIOD = 36;
+const START_PERIOD = 41; 
+const END_PERIOD = 48;
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const BMU_MAPPING_PATH = path.join(__dirname, "server/data/bmuMapping.json");
 

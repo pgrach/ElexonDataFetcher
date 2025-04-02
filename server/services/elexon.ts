@@ -105,11 +105,11 @@ export async function fetchBidsOffers(date: string, period: number): Promise<Ele
     }
 
     const validBids = bidsResponse.data.data.filter((record: any) => 
-      record.volume < 0 && (record.soFlag || record.cadlFlag) && validWindFarmIds.has(record.id)
+      record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
     );
 
     const validOffers = offersResponse.data.data.filter((record: any) => 
-      record.volume < 0 && (record.soFlag || record.cadlFlag) && validWindFarmIds.has(record.id)
+      record.volume < 0 && record.soFlag && validWindFarmIds.has(record.id)
     );
 
     const allRecords = [...validBids, ...validOffers];
