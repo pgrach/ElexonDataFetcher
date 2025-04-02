@@ -16,6 +16,7 @@ import path from "path";
 import { fileURLToPath } from 'url';
 import { format } from 'date-fns';
 import { processDailyCurtailment } from "./server/services/curtailment";
+import { monthlySummaries, yearlySummaries } from "./db/schema";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,6 +110,142 @@ async function updateBitcoinCalculations(): Promise<void> {
   }
 }
 
+// Create daily summary based on curtailment records
+async function createDailySummary(): Promise<void> {
+  console.log(`Creating daily summary for ${TARGET_DATE}...`);
+  
+  try {
+    // Calculate totals from curtailment records
+    const totals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+        totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+    
+    if (!totals[0] || !totals[0].totalCurtailedEnergy) {
+      console.error('Error: No curtailment records found to create summary');
+      return;
+    }
+    
+    // Insert the daily summary
+    await db.insert(dailySummaries).values({
+      summaryDate: TARGET_DATE,
+      totalCurtailedEnergy: totals[0].totalCurtailedEnergy,
+      totalPayment: totals[0].totalPayment,
+      totalWindGeneration: '0', // Default value, will be updated by wind data service if available
+      windOnshoreGeneration: '0',
+      windOffshoreGeneration: '0',
+      lastUpdated: new Date()
+    });
+    
+    console.log('Daily summary created successfully:');
+    console.log(`- Energy: ${totals[0].totalCurtailedEnergy} MWh`);
+    console.log(`- Payment: £${totals[0].totalPayment}`);
+    
+    // Update monthly summary
+    const yearMonth = TARGET_DATE.substring(0, 7);
+    await updateMonthlySummary(yearMonth);
+    
+    // Update yearly summary
+    const year = TARGET_DATE.substring(0, 4);
+    await updateYearlySummary(year);
+    
+  } catch (error) {
+    console.error('Error creating daily summary:', error);
+    throw error;
+  }
+}
+
+// Update monthly summary based on daily summaries
+async function updateMonthlySummary(yearMonth: string): Promise<void> {
+  console.log(`Updating monthly summary for ${yearMonth}...`);
+  
+  try {
+    // Calculate monthly totals from daily summaries
+    const monthlyTotals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
+      })
+      .from(dailySummaries)
+      .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${yearMonth + '-01'}::date)`);
+    
+    if (!monthlyTotals[0] || !monthlyTotals[0].totalCurtailedEnergy) {
+      console.error('Error: No daily summaries found to create monthly summary');
+      return;
+    }
+    
+    // Update the monthly summary
+    await db.insert(monthlySummaries).values({
+      yearMonth,
+      totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
+      totalPayment: monthlyTotals[0].totalPayment,
+      updatedAt: new Date()
+    }).onConflictDoUpdate({
+      target: [monthlySummaries.yearMonth],
+      set: {
+        totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
+        totalPayment: monthlyTotals[0].totalPayment,
+        updatedAt: new Date()
+      }
+    });
+    
+    console.log(`Monthly summary updated for ${yearMonth}:`);
+    console.log(`- Energy: ${monthlyTotals[0].totalCurtailedEnergy} MWh`);
+    console.log(`- Payment: £${monthlyTotals[0].totalPayment}`);
+    
+  } catch (error) {
+    console.error(`Error updating monthly summary for ${yearMonth}:`, error);
+    throw error;
+  }
+}
+
+// Update yearly summary based on daily summaries
+async function updateYearlySummary(year: string): Promise<void> {
+  console.log(`Updating yearly summary for ${year}...`);
+  
+  try {
+    // Calculate yearly totals from daily summaries
+    const yearlyTotals = await db
+      .select({
+        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
+        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
+      })
+      .from(dailySummaries)
+      .where(sql`date_trunc('year', ${dailySummaries.summaryDate}::date) = date_trunc('year', ${year + '-01-01'}::date)`);
+    
+    if (!yearlyTotals[0] || !yearlyTotals[0].totalCurtailedEnergy) {
+      console.error('Error: No daily summaries found to create yearly summary');
+      return;
+    }
+    
+    // Update the yearly summary
+    await db.insert(yearlySummaries).values({
+      year,
+      totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
+      totalPayment: yearlyTotals[0].totalPayment,
+      updatedAt: new Date()
+    }).onConflictDoUpdate({
+      target: [yearlySummaries.year],
+      set: {
+        totalCurtailedEnergy: yearlyTotals[0].totalCurtailedEnergy,
+        totalPayment: yearlyTotals[0].totalPayment,
+        updatedAt: new Date()
+      }
+    });
+    
+    console.log(`Yearly summary updated for ${year}:`);
+    console.log(`- Energy: ${yearlyTotals[0].totalCurtailedEnergy} MWh`);
+    console.log(`- Payment: £${yearlyTotals[0].totalPayment}`);
+    
+  } catch (error) {
+    console.error(`Error updating yearly summary for ${year}:`, error);
+    throw error;
+  }
+}
+
 // Verify the update with stats
 async function verifyUpdate(): Promise<void> {
   console.log(`Verifying update for ${TARGET_DATE}...`);
@@ -128,6 +265,21 @@ async function verifyUpdate(): Promise<void> {
   console.log(`- Periods: ${stats[0]?.periodCount || 0}`);
   console.log(`- Volume: ${Number(stats[0]?.totalVolume || 0).toFixed(2)} MWh`);
   console.log(`- Payment: £${Number(stats[0]?.totalPayment || 0).toFixed(2)}`);
+  
+  // Verify daily summary exists
+  const dailySummary = await db
+    .select()
+    .from(dailySummaries)
+    .where(eq(dailySummaries.summaryDate, TARGET_DATE));
+    
+  if (dailySummary.length === 0) {
+    console.log('⚠️ Daily summary not found. Creating it now...');
+    await createDailySummary();
+  } else {
+    console.log('✅ Daily summary record exists.');
+    console.log(`- Energy: ${dailySummary[0].totalCurtailedEnergy} MWh`);
+    console.log(`- Payment: £${dailySummary[0].totalPayment}`);
+  }
 }
 
 // Main function
