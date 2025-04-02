@@ -133,30 +133,5 @@
     "elexonBmUnit": "T_BEATO-4",
     "leadPartyName": "Beatrice Offshore Windfarm Ltd",
     "fuelType": "WIND"
-  },
-  {
-    "elexonBmUnit": "E_FALRW-1",
-    "leadPartyName": "Fallago Rig Wind Farm Limited",
-    "fuelType": "WIND"
-  },
-  {
-    "elexonBmUnit": "E_CLDRW-1",
-    "leadPartyName": "Clyde Windfarm (Scotland) Ltd",
-    "fuelType": "WIND"
-  },
-  {
-    "elexonBmUnit": "E_EAONE-1",
-    "leadPartyName": "East Anglia One Limited",
-    "fuelType": "WIND"
-  },
-  {
-    "elexonBmUnit": "E_MOBR2-1",
-    "leadPartyName": "Mobius Renewables 2020 Limited",
-    "fuelType": "WIND"
-  },
-  {
-    "elexonBmUnit": "E_SPENR-1",
-    "leadPartyName": "SP Energy Retail Limited",
-    "fuelType": "WIND"
   }
 ]
