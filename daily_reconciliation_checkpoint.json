@@ -1,12 +1,11 @@
 {
-  "lastRun": "2025-04-02T17:13:20.325Z",
+  "lastRun": "2025-04-02T17:23:10.613Z",
   "dates": [
-    "2025-04-01",
-    "2025-03-31"
+    "2025-03-28"
   ],
   "processedDates": [],
-  "lastProcessedDate": "2025-04-01",
+  "lastProcessedDate": "2025-03-28",
   "status": "running",
-  "startTime": "2025-04-02T17:13:20.326Z",
+  "startTime": "2025-04-02T17:23:10.613Z",
   "endTime": null
 }
