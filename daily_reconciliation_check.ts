@@ -324,6 +324,7 @@ export async function runDailyCheck(): Promise<{
   // Get command line args
   let daysArg = process.argv[2];
   let datesToCheck: string[] = [];
+  let daysToCheck = 2;
   
   // Check if it's a date in YYYY-MM-DD format
   if (daysArg?.match(/^\d{4}-\d{2}-\d{2}$/)) {
@@ -332,7 +333,7 @@ export async function runDailyCheck(): Promise<{
     log(`Checking specific date: ${daysArg}`, "info");
   } else {
     // Treat as number of days to check
-    const daysToCheck = daysArg && !isNaN(parseInt(daysArg, 10)) ? parseInt(daysArg, 10) : 2;
+    daysToCheck = daysArg && !isNaN(parseInt(daysArg, 10)) ? parseInt(daysArg, 10) : 2;
     const validDaysToCheck = daysToCheck > 0 ? daysToCheck : 2;
     
     if (isNaN(daysToCheck) || daysToCheck < 1) {
@@ -351,19 +352,13 @@ export async function runDailyCheck(): Promise<{
   }
   
   const forceProcess = process.argv[3] === 'true';
-  
-  if (isNaN(daysToCheck) || daysToCheck < 1) {
-    log("Invalid 'days' parameter. Using default of 2 days.", "warning");
-  }
-  
-  log(`Starting daily reconciliation check for the last ${validDaysToCheck} days...`, "info");
   log(`Force processing is ${forceProcess ? 'enabled' : 'disabled'}`, "info");
   
   // Load previous checkpoint or create a new one
   const previousCheckpoint = loadCheckpoint();
   const newCheckpoint: Checkpoint = {
     lastRun: new Date().toISOString(),
-    dates: [],
+    dates: datesToCheck,
     processedDates: [],
     lastProcessedDate: null,
     status: "running",
@@ -372,19 +367,6 @@ export async function runDailyCheck(): Promise<{
   };
   
   // Save initial checkpoint
-  saveCheckpoint(newCheckpoint);
-  
-  // Generate dates to check (most recent first)
-  const datesToCheck: string[] = [];
-  const now = new Date();
-  
-  for (let i = 1; i <= validDaysToCheck; i++) {
-    const date = new Date(now);
-    date.setDate(now.getDate() - i);
-    datesToCheck.push(date.toISOString().split('T')[0]); // Format: YYYY-MM-DD
-  }
-  
-  newCheckpoint.dates = datesToCheck;
   saveCheckpoint(newCheckpoint);
   
   // Check each date

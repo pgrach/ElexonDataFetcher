@@ -10,12 +10,17 @@
  * - Efficient batch processing to avoid timeouts
  * - Comprehensive logging and verification
  * - Simple command-line interface
+ * - Improved validation and error handling
+ * - Safety checks for invalid period numbers
  * 
  * Usage:
  *   npx tsx optimized_critical_date_processor.ts <date> [start_period] [end_period]
  * 
  * Example:
  *   npx tsx optimized_critical_date_processor.ts 2025-03-09 44 48
+ * 
+ * For processing entire days:
+ *   npx tsx optimized_critical_date_processor.ts 2025-03-28
  */
 
 import { db } from './db';
@@ -325,8 +330,14 @@ export async function processDate(
     
     // Use passed parameters instead of global variables
     const currentDate = targetDate;
-    const currentStartPeriod = targetStartPeriod || startPeriod;
-    const currentEndPeriod = targetEndPeriod || endPeriod;
+    
+    // Ensure periods are valid numbers, defaulting to 1-48 if not
+    let currentStartPeriod = isNaN(targetStartPeriod) ? 1 : targetStartPeriod;
+    let currentEndPeriod = isNaN(targetEndPeriod) ? 48 : targetEndPeriod;
+    
+    // Ensure periods are within valid range
+    currentStartPeriod = Math.max(1, Math.min(48, currentStartPeriod));
+    currentEndPeriod = Math.max(1, Math.min(48, currentEndPeriod));
     
     log(`Starting critical date processing for ${currentDate}`, "info");
     log(`Target periods: ${currentStartPeriod}-${currentEndPeriod}`, "info");
