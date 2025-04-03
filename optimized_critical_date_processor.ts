@@ -10,17 +10,12 @@
  * - Efficient batch processing to avoid timeouts
  * - Comprehensive logging and verification
  * - Simple command-line interface
- * - Improved validation and error handling
- * - Safety checks for invalid period numbers
  * 
  * Usage:
  *   npx tsx optimized_critical_date_processor.ts <date> [start_period] [end_period]
  * 
  * Example:
  *   npx tsx optimized_critical_date_processor.ts 2025-03-09 44 48
- * 
- * For processing entire days:
- *   npx tsx optimized_critical_date_processor.ts 2025-03-28
  */
 
 import { db } from './db';
@@ -38,7 +33,7 @@ const __dirname = path.dirname(__filename);
 
 // Configuration
 const API_BASE_URL = 'https://data.elexon.co.uk/bmrs/api/v1';
-const BMU_MAPPING_PATH = path.join(__dirname, 'server', 'data', 'bmuMapping.json');
+const BMU_MAPPING_PATH = path.join(__dirname, 'data', 'bmu_mapping.json');
 const LOG_FILE = `process_critical_date_${new Date().toISOString().split('T')[0]}.log`;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000; // 5 seconds
@@ -160,7 +155,7 @@ async function processPeriod(
     let totalPaymentAdded = 0;
     
     // Get the unique farm IDs for this period
-    const uniqueFarmIds = Array.from(new Set(validRecords.map((record: any) => record.id)));
+    const uniqueFarmIds = [...new Set(validRecords.map((record: any) => record.id))];
     
     // Clear all existing records for this period - simpler approach that guarantees no duplicates
     try {
@@ -306,66 +301,35 @@ async function processBatch(
 }
 
 // Process a specific date with small batches
-export async function processDate(
-  targetDate: string = date,
-  targetStartPeriod: number = startPeriod,
-  targetEndPeriod: number = endPeriod
-): Promise<{
-  success: boolean;
-  recordsProcessed: number;
-  recordsAdded: number;
-  periodsProcessed: number;
-}> {
+async function processDate(): Promise<void> {
   try {
-    // Validate date format (YYYY-MM-DD)
-    if (!targetDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      log(`Invalid date format: ${targetDate}. Expected format: YYYY-MM-DD`, "error");
-      return {
-        success: false,
-        recordsProcessed: 0,
-        recordsAdded: 0,
-        periodsProcessed: 0
-      };
-    }
-    
-    // Use passed parameters instead of global variables
-    const currentDate = targetDate;
-    
-    // Ensure periods are valid numbers, defaulting to 1-48 if not
-    let currentStartPeriod = isNaN(targetStartPeriod) ? 1 : targetStartPeriod;
-    let currentEndPeriod = isNaN(targetEndPeriod) ? 48 : targetEndPeriod;
-    
-    // Ensure periods are within valid range
-    currentStartPeriod = Math.max(1, Math.min(48, currentStartPeriod));
-    currentEndPeriod = Math.max(1, Math.min(48, currentEndPeriod));
-    
-    log(`Starting critical date processing for ${currentDate}`, "info");
-    log(`Target periods: ${currentStartPeriod}-${currentEndPeriod}`, "info");
+    log(`Starting critical date processing for ${date}`, "info");
+    log(`Target periods: ${startPeriod}-${endPeriod}`, "info");
     
     // Initialize log file
-    await fs.writeFile(LOG_FILE, `=== Critical Date Processing: ${currentDate} (Periods ${currentStartPeriod}-${currentEndPeriod}) ===\n`);
+    await fs.writeFile(LOG_FILE, `=== Critical Date Processing: ${date} (Periods ${startPeriod}-${endPeriod}) ===\n`);
     
     // Load BMU mappings once
     const { windFarmIds, bmuLeadPartyMap } = await loadBmuMappings();
     
     // First check if we need to clear existing records
     try {
-      log(`Checking for existing records for periods ${currentStartPeriod}-${currentEndPeriod}...`, "info");
+      log(`Checking for existing records for periods ${startPeriod}-${endPeriod}...`, "info");
         
       // Clear any existing records
       const deleteResult = await db.delete(curtailmentRecords)
         .where(
           and(
-            eq(curtailmentRecords.settlementDate, currentDate),
-            between(curtailmentRecords.settlementPeriod, currentStartPeriod, currentEndPeriod)
+            eq(curtailmentRecords.settlementDate, date),
+            between(curtailmentRecords.settlementPeriod, startPeriod, endPeriod)
           )
         )
         .returning({ id: curtailmentRecords.id });
           
       if (deleteResult.length > 0) {
-        log(`Cleared ${deleteResult.length} existing records for periods ${currentStartPeriod}-${currentEndPeriod}`, "success");
+        log(`Cleared ${deleteResult.length} existing records for periods ${startPeriod}-${endPeriod}`, "success");
       } else {
-        log(`No existing records found for periods ${currentStartPeriod}-${currentEndPeriod}`, "info");
+        log(`No existing records found for periods ${startPeriod}-${endPeriod}`, "info");
       }
     } catch (error) {
       log(`Error clearing existing records: ${error}`, "error");
@@ -378,8 +342,8 @@ export async function processDate(
     let totalVolume = 0;
     let totalPayment = 0;
     
-    for (let batchStart = currentStartPeriod; batchStart <= currentEndPeriod; batchStart += BATCH_SIZE) {
-      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, currentEndPeriod);
+    for (let batchStart = startPeriod; batchStart <= endPeriod; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, endPeriod);
       
       const batchResult = await processBatch(
         batchStart,
@@ -399,10 +363,10 @@ export async function processDate(
     }
     
     // Final summary
-    const totalPeriods = currentEndPeriod - currentStartPeriod + 1;
+    const totalPeriods = endPeriod - startPeriod + 1;
     const successRate = (totalProcessed / totalPeriods) * 100;
     
-    log(`=== Processing complete for ${currentDate} ===`, successRate === 100 ? "success" : "warning");
+    log(`=== Processing complete for ${date} ===`, successRate === 100 ? "success" : "warning");
     log(`- Periods processed: ${totalProcessed}/${totalPeriods} (${successRate.toFixed(1)}%)`, "info");
     log(`- Records added: ${totalRecords}`, "info");
     log(`- Total volume: ${totalVolume.toFixed(2)} MWh`, "info");
@@ -410,40 +374,25 @@ export async function processDate(
     
     // Run reconciliation to update Bitcoin calculations
     log(`Running reconciliation to update Bitcoin calculations...`, "info");
-    await runReconciliation(currentDate);
+    await runReconciliation();
     
     // Final status
     log(`=== Complete ===`, "success");
-    log(`Data reingestion and reconciliation completed for ${currentDate}`, "success");
-    
-    // Return result object for use in daily_reconciliation_check
-    return {
-      success: successRate > 90, // Consider success if >90% of periods were processed
-      recordsProcessed: totalRecords,
-      recordsAdded: totalRecords,
-      periodsProcessed: totalProcessed
-    };
+    log(`Data reingestion and reconciliation completed for ${date}`, "success");
     
   } catch (error) {
     log(`Fatal error during processing: ${error}`, "error");
     await logToFile(`Fatal error during processing: ${error}`);
-    
-    // Return failure result instead of exiting
-    return {
-      success: false,
-      recordsProcessed: 0,
-      recordsAdded: 0,
-      periodsProcessed: 0
-    };
+    process.exit(1);
   }
 }
 
 // Run reconciliation to update Bitcoin calculations
-async function runReconciliation(targetDate: string = date): Promise<void> {
+async function runReconciliation(): Promise<void> {
   return new Promise((resolve, reject) => {
-    log(`Running reconciliation for ${targetDate}...`, "info");
+    log(`Running reconciliation for ${date}...`, "info");
     
-    const reconciliation = spawn('npx', ['tsx', 'update_summaries.ts', targetDate]);
+    const reconciliation = spawn('npx', ['tsx', 'unified_reconciliation.ts', 'date', date]);
     
     reconciliation.stdout.on('data', (data) => {
       console.log(`${data}`);
@@ -455,7 +404,7 @@ async function runReconciliation(targetDate: string = date): Promise<void> {
     
     reconciliation.on('close', (code) => {
       if (code === 0) {
-        log(`Reconciliation completed successfully for ${targetDate}`, "success");
+        log(`Reconciliation completed successfully for ${date}`, "success");
         resolve();
       } else {
         log(`Reconciliation failed with code ${code}`, "error");

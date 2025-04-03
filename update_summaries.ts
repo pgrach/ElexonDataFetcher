@@ -1,36 +1,19 @@
 /**
- * Update Summary Tables
+ * Update Summary Tables for March 28, 2025
  * 
  * This script calculates and updates the daily, monthly, and yearly summaries
- * based on the curtailment records for a specific date. By default, it uses
- * March 28, 2025 if no date is provided.
+ * based on the curtailment records for March 28, 2025.
  */
 
 import { db } from "./db";
-import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "./db/schema";
-import { eq } from "drizzle-orm";
-import { sql } from "drizzle-orm/sql";
+import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries, historicalBitcoinCalculations } from "./db/schema";
+import { eq, sql } from "drizzle-orm";
 
-// Get date from command line arguments or use default
-const DEFAULT_DATE = '2025-03-28';
-const args = process.argv.slice(2);
-const DATE_ARG = args.length > 0 ? args[0] : DEFAULT_DATE;
+const TARGET_DATE = '2025-03-28';
 
-/**
- * Update all summary tables: daily, monthly, and yearly
- * 
- * @export Can be imported by other modules
- * @param targetDate Optional date to update, defaults to command line argument or default date
- */
-export async function updateSummaries(targetDate: string = DATE_ARG): Promise<void> {
+async function updateSummaries(): Promise<void> {
   try {
-    // Validate date format (YYYY-MM-DD)
-    if (!targetDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      console.error(`Invalid date format: ${targetDate}. Expected format: YYYY-MM-DD`);
-      return;
-    }
-    
-    console.log(`Updating summary records for ${targetDate}...`);
+    console.log(`Updating summary records for ${TARGET_DATE}...`);
     
     // Calculate totals from curtailment records
     const totals = await db
@@ -39,7 +22,7 @@ export async function updateSummaries(targetDate: string = DATE_ARG): Promise<vo
         totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
       })
       .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, targetDate));
+      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
     
     if (!totals[0] || !totals[0].totalCurtailedEnergy) {
       console.error('Error: No curtailment records found to create summary');
@@ -48,7 +31,7 @@ export async function updateSummaries(targetDate: string = DATE_ARG): Promise<vo
     
     // Update daily summary
     await db.insert(dailySummaries).values({
-      summaryDate: targetDate,
+      summaryDate: TARGET_DATE,
       totalCurtailedEnergy: totals[0].totalCurtailedEnergy,
       totalPayment: totals[0].totalPayment,
       totalWindGeneration: '0',
@@ -64,12 +47,12 @@ export async function updateSummaries(targetDate: string = DATE_ARG): Promise<vo
       }
     });
     
-    console.log(`Daily summary updated for ${targetDate}:`);
+    console.log(`Daily summary updated for ${TARGET_DATE}:`);
     console.log(`- Energy: ${totals[0].totalCurtailedEnergy} MWh`);
     console.log(`- Payment: £${totals[0].totalPayment}`);
     
     // Update monthly summary
-    const yearMonth = targetDate.substring(0, 7);
+    const yearMonth = TARGET_DATE.substring(0, 7);
     const monthlyTotals = await db
       .select({
         totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
@@ -99,7 +82,7 @@ export async function updateSummaries(targetDate: string = DATE_ARG): Promise<vo
     }
     
     // Update yearly summary
-    const year = targetDate.substring(0, 4);
+    const year = TARGET_DATE.substring(0, 4);
     const yearlyTotals = await db
       .select({
         totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
@@ -133,28 +116,17 @@ export async function updateSummaries(targetDate: string = DATE_ARG): Promise<vo
   }
 }
 
-/**
- * Update Bitcoin mining calculations for the date
- * 
- * @export Can be imported by other modules
- * @param targetDate Optional date to update, defaults to command line argument or default date
- */
-export async function updateBitcoinCalculations(targetDate: string = DATE_ARG): Promise<void> {
-  // Validate date format (YYYY-MM-DD)
-  if (!targetDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    console.error(`Invalid date format: ${targetDate}. Expected format: YYYY-MM-DD`);
-    return;
-  }
-  
-  console.log(`\nUpdating Bitcoin calculations for ${targetDate}...`);
+// Update Bitcoin calculations for the date
+async function updateBitcoinCalculations(): Promise<void> {
+  console.log(`Updating Bitcoin calculations for ${TARGET_DATE}...`);
   
   try {
     const minerModels = ['S19J_PRO', 'S9', 'M20S'];
     const { processSingleDay } = await import('./server/services/bitcoinService');
     
     for (const minerModel of minerModels) {
-      await processSingleDay(targetDate, minerModel);
-      console.log(`- Processed ${minerModel} model calculations`);
+      await processSingleDay(TARGET_DATE, minerModel);
+      console.log(`- Processed ${minerModel}`);
     }
     
     console.log('Bitcoin calculations updated successfully');
@@ -164,28 +136,23 @@ export async function updateBitcoinCalculations(targetDate: string = DATE_ARG): 
   }
 }
 
-/**
- * Main function to execute the script
- */
 async function main(): Promise<void> {
-  console.log(`=== Updating Summaries for ${DATE_ARG} ===`);
-  console.log(`Started at: ${new Date().toISOString()}`);
-  
   try {
-    // Update the summary tables
-    await updateSummaries(DATE_ARG);
+    console.log('Starting summary updates...');
     
-    // Update Bitcoin calculations
-    await updateBitcoinCalculations(DATE_ARG);
+    // Step 1: Update all summary tables
+    await updateSummaries();
     
-    console.log(`\nSummary updates completed successfully at ${new Date().toISOString()}`);
+    // Step 2: Update Bitcoin calculations
+    await updateBitcoinCalculations();
+    
+    console.log('Summary update completed successfully');
   } catch (error) {
-    console.error('Error during summary update process:', error);
+    console.error('Error during summary update:', error);
     process.exit(1);
   }
 }
 
-// Run the script
 main().catch(error => {
   console.error('Unhandled error:', error);
   process.exit(1);
