@@ -11,18 +11,16 @@
 
 import { db } from './db';
 import { eq, and, sql, desc } from 'drizzle-orm';
-import pg from 'pg';
-const { Pool } = pg;
+import { Pool } from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
 
 // Configuration - Edit these values for your specific case
-const TARGET_DATE = process.argv[2] || '2025-03-21'; // Set this to the date you want to reingest
-const BATCH_SIZE = 3; // Smaller batch size for demonstration
-const MAX_PERIODS = 12; // For demo, only process limited number of periods (normally 48)
+const TARGET_DATE = process.argv[2] || '2025-03-28'; // Set this to the date you want to reingest
+const BATCH_SIZE = 6; // Optimal batch size to avoid timeouts (don't change unless necessary)
 const LOG_FILE = `reingest_${TARGET_DATE}.log`;
-const API_THROTTLE_MS = 500; // Time to wait between API calls to avoid rate limiting
+const API_THROTTLE_MS = 1000; // Time to wait between API calls to avoid rate limiting
 
 // Initialize database pool with more generous timeout
 const pool = new Pool({
@@ -70,21 +68,14 @@ async function delay(ms: number): Promise<void> {
 
 /**
  * Load BMU mappings from the mapping file
- * For this demonstration, we'll use sample mappings instead of loading from a file
  */
 async function loadBmuMappings(): Promise<{
   bmuMap: Map<string, string>,
   bmuLeadPartyMap: Map<string, string>
 }> {
   try {
-    // Create sample mapping data for demonstration
-    const bmuMappingData = [
-      { elexonBmUnit: 'T_ABRBO-1', id: 'farm-001', leadParty: 'SP Renewables Limited' },
-      { elexonBmUnit: 'T_ACHYW-1', id: 'farm-002', leadParty: 'Orsted Wind Power A/S' },
-      { elexonBmUnit: 'T_DDLHW-1', id: 'farm-003', leadParty: 'Orsted Wind Power A/S' },
-      { elexonBmUnit: 'T_GWSWW-1', id: 'farm-004', leadParty: 'ESB Wind Development UK Limited' },
-      { elexonBmUnit: 'T_MRHLW-1', id: 'farm-005', leadParty: 'RWE Renewables UK Limited' }
-    ];
+    const bmuMappingPath = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
+    const bmuMappingData = JSON.parse(fs.readFileSync(bmuMappingPath, 'utf-8'));
     
     const bmuMap = new Map<string, string>();
     const bmuLeadPartyMap = new Map<string, string>();
@@ -116,47 +107,26 @@ async function clearExistingData(): Promise<void> {
     
     await client.query('BEGIN');
     
-    // Get counts before deletion for logging
-    const countResult = await client.query(
-      'SELECT COUNT(*) as count FROM curtailment_records WHERE settlement_date = $1',
-      [TARGET_DATE]
-    );
-    const recordCount = parseInt(countResult.rows[0].count || '0');
-    
     // Delete from curtailment_records
-    await client.query(
-      'DELETE FROM curtailment_records WHERE settlement_date = $1',
+    const deleteResult = await client.query(
+      'DELETE FROM curtailment_records WHERE settlement_date = $1 RETURNING COUNT(*)',
       [TARGET_DATE]
     );
-    log(`Deleted ${recordCount} curtailment records`);
-    
-    // Get counts before deletion for logging
-    const bitcoinCountResult = await client.query(
-      'SELECT COUNT(*) as count FROM historical_bitcoin_calculations WHERE settlement_date = $1',
-      [TARGET_DATE]
-    );
-    const bitcoinRecordCount = parseInt(bitcoinCountResult.rows[0].count || '0');
+    log(`Deleted ${deleteResult.rowCount} curtailment records`);
     
     // Delete from historical_bitcoin_calculations
-    await client.query(
-      'DELETE FROM historical_bitcoin_calculations WHERE settlement_date = $1',
+    const deleteBitcoinResult = await client.query(
+      'DELETE FROM historical_bitcoin_calculations WHERE settlement_date = $1 RETURNING COUNT(*)',
       [TARGET_DATE]
     );
-    log(`Deleted ${bitcoinRecordCount} Bitcoin calculation records`);
-    
-    // Get counts before deletion for logging
-    const dailySummaryCountResult = await client.query(
-      'SELECT COUNT(*) as count FROM daily_summaries WHERE summary_date = $1',
-      [TARGET_DATE]
-    );
-    const dailySummaryCount = parseInt(dailySummaryCountResult.rows[0].count || '0');
+    log(`Deleted ${deleteBitcoinResult.rowCount} Bitcoin calculation records`);
     
     // Delete from daily_summaries
-    await client.query(
-      'DELETE FROM daily_summaries WHERE summary_date = $1',
+    const deleteDailySummaryResult = await client.query(
+      'DELETE FROM daily_summaries WHERE date = $1 RETURNING COUNT(*)',
       [TARGET_DATE]
     );
-    log(`Deleted ${dailySummaryCount} daily summary records`);
+    log(`Deleted ${deleteDailySummaryResult.rowCount} daily summary records`);
     
     await client.query('COMMIT');
     log(`Successfully cleared existing data for ${TARGET_DATE}`, "success");
@@ -180,24 +150,10 @@ async function processPeriod(
   try {
     log(`[${TARGET_DATE} P${period}] Processing settlement period ${period}...`);
     
-    // Fetch data from Elexon API (public access with no API key for demonstration)
-    const elexonApiUrl = `https://api.bmreports.com/BMRS/B1620/v1?SettlementDate=${TARGET_DATE}&Period=${period}&ServiceType=csv`;
-    log(`Fetching data from Elexon API: ${elexonApiUrl}`);
+    // Fetch data from Elexon API
+    const elexonApiUrl = `https://api.bmreports.com/BMRS/B1620/v1?APIKey=${process.env.ELEXON_API_KEY}&SettlementDate=${TARGET_DATE}&Period=${period}&ServiceType=csv`;
     
-    // For demonstration purposes, we'll simulate fetching historical data
-    // In a real scenario, you would use the proper Elexon API with an API key
-    
-    // Sample data for demonstration - this would normally come from the API
-    const sampleData = `
-B1620,1,2,2025-03-21,${period},T_ABRBO-1,Wind Offshore,SP Renewables Limited,75.0,-28.55
-B1620,1,2,2025-03-21,${period},T_ACHYW-1,Wind Offshore,Orsted Wind Power A/S,129.6,-40.22
-B1620,1,2,2025-03-21,${period},T_DDLHW-1,Wind Offshore,Orsted Wind Power A/S,85.3,-31.77
-B1620,1,2,2025-03-21,${period},T_GWSWW-1,Wind Offshore,ESB Wind Development UK Limited,45.2,-19.88
-B1620,1,2,2025-03-21,${period},T_MRHLW-1,Wind Offshore,RWE Renewables UK Limited,62.8,-25.13
-`;
-    
-    // Mock response object
-    const response = { data: sampleData };
+    const response = await axios.get(elexonApiUrl);
     const lines = response.data.split('\n');
     
     // Skip header and empty lines
@@ -214,56 +170,40 @@ B1620,1,2,2025-03-21,${period},T_MRHLW-1,Wind Offshore,RWE Renewables UK Limited
     
     // Process each data line
     for (const line of dataLines) {
+      const fields = line.split(',');
+      
+      // Extract BMU ID (position 5 in the CSV)
+      const bmuId = fields[5]?.trim();
+      if (!bmuId || !bmuMap.has(bmuId)) continue;
+      
+      // Get farm ID from the BMU mapping
+      const farmId = bmuMap.get(bmuId)!;
+      const leadParty = bmuLeadPartyMap.get(bmuId) || 'Unknown';
+      
+      // Extract volume and payment data
+      const volume = Math.abs(parseFloat(fields[8]));
+      const price = parseFloat(fields[9]);
+      const payment = -1 * volume * price; // Negative because payments are costs
+      
+      if (isNaN(volume) || isNaN(payment) || volume === 0) continue;
+      
+      totalVolume += volume;
+      totalPayment += payment;
+      
+      // Insert record into curtailment_records table
+      const client = await pool.connect();
       try {
-        const fields = line.split(',');
+        await client.query(
+          `INSERT INTO curtailment_records 
+           (settlement_date, settlement_period, farm_id, lead_party, volume, price, payment, created_at, updated_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+          [TARGET_DATE, period, farmId, leadParty, volume, price, payment]
+        );
         
-        // Extract BMU ID (position 5 in the CSV)
-        const bmuId = fields[5]?.trim();
-        
-        // For our sample BMU data, we need to ensure this check passes
-        if (!bmuId) continue;
-        
-        // For demonstration, ensure BMU matches our sample data
-        if (!bmuMap.has(bmuId)) {
-          log(`Skipping unknown BMU ID: ${bmuId}`, "warning");
-          continue;
-        }
-        
-        // Get farm ID from the BMU mapping
-        const farmId = bmuMap.get(bmuId);
-        const leadParty = bmuLeadPartyMap.get(bmuId) || 'Unknown';
-        
-        // Extract volume and payment data
-        const volume = Math.abs(parseFloat(fields[8]));
-        const price = parseFloat(fields[9]);
-        const payment = -1 * volume * price; // Negative because payments are costs
-        
-        if (isNaN(volume) || isNaN(payment) || volume === 0) continue;
-        
-        log(`Processing data for BMU ${bmuId}, Farm ${farmId}, Volume: ${volume.toFixed(2)}, Price: ${price.toFixed(2)}, Payment: £${payment.toFixed(2)}`);
-        
-        // Add to totals
-        totalVolume += volume;
-        totalPayment += payment;
-        
-        // Insert record into curtailment_records table
-        const client = await pool.connect();
-        try {
-          await client.query(
-            `INSERT INTO curtailment_records 
-             (settlement_date, settlement_period, farm_id, lead_party, volume, price, payment, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
-            [TARGET_DATE, period, farmId, leadParty, volume, price, payment]
-          );
-          
-          recordCount++;
-          log(`[${TARGET_DATE} P${period}] Added record for ${farmId}: ${volume.toFixed(2)} MWh, £${payment.toFixed(2)}`);
-        } finally {
-          client.release();
-        }
-      } catch (error) {
-        log(`Error processing data line: ${error}`, "error");
-        continue;
+        recordCount++;
+        log(`[${TARGET_DATE} P${period}] Added record for ${farmId}: ${volume.toFixed(2)} MWh, £${payment.toFixed(2)}`);
+      } finally {
+        client.release();
       }
     }
     
@@ -316,20 +256,20 @@ async function updateSummaries(): Promise<void> {
     try {
       // Step 1: Update daily_summaries
       await client.query(
-        `INSERT INTO daily_summaries (summary_date, total_curtailed_energy, total_payment, created_at, last_updated)
+        `INSERT INTO daily_summaries (date, energy, payment, created_at, updated_at)
          SELECT 
            settlement_date, 
-           ROUND(SUM(ABS(volume))::numeric, 2) as total_curtailed_energy, 
-           ROUND(SUM(payment)::numeric, 2) as total_payment,
+           ROUND(SUM(ABS(volume))::numeric, 2) as energy, 
+           ROUND(SUM(payment)::numeric, 2) as payment,
            NOW(), 
            NOW()
          FROM curtailment_records
          WHERE settlement_date = $1
          GROUP BY settlement_date
-         ON CONFLICT (summary_date) DO UPDATE SET
-           total_curtailed_energy = EXCLUDED.total_curtailed_energy,
-           total_payment = EXCLUDED.total_payment,
-           last_updated = NOW()`,
+         ON CONFLICT (date) DO UPDATE SET
+           energy = EXCLUDED.energy,
+           payment = EXCLUDED.payment,
+           updated_at = NOW()`,
         [TARGET_DATE]
       );
       
@@ -343,13 +283,13 @@ async function updateSummaries(): Promise<void> {
       await client.query(
         `INSERT INTO monthly_summaries (year_month, energy, payment, created_at, updated_at)
          SELECT 
-           SUBSTRING(summary_date::text, 1, 7) as year_month, 
-           ROUND(SUM(total_curtailed_energy)::numeric, 2) as energy, 
-           ROUND(SUM(total_payment)::numeric, 2) as payment,
+           SUBSTRING(date::text, 1, 7) as year_month, 
+           ROUND(SUM(energy)::numeric, 2) as energy, 
+           ROUND(SUM(payment)::numeric, 2) as payment,
            NOW(), 
            NOW()
          FROM daily_summaries
-         WHERE SUBSTRING(summary_date::text, 1, 7) = $1
+         WHERE SUBSTRING(date::text, 1, 7) = $1
          GROUP BY year_month
          ON CONFLICT (year_month) DO UPDATE SET
            energy = EXCLUDED.energy,
@@ -362,13 +302,13 @@ async function updateSummaries(): Promise<void> {
       await client.query(
         `INSERT INTO yearly_summaries (year, energy, payment, created_at, updated_at)
          SELECT 
-           SUBSTRING(summary_date::text, 1, 4) as year, 
-           ROUND(SUM(total_curtailed_energy)::numeric, 2) as energy, 
-           ROUND(SUM(total_payment)::numeric, 2) as payment,
+           SUBSTRING(date::text, 1, 4) as year, 
+           ROUND(SUM(energy)::numeric, 2) as energy, 
+           ROUND(SUM(payment)::numeric, 2) as payment,
            NOW(), 
            NOW()
          FROM daily_summaries
-         WHERE SUBSTRING(summary_date::text, 1, 4) = $1
+         WHERE SUBSTRING(date::text, 1, 4) = $1
          GROUP BY year
          ON CONFLICT (year) DO UPDATE SET
            energy = EXCLUDED.energy,
@@ -379,13 +319,13 @@ async function updateSummaries(): Promise<void> {
       
       // Fetch updated values for verification
       const dailyResult = await client.query(
-        'SELECT total_curtailed_energy, total_payment FROM daily_summaries WHERE summary_date = $1',
+        'SELECT energy, payment FROM daily_summaries WHERE date = $1',
         [TARGET_DATE]
       );
       
       if (dailyResult.rows.length > 0) {
-        const { total_curtailed_energy, total_payment } = dailyResult.rows[0];
-        log(`[${TARGET_DATE}] Reprocessing complete: { energy: '${total_curtailed_energy} MWh', payment: '£${total_payment}' }`, "success");
+        const { energy, payment } = dailyResult.rows[0];
+        log(`[${TARGET_DATE}] Reprocessing complete: { energy: '${energy} MWh', payment: '£${payment}' }`, "success");
       }
     } finally {
       client.release();
@@ -614,8 +554,7 @@ async function main(): Promise<void> {
     let totalPayment = 0;
     
     // Create batches of settlement periods
-    // For a real-world use, this would be 48 periods. For demonstration, we use MAX_PERIODS
-    const allPeriods = Array.from({ length: MAX_PERIODS }, (_, i) => i + 1);
+    const allPeriods = Array.from({ length: 48 }, (_, i) => i + 1);
     const batches = [];
     for (let i = 0; i < allPeriods.length; i += BATCH_SIZE) {
       batches.push(allPeriods.slice(i, i + BATCH_SIZE));

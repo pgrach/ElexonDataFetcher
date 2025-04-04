@@ -1,126 +1,93 @@
-# Data Reingestion Guide
+# Data Reingest Guide
 
-This guide provides a comprehensive reference for reingesting settlement data for a specific date in the energy curtailment system. This process is useful when you need to fix incomplete or corrupted data.
+This guide explains how to use the data reingest reference file to fix incomplete or corrupted data for any date in the system. This process is particularly useful when you need to ensure all 48 settlement periods for a specific date are properly ingested from the Elexon API.
 
-## When to Use Data Reingestion
+## Problem Background
 
-You may need to perform a complete data reingestion in the following scenarios:
+When settlement period data is incomplete for a date (for example, having only some of the 48 periods), it causes several issues:
 
-1. **Incomplete Data**: When some settlement periods are missing for a date
-2. **Corrupted Data**: When existing data is corrupted or inaccurate
-3. **Data Reconciliation**: When you need to ensure totals match expected values
-4. **API Data Updates**: When the source API has updated its data for a historical date
+1. **Incomplete Data Visualization**: Charts will show gaps or partial data for the affected date
+2. **Inaccurate Summaries**: Daily, monthly, and yearly summaries may be incorrect
+3. **Missing Bitcoin Calculations**: Bitcoin mining calculations will be incomplete
 
-## Prerequisites
+## Solution Overview
 
-Before starting a data reingestion process, ensure you have:
+The `data_reingest_reference.ts` script provides a complete solution that:
 
-1. Database access with sufficient permissions
-2. Valid BMU mappings for wind farms
-3. Access to the Elexon API (if using live data)
-4. Sufficient system resources (memory and CPU)
+1. Clears existing data for the target date
+2. Fetches all 48 settlement periods from the Elexon API
+3. Processes the data in manageable batches to avoid timeouts
+4. Updates all relevant summary tables (daily, monthly, yearly)
+5. Recalculates all Bitcoin mining potential values
+6. Verifies the data integrity after processing
 
-## Reingestion Process Overview
+## Usage Instructions
 
-The complete reingestion process consists of the following steps:
+1. **Identify the problematic date** you need to fix (for example, if charts show incomplete data)
 
-1. **Data Clearing**: Remove existing data for the specified date
-2. **Data Fetching**: Retrieve fresh data from the Elexon API for all settlement periods
-3. **Data Processing**: Process and insert the new data into the database
-4. **Summary Updates**: Refresh daily, monthly, and yearly summaries
-5. **Bitcoin Calculations**: Update Bitcoin mining potential calculations
-6. **Verification**: Confirm all data has been correctly processed
+2. **Run the script** with the target date:
+   ```bash
+   npx tsx data_reingest_reference.ts 2025-04-10
+   ```
 
-## Using the Reingestion Scripts
+3. **Monitor the logs** to track progress:
+   - The script generates a log file named `reingest_YYYY-MM-DD.log` 
+   - The console will also display progress information
+   - Look for the "Update successful" message at the end
 
-### Basic Usage
+4. **Verify the results**:
+   - Check that the daily summary has been updated with correct values
+   - Verify that Bitcoin calculations exist for all periods
+   - Confirm that charts and data visualizations now show complete data
 
-For a standard reingestion of a single date:
+## Key Performance Numbers
 
-```bash
-npx tsx data_reingest_reference.ts 2025-MM-DD
-```
+For reference, a typical complete reingest of March 28, 2025 processed:
+- 4,684 curtailment records
+- 99,904 MWh of curtailed energy
+- £3,784,089.62 in payments
+- 48 complete settlement periods
+- Data for all 24 hours (2 settlement periods per hour)
 
-### Configuration Options
+## Behind The Scenes
 
-The scripts provide several configuration options:
+The script performs these key operations:
 
-- `TARGET_DATE`: The date for which data should be reingested (YYYY-MM-DD format)
-- `BATCH_SIZE`: Number of settlement periods to process in each batch (default: 6)
-- `MAX_PERIODS`: Maximum number of periods to process (default: 48)
-- `API_THROTTLE_MS`: Delay between API calls to avoid rate limiting (default: 500ms)
+1. **Database Clearing**: Removes existing records for the target date from:
+   - `curtailment_records`
+   - `historical_bitcoin_calculations`
+   - `daily_summaries`
 
-### Examples
+2. **Data Processing**:
+   - Processes periods in batches of 6 to avoid timeouts
+   - Maps BMU IDs to farm IDs using the mapping file
+   - Calculates volumes and payments for each record
 
-**Reingest a specific date:**
+3. **Summary Updates**:
+   - Updates daily summary for the target date
+   - Recalculates monthly summary for the affected month
+   - Updates yearly summary for the affected year
 
-```bash
-npx tsx data_reingest_reference.ts 2025-03-21
-```
-
-**Reingest March 28, 2025 with specific focus:**
-
-```bash
-npx tsx complete_reingest_march_28.ts
-```
+4. **Bitcoin Recalculations**:
+   - Recalculates Bitcoin mining potential for each farm and period
+   - Updates monthly and yearly Bitcoin summaries
 
 ## Troubleshooting
 
-### Common Issues
+- **API Rate Limiting**: If you encounter API rate limiting issues, adjust the `API_THROTTLE_MS` value
+- **Database Timeouts**: For very large datasets, reduce the `BATCH_SIZE` to process fewer periods at once
+- **Missing Farm Mappings**: Ensure the BMU mapping file is up-to-date with all required wind farms
 
-1. **API Rate Limiting**: If you encounter API rate limits, increase the `API_THROTTLE_MS` value
-2. **Database Timeout**: For large data sets, try reducing the `BATCH_SIZE` value
-3. **Missing Periods**: Check the Elexon API availability for specific periods
-4. **Inconsistent Totals**: Verify BMU mappings and price calculations
+## Example Successful Output
 
-### Error Logs
+A successful reingest should show verification results similar to:
 
-All reingestion scripts create detailed log files with timestamps in the `logs/` directory. Review these logs for troubleshooting:
-
-- `reingest_YYYY-MM-DD.log`: Main reingestion log file
-- `performance_YYYY-MM-DD.log`: Performance statistics
-- `cache_YYYY-MM-DD.log`: API caching information
-
-## Special Dates
-
-Some dates may require special handling due to daylight saving changes or unusual market conditions:
-
-1. **Daylight Saving Time**: Days with 46 or 50 periods instead of 48
-2. **High Curtailment Events**: Dates with unusually high curtailment volumes
-3. **Market Disruptions**: Dates with incomplete or delayed settlement data
-
-## Database Structure Overview
-
-The reingestion process interacts with the following key tables:
-
-1. `curtailment_records`: Individual curtailment events by settlement period
-2. `daily_summaries`: Daily aggregated curtailment data
-3. `monthly_summaries`: Monthly aggregated curtailment data 
-4. `yearly_summaries`: Yearly aggregated curtailment data
-5. `historical_bitcoin_calculations`: Bitcoin mining potential calculations
-6. `monthly_bitcoin_summaries`: Monthly Bitcoin mining summaries
-7. `yearly_bitcoin_summaries`: Yearly Bitcoin mining summaries
-
-## Technical Notes
-
-### Data Consistency
-
-The scripts ensure data consistency by:
-
-1. Using database transactions for critical operations
-2. Implementing ON CONFLICT rules for upserts
-3. Verifying data before and after processing
-
-### Performance Optimization
-
-For large-scale reingestion operations:
-
-1. Process data in batches to manage memory usage
-2. Use connection pooling for database operations
-3. Implement parallel processing where appropriate
-
-## References
-
-- **Elexon API Documentation**: [https://www.elexon.co.uk/documents/training-guidance/bsc-guidance-notes/bmrs-api-and-data-push-user-guide/](https://www.elexon.co.uk/documents/training-guidance/bsc-guidance-notes/bmrs-api-and-data-push-user-guide/)
-- **PostgreSQL Documentation**: [https://www.postgresql.org/docs/](https://www.postgresql.org/docs/)
-- **Bitcoin Mining Calculations**: See internal documentation for details on mining efficiency calculations
+```
+Verification Check for 2025-03-28: {
+  "records": "4684",
+  "periods": "48",
+  "volume": "99904.22",
+  "payment": "-3784089.62"
+}
+Update successful at 2025-03-28T12:34:56.789Z
+```
