@@ -1,15 +1,14 @@
 /**
- * March 21, 2025 Reingest Script (Subset Version)
+ * March 21, 2025 Final Reingest Script
  * 
- * This script is designed to reingest a subset of settlement period data for March 21, 2025.
- * It's optimized to run faster by processing only specific periods.
- * The target values for reconciliation are:
+ * This script processes the final missing periods for March 21, 2025.
+ * Target values for reconciliation:
  * - Subsidies Paid: £1,240,439.58
  * - Energy Curtailed: 50,518.72 MWh
  */
 
 import { db } from './db';
-import { eq, and, between, sql } from 'drizzle-orm';
+import { eq, and, between, sql, inArray } from 'drizzle-orm';
 import pg from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -20,8 +19,8 @@ const { Pool } = pg;
 
 // Configuration
 const TARGET_DATE = '2025-03-21';
-const START_PERIOD = 33; // Start with final batch of periods
-const END_PERIOD = 48;   // Process the remaining periods
+// Only process the 8 missing periods
+const MISSING_PERIODS = [29, 30, 31, 32, 45, 46, 47, 48];
 const API_THROTTLE_MS = 500; // Time to wait between API calls to avoid rate limiting
 
 // Initialize database pool with more generous timeout
@@ -113,19 +112,19 @@ async function loadBmuMappings(): Promise<{
  */
 async function clearExistingPeriods(): Promise<void> {
   try {
-    log(`Clearing existing data for ${TARGET_DATE} periods ${START_PERIOD}-${END_PERIOD}...`, "info");
+    log(`Clearing existing data for ${TARGET_DATE} periods ${MISSING_PERIODS.join(', ')}...`, "info");
     
     // Use Drizzle ORM for the delete operation
     const deleteResult = await db.delete(curtailmentRecords)
       .where(
         and(
           eq(curtailmentRecords.settlementDate, TARGET_DATE),
-          between(curtailmentRecords.settlementPeriod, START_PERIOD, END_PERIOD)
+          inArray(curtailmentRecords.settlementPeriod, MISSING_PERIODS)
         )
       )
       .returning({ id: curtailmentRecords.id });
     
-    log(`Cleared ${deleteResult.length} existing records for ${TARGET_DATE} periods ${START_PERIOD}-${END_PERIOD}`, "success");
+    log(`Cleared ${deleteResult.length} existing records for ${TARGET_DATE} periods ${MISSING_PERIODS.join(', ')}`, "success");
   } catch (error) {
     log(`Error clearing existing data: ${error}`, "error");
     throw error;
@@ -302,11 +301,11 @@ async function updateBitcoinCalculations(): Promise<void> {
 async function main(): Promise<void> {
   const startTime = Date.now();
   
-  log(`=== Starting subset data reingest for ${TARGET_DATE} ===`, "info");
+  log(`=== Starting final data reingest for ${TARGET_DATE} ===`, "info");
   log(`Target values for reconciliation:`, "info");
   log(`- Subsidies Paid: £1,240,439.58`, "info");
   log(`- Energy Curtailed: 50,518.72 MWh`, "info");
-  log(`- Processing periods ${START_PERIOD} to ${END_PERIOD} only`, "info");
+  log(`- Processing ${MISSING_PERIODS.length} missing periods: ${MISSING_PERIODS.join(', ')}`, "info");
   
   try {
     // Step 1: Load BMU mappings
@@ -320,8 +319,8 @@ async function main(): Promise<void> {
     let totalVolume = 0;
     let totalPayment = 0;
     
-    // Process each period
-    for (let period = START_PERIOD; period <= END_PERIOD; period++) {
+    // Process each missing period
+    for (const period of MISSING_PERIODS) {
       try {
         const result = await processPeriod(period, windFarmIds, bmuLeadPartyMap);
         totalRecords += result.count;
@@ -336,7 +335,7 @@ async function main(): Promise<void> {
       }
     }
     
-    log(`\nCompleted processing selected settlement periods:`, "success");
+    log(`\nCompleted processing settlement periods:`, "success");
     log(`- Total records: ${totalRecords}`, "info");
     log(`- Total volume: ${totalVolume.toFixed(2)} MWh`, "info");
     log(`- Total payment: £${totalPayment.toFixed(2)}`, "info");
@@ -350,29 +349,7 @@ async function main(): Promise<void> {
     // Step 6: Verify the results
     const client = await pool.connect();
     try {
-      // Get the figures for the processed periods
-      const result = await client.query(`
-        SELECT 
-          COUNT(*) as record_count,
-          COUNT(DISTINCT settlement_period) as period_count,
-          SUM(ABS(CAST(volume AS DECIMAL))) as total_volume,
-          SUM(CAST(payment AS DECIMAL)) as total_payment
-        FROM 
-          curtailment_records
-        WHERE 
-          settlement_date = $1
-          AND settlement_period BETWEEN $2 AND $3
-      `, [TARGET_DATE, START_PERIOD, END_PERIOD]);
-      
-      const verificationResult = result.rows[0];
-      
-      log(`\nVerification Results for ${TARGET_DATE} (Periods ${START_PERIOD}-${END_PERIOD}):`, "info");
-      log(`- Records: ${verificationResult.record_count}`, "info");
-      log(`- Periods: ${verificationResult.period_count}`, "info");
-      log(`- Volume: ${Number(verificationResult.total_volume).toFixed(2)} MWh`, "info");
-      log(`- Payment: £${Number(verificationResult.total_payment).toFixed(2)}`, "info");
-      
-      // Get total for the date (including any previously existing data)
+      // Get the total for the target date
       const totalResult = await client.query(`
         SELECT 
           COUNT(*) as record_count,
@@ -389,18 +366,21 @@ async function main(): Promise<void> {
       
       log(`\nTotal Data for ${TARGET_DATE}:`, "info");
       log(`- Records: ${totalVerification.record_count}`, "info");
-      log(`- Periods: ${totalVerification.period_count}`, "info");
+      log(`- Periods: ${totalVerification.period_count} of 48`, "info");
       log(`- Volume: ${Number(totalVerification.total_volume).toFixed(2)} MWh (Target: 50,518.72 MWh)`, "info");
       log(`- Payment: £${Number(totalVerification.total_payment).toFixed(2)} (Target: £1,240,439.58)`, "info");
       
-      // The full target values would only be reached if all 48 periods were processed
-      log(`\nNote: Full target values will only be reached when all 48 periods are processed.`, "warning");
+      if (Number(totalVerification.period_count) === 48) {
+        log(`\n✅ All 48 settlement periods are now processed!`, "success");
+      } else {
+        log(`\n⚠️ Some settlement periods are still missing (${48 - Number(totalVerification.period_count)} of 48)`, "warning");
+      }
     } finally {
       client.release();
     }
     
     const duration = (Date.now() - startTime) / 1000;
-    log(`\n=== Subset reingest completed in ${duration.toFixed(1)} seconds ===`, "success");
+    log(`\n=== Final reingest completed in ${duration.toFixed(1)} seconds ===`, "success");
   } catch (error) {
     log(`Fatal error during reingest: ${error}`, "error");
     process.exit(1);
