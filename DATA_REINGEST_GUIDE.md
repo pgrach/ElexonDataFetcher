@@ -78,6 +78,103 @@ The script performs these key operations:
 - **Database Timeouts**: For very large datasets, reduce the `BATCH_SIZE` to process fewer periods at once
 - **Missing Farm Mappings**: Ensure the BMU mapping file is up-to-date with all required wind farms
 
+## Alternative Method: SQL-Based Data Reingest
+
+If you're encountering persistent issues with the TypeScript reingest script, you can use a direct SQL approach which is more efficient for large datasets:
+
+### 1. Generate Test Data (When API Access Is Not Available)
+
+For development/testing purposes when the Elexon API key is not available, the following approach can be used:
+
+```bash
+# Run the fast reingest script for a specific date
+npx tsx fast_reingest_march_21.ts
+```
+
+This script:
+- Clears existing data for the date
+- Generates representative test data for all 48 settlement periods
+- Updates summary tables correctly
+- Handles 5 representative wind farms with typical curtailment patterns
+
+### 2. Update Bitcoin Calculations Separately
+
+For better performance and reliability, use SQL directly to update Bitcoin calculations:
+
+```sql
+-- Clear existing calculations
+DELETE FROM historical_bitcoin_calculations
+WHERE settlement_date = '2025-03-21';
+
+-- S19J_PRO calculations (100 TH/s at 3250W)
+INSERT INTO historical_bitcoin_calculations (
+  settlement_date, settlement_period, farm_id, miner_model,
+  bitcoin_mined, difficulty, calculated_at
+)
+SELECT 
+  settlement_date,
+  settlement_period::integer,
+  farm_id,
+  'S19J_PRO',
+  (ABS(volume::numeric) * 0.007 * (100000000000000::numeric / 113757508810853::numeric))::numeric,
+  113757508810853::numeric,
+  NOW()
+FROM curtailment_records
+WHERE settlement_date = '2025-03-21';
+
+-- Add similar INSERT statements for other miner models (S9, M20S, etc.)
+```
+
+### 3. Verify All Data Components
+
+Use this comprehensive verification query to ensure all data components are properly updated:
+
+```sql
+WITH curtailment_stats AS (
+  SELECT 
+    settlement_date,
+    COUNT(*) AS record_count,
+    COUNT(DISTINCT settlement_period) AS period_count,
+    ROUND(SUM(ABS(volume::numeric))::numeric, 2) AS total_volume,
+    ROUND(SUM(payment::numeric)::numeric, 2) AS total_payment
+  FROM curtailment_records
+  WHERE settlement_date = '2025-03-21'
+  GROUP BY settlement_date
+),
+bitcoin_stats AS (
+  SELECT 
+    settlement_date,
+    COUNT(*) AS record_count,
+    COUNT(DISTINCT miner_model) AS model_count,
+    ROUND(SUM(bitcoin_mined::numeric)::numeric, 8) AS total_bitcoin
+  FROM historical_bitcoin_calculations
+  WHERE settlement_date = '2025-03-21'
+  GROUP BY settlement_date
+),
+summary_stats AS (
+  SELECT
+    summary_date AS date,
+    total_curtailed_energy,
+    total_payment
+  FROM daily_summaries
+  WHERE summary_date = '2025-03-21'
+)
+SELECT 
+  c.settlement_date AS date,
+  c.record_count AS curtailment_records,
+  c.period_count AS periods,
+  c.total_volume AS total_curtailed_mwh,
+  ABS(c.total_payment) AS total_payment_gbp,
+  b.record_count AS bitcoin_records,
+  b.model_count AS miner_models,
+  b.total_bitcoin AS total_bitcoin,
+  s.total_curtailed_energy AS summary_energy,
+  ABS(s.total_payment) AS summary_payment
+FROM curtailment_stats c
+JOIN bitcoin_stats b ON c.settlement_date = b.settlement_date
+JOIN summary_stats s ON c.settlement_date = s.date;
+```
+
 ## Example Successful Output
 
 A successful reingest should show verification results similar to:
