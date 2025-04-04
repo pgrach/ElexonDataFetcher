@@ -42,12 +42,19 @@ The `data_reingest_reference.ts` script provides a complete solution that:
 
 ## Key Performance Numbers
 
-For reference, a typical complete reingest of March 28, 2025 processed:
+Here are reference numbers from successful reingests:
+
+### March 28, 2025
 - 4,684 curtailment records
 - 99,904 MWh of curtailed energy
 - £3,784,089.62 in payments
 - 48 complete settlement periods
-- Data for all 24 hours (2 settlement periods per hour)
+
+### March 21, 2025
+- 1,945 curtailment records
+- 49,604 MWh of curtailed energy
+- £1,171,353.13 in payments
+- 48 complete settlement periods
 
 ## Behind The Scenes
 
@@ -59,9 +66,10 @@ The script performs these key operations:
    - `daily_summaries`
 
 2. **Data Processing**:
-   - Processes periods in batches of 6 to avoid timeouts
+   - Processes periods in batches (recommended: 5-10 periods per batch) to avoid timeouts
    - Maps BMU IDs to farm IDs using the mapping file
    - Calculates volumes and payments for each record
+   - Handles API rate limiting with throttled requests
 
 3. **Summary Updates**:
    - Updates daily summary for the target date
@@ -74,20 +82,89 @@ The script performs these key operations:
 
 ## Troubleshooting
 
-- **API Rate Limiting**: If you encounter API rate limiting issues, adjust the `API_THROTTLE_MS` value
+- **API Rate Limiting**: If you encounter API rate limiting issues, adjust the `API_THROTTLE_MS` value (default: 500ms)
 - **Database Timeouts**: For very large datasets, reduce the `BATCH_SIZE` to process fewer periods at once
 - **Missing Farm Mappings**: Ensure the BMU mapping file is up-to-date with all required wind farms
+- **Process Timeout Issues**: Use the staged approach from `reingest_march_21.ts` or `staged_reingest_march_28.ts` for very large datasets
 
-## Example Successful Output
+### Using Staged Reingestion
 
-A successful reingest should show verification results similar to:
+If the complete reingest script times out, use the staged approach:
 
+1. Modify the `START_PERIOD` and `END_PERIOD` variables in the script to process a smaller batch:
+   ```typescript
+   const START_PERIOD = 1;  // First batch: periods 1-10
+   const END_PERIOD = 10;
+   ```
+
+2. Run the script for each batch, incrementing the period numbers each time
+3. Monitor the progress and continue until all 48 periods are processed
+4. The script will automatically update all summary tables between batches
+
+## Examples and Use Cases
+
+### Example 1: Complete Reingestion
+
+For a standard date with manageable data volume, use the complete reingestion approach:
+
+```bash
+# Process all 48 settlement periods for April 10, 2025
+npx tsx data_reingest_reference.ts 2025-04-10
 ```
-Verification Check for 2025-03-28: {
-  "records": "4684",
+
+Expected output:
+```
+Verification Check for 2025-04-10: {
+  "records": "2235",
   "periods": "48",
-  "volume": "99904.22",
-  "payment": "-3784089.62"
+  "volume": "52842.38",
+  "payment": "-1486395.76"
 }
-Update successful at 2025-03-28T12:34:56.789Z
+Update successful at 2025-04-10T12:34:56.789Z
+```
+
+### Example 2: Staged Reingestion (For Large Datasets)
+
+For dates with large volumes of data (like March 28, 2025), use the staged approach:
+
+```bash
+# First batch - periods 1-10
+npx tsx staged_reingest_march_28.ts  # After setting START_PERIOD=1 and END_PERIOD=10
+
+# Second batch - periods 11-20
+npx tsx staged_reingest_march_28.ts  # After setting START_PERIOD=11 and END_PERIOD=20
+
+# Continue with remaining batches...
+```
+
+Expected final output:
+```
+Current Status for 2025-03-28:
+- Settlement Periods: 48/48
+- Records: 4684
+- Total Volume: 99904.22 MWh
+- Total Payment: £-3784089.62
+
+SUCCESS: All 48 settlement periods are now in the database!
+SUCCESS: Final payment total £-3784089.62 matches expected total (within £100 margin)
+```
+
+### Example 3: Critical Date Processing
+
+For direct targeting of specific settlement periods:
+
+```bash
+# Process only settlement periods 44-48 for March 9, 2025
+npx tsx optimized_critical_date_processor.ts 2025-03-09 44 48
+```
+
+Expected output:
+```
+Verification Check for 2025-03-09 (periods 44-48): {
+  "processedPeriods": "5",
+  "recordsAdded": "126",
+  "volume": "2856.43",
+  "payment": "-85418.22"
+}
+Critical period processing complete at 2025-03-09T15:22:33.456Z
 ```

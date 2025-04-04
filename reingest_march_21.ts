@@ -4,8 +4,13 @@
  * This script allows for reingesting settlement periods in smaller batches.
  * Set START_PERIOD and END_PERIOD to control which range to process.
  * 
+ * The goal is to ensure the total payment matches the expected amount of £1,240,439.58.
+ * 
  * Based on the successful approach used for March 28 reingestion.
  */
+
+// Expected payment total for March 21, 2025
+export const EXPECTED_TOTAL_PAYMENT = 1240439.58;
 
 import { db } from "./db";
 import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries } from "./db/schema";
@@ -18,12 +23,12 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const TARGET_DATE = '2025-03-21';
+const TARGET_DATE = '2025-03-21'; // Target date for data reingestion
 const BMU_MAPPING_PATH = path.join(__dirname, "server/data/bmuMapping.json");
 
 // Set these variables to control which periods to process
-const START_PERIOD = 1;  // Start from period 1
-const END_PERIOD = 6;    // Process up to period 6
+const START_PERIOD = 45;  // Start from period 45
+const END_PERIOD = 48;    // Process up to period 48 (final batch)
 
 // Flag to control whether to clear existing data for the given periods
 const CLEAR_EXISTING_DATA = true;
@@ -379,6 +384,15 @@ async function main(): Promise<void> {
       console.log(`END_PERIOD = ${nextEnd};`);
     } else {
       console.log('SUCCESS: All 48 settlement periods are now in the database!');
+      
+      // Check if all the data matches expected payment
+      const paymentTotal = parseFloat(currentStatus[0].totalPayment);
+      if (Math.abs(paymentTotal - EXPECTED_TOTAL_PAYMENT) > 100) {
+        console.log(`WARNING: Final payment total £${paymentTotal.toFixed(2)} differs from expected £${EXPECTED_TOTAL_PAYMENT.toFixed(2)}`);
+        console.log(`Difference: £${Math.abs(paymentTotal - EXPECTED_TOTAL_PAYMENT).toFixed(2)}`);
+      } else {
+        console.log(`SUCCESS: Final payment total £${paymentTotal.toFixed(2)} matches expected total (within £100 margin)`);
+      }
     }
     
     console.log(`\nReingest for periods ${START_PERIOD}-${END_PERIOD} completed successfully at ${new Date().toISOString()}`);

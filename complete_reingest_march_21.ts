@@ -17,6 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const TARGET_DATE = '2025-03-21';
+const EXPECTED_TOTAL_PAYMENT = 1240439.58; // Expected total in GBP
 const BMU_MAPPING_PATH = path.join(__dirname, "server/data/bmuMapping.json");
 
 // Utility function to delay between API calls
@@ -382,6 +383,15 @@ async function main(): Promise<void> {
     console.log(`- Records: ${finalStatus[0].recordCount}`);
     console.log(`- Total Volume: ${finalStatus[0].totalVolume} MWh`);
     console.log(`- Total Payment: £${finalStatus[0].totalPayment}`);
+    
+    // Check if payment matches expected amount
+    const paymentTotal = parseFloat(finalStatus[0].totalPayment);
+    if (Math.abs(paymentTotal - EXPECTED_TOTAL_PAYMENT) > 100) {
+      console.log(`WARNING: Final payment total £${paymentTotal.toFixed(2)} differs from expected £${EXPECTED_TOTAL_PAYMENT.toFixed(2)}`);
+      console.log(`Difference: £${Math.abs(paymentTotal - EXPECTED_TOTAL_PAYMENT).toFixed(2)}`);
+    } else {
+      console.log(`SUCCESS: Final payment total £${paymentTotal.toFixed(2)} matches expected total (within £100 margin)`);
+    }
     
     // Check if we have all 48 periods
     if (Number(finalStatus[0].periodCount) === 48) {
