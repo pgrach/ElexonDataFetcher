@@ -18,8 +18,8 @@ import * as colorette from "colorette";
 
 // Configuration
 const TARGET_DATE = "2025-03-21";
-const START_PERIOD = 1; // Customize these values
-const END_PERIOD = 12;  // to process in batches
+const START_PERIOD = 1; // Process the first batch (periods 1-6)
+const END_PERIOD = 6;   // Keep batches small to avoid timeouts
 const ELEXON_API_URL = "https://api.bmreports.com/BMRS/BOALF/V1";
 const BMU_MAPPING_PATH = path.join(process.cwd(), "server", "data", "bmuMapping.json");
 const LOG_DIR = path.join(process.cwd(), "logs");
