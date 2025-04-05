@@ -28,6 +28,7 @@ export function formatEnergy(value: number | string): string {
 
 /**
  * Format currency values in GBP, converting to millions for large values
+ * Always display payment values as positive (for Subsidies Paid display)
  * @param value Amount in GBP
  * @returns Formatted string with £ symbol and M suffix for millions
  */
@@ -36,15 +37,18 @@ export function formatGBP(value: number | string): string {
   
   if (Number.isNaN(numValue)) return "£0"
   
+  // Always use absolute value for display (payment values are stored as negative)
+  const displayValue = Math.abs(numValue)
+  
   // Convert to millions for values with 7 or more digits
-  if (Math.abs(numValue) >= 1000000) {
-    const millions = numValue / 1000000
+  if (displayValue >= 1000000) {
+    const millions = displayValue / 1000000
     // Round to 1 decimal place for millions
     return `£${millions.toFixed(1).replace(/\.0$/, '')} M`
   }
   
   // Regular formatting for smaller values
-  return `£${Math.round(numValue).toLocaleString()}`
+  return `£${Math.round(displayValue).toLocaleString()}`
 }
 
 /**
