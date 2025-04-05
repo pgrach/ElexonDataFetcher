@@ -1,133 +1,144 @@
-# Data Reingestion and Correction Guide
+# Data Reingestion Guide
 
-This document provides guidelines and step-by-step procedures for correcting inaccuracies in settlement data within the system.
+This guide provides a comprehensive reference for reingesting settlement data for a specific date in the system. Use this when you need to fix incomplete or corrupted data for any date.
 
 ## When to Use Data Reingestion
 
-Data reingestion or correction may be necessary in the following scenarios:
+1. **Missing Settlement Periods**: When a date has incomplete settlement periods
+2. **Inconsistent Data**: When summary totals don't match raw curtailment records
+3. **Incorrect Totals**: When energy or payment values don't match Elexon API values
+4. **Data Corruption**: When data for a specific date is corrupted or inconsistent
 
-1. **Incomplete Data**: Missing settlement periods for a specific date
-2. **Inaccurate Payment Values**: Payment amounts that don't match Elexon API values
-3. **Inaccurate Energy Values**: Energy curtailment values that don't match Elexon API values
-4. **BMU Mapping Issues**: Incorrect or missing lead party mappings affecting farm attribution
-5. **Calculation Errors**: Issues with Bitcoin mining potential calculations
+## Reingestion Process Overview
 
-## Available Correction Scripts
+The complete reingestion process involves these key steps:
 
-### Complete Reingestion Scripts
+1. **Data Clearing**: Remove existing data for the target date
+2. **Data Fetching**: Obtain correct data from the Elexon API for all periods
+3. **Data Processing**: Process and insert the data into the database
+4. **Summary Updates**: Recalculate daily, monthly, and yearly summaries
+5. **Bitcoin Recalculations**: Update Bitcoin mining potential calculations
+6. **Verification**: Confirm the totals match expected values
 
-These scripts perform a full reingestion by clearing all data for a specific date and fetching fresh data from the Elexon API:
+## Available Scripts
 
-- `complete_reingest_march_21.ts`: Template for full reingestion of all 48 settlement periods
-- `data_reingest_reference.ts`: General-purpose reingestion template (recommended for new dates)
+### 1. Complete Reingestion Script (`fixed_reingest_march_21.ts`)
 
-### Targeted Correction Scripts
+Use this script to completely reingest all 48 settlement periods for a specific date.
 
-These scripts perform targeted updates without complete reingestion:
+```bash
+# Run the script with TypeScript
+npx tsx fixed_reingest_march_21.ts
 
-- `update_march_21_payment.ts`: Template for correcting payment values only
-- `update_march_21_energy_and_payment.ts`: Template for correcting energy and payment values
-- `update_march_21_correct_energy.ts`: Template for final adjustments to match exact API values
-
-### Verification Scripts
-
-These scripts verify data integrity without making changes:
-
-- `verify_dates.ts`: Checks data integrity for specific dates
-- `verify_service.ts`: Verifies consistency between tables
-
-## Step-by-Step Correction Process
-
-### 1. Identify the Issue
-
-Before making any corrections, identify the specific issues:
-
-```sql
--- Check daily summary for a specific date
-SELECT summary_date, total_curtailed_energy, total_payment 
-FROM daily_summaries 
-WHERE summary_date = 'YYYY-MM-DD';
-
--- Check if all 48 settlement periods exist
-SELECT settlement_period, COUNT(*) as record_count
-FROM curtailment_records
-WHERE settlement_date = 'YYYY-MM-DD'
-GROUP BY settlement_period
-ORDER BY settlement_period;
-
--- Check Bitcoin calculations
-SELECT settlement_date, miner_model, SUM(bitcoin_mined) as total_bitcoin
-FROM historical_bitcoin_calculations
-WHERE settlement_date = 'YYYY-MM-DD'
-GROUP BY settlement_date, miner_model;
+# To adapt for another date, modify the TARGET_DATE, EXPECTED_TOTAL_PAYMENT and EXPECTED_TOTAL_ENERGY constants
 ```
 
-### 2. Select the Appropriate Correction Method
+### 2. Test Reingestion Script (`test_reingest_march_21.ts`)
 
-#### Complete Reingestion
+Use this script to test the reingestion process with a small batch of periods.
 
-Use when multiple settlement periods are missing or when many values need correction:
+```bash
+# Run the script with TypeScript
+npx tsx test_reingest_march_21.ts
 
-1. Create a new script based on `data_reingest_reference.ts`
-2. Set the target date
-3. Run the script to clear existing data and fetch fresh data
-4. Verify the updates
+# To adapt for another date, modify the TARGET_DATE and customize START_PERIOD and END_PERIOD
+```
 
-#### Targeted Correction
+### 3. Staged Reingestion Script (`staged_reingest_march_21.ts`)
 
-Use when only specific values need correction:
+Use this script to reingest data in smaller batches (useful for troubleshooting).
 
-1. Create a new script based on the appropriate template
-2. Set the target date and correct values
-3. Run the script to update specific fields
-4. Verify the updates
+```bash
+# Run the script with TypeScript
+npx tsx staged_reingest_march_21.ts
 
-### 3. Verify the Corrections
+# Modify START_PERIOD and END_PERIOD to control the range
+```
 
-After making corrections, always verify:
+## Adapting Scripts for Other Dates
 
-1. Daily summary values
-2. Monthly and yearly summary updates
-3. Bitcoin mining calculations
-4. Frontend data display
+To adapt the reingestion scripts for other dates:
 
-### 4. Document the Correction
+1. **Update the Target Date**: Change the `TARGET_DATE` constant
+2. **Update Expected Values**: Set `EXPECTED_TOTAL_PAYMENT` and `EXPECTED_TOTAL_ENERGY` based on Elexon API data
+3. **Review Period Logic**: Ensure the script processes all 48 settlement periods
+4. **Test with a Small Batch**: Use the test script to verify the process works correctly
+5. **Run Full Reingestion**: Execute the complete reingestion script
 
-Always document the correction process:
+## Troubleshooting Common Issues
 
-1. Create a summary document (e.g., `MARCH_21_REINGEST_SUMMARY.md`)
-2. Include initial values, correction steps, and final values
-3. Document verification steps and results
+### 1. Missing BMU Mappings
 
-## Important Considerations
+If the script doesn't find BMU mappings:
 
-### Database Integrity
+- Check the BMU mapping file path
+- Ensure the mapping file format is correct
+- Verify BMU ID formats match those in the Elexon API response
 
-All correction scripts should maintain integrity across related tables:
+### 2. API Rate Limiting
 
-- `daily_summaries`
-- `monthly_summaries`
-- `yearly_summaries`
-- `historical_bitcoin_calculations`
+If you encounter API rate limiting:
 
-### Logging and Error Handling
+- Increase the delay between API calls (`delay` function)
+- Reduce batch sizes to process fewer periods at once
+- Implement exponential backoff for retries
 
-All correction scripts should include:
+### 3. Database Connection Timeouts
 
-- Comprehensive logging to both console and files
-- Error handling with appropriate recovery
-- Verification steps to confirm successful updates
+If database operations timeout:
 
-### Incremental Approach
+- Ensure the DB connection is refreshed between operations
+- Process data in smaller batches
+- Add explicit transaction handling
 
-For complex corrections:
+### 4. Verification Failures
 
-1. Start with the most critical value (usually payment amount)
-2. Proceed to energy values
-3. Finish with any final adjustments to match exact API values
+If totals don't match expected values:
 
-## Conclusion
+- Check the XML parsing logic for accuracy
+- Verify price and volume calculations
+- Ensure all settlement periods were processed
+- Check for partial or failed API responses
 
-Following these guidelines ensures accurate and consistent data throughout the system, maintaining the reliability of analytics, visualizations, and reports based on this data.
+## Data Integrity Considerations
 
-For specific implementation details, refer to the existing correction scripts and the `data_reingest_reference.ts` template.
+To ensure complete data integrity during reingestion:
+
+1. **Transaction Handling**: Wrap critical operations in transactions
+2. **Logging**: Maintain detailed logs of all operations
+3. **Verification**: Always verify totals against expected values
+4. **Backup**: Take a database backup before major reingestions
+5. **Documentation**: Document the reason for reingestion and the results
+
+## Example: Complete Reingestion Workflow
+
+Here's a typical workflow for a complete data reingestion:
+
+1. Identify the date with problematic data
+2. Determine the correct energy and payment totals from Elexon API
+3. Create a backup of the current database state
+4. Customize the reingestion script with the target date and expected values
+5. Run a test reingestion on a small number of periods
+6. Verify the test results are correct
+7. Run the complete reingestion script
+8. Verify all 48 settlement periods are processed
+9. Confirm the corrected totals match expected values
+10. Document the reingestion process and results
+
+## Performance Optimization
+
+To optimize the reingestion process:
+
+1. **Batch Processing**: Process records in appropriate batch sizes
+2. **Connection Management**: Refresh DB connections to prevent timeouts
+3. **Parallel Processing**: Consider parallel processing for non-dependent operations
+4. **Resource Monitoring**: Monitor system resources during long reingestion jobs
+
+## Maintenance Responsibilities
+
+Regular data maintenance responsibilities:
+
+1. **Periodic Reconciliation**: Regularly check for data inconsistencies
+2. **Process Improvement**: Refine the reingestion process based on experience
+3. **Documentation Updates**: Keep this guide updated with new findings
+4. **Script Maintenance**: Keep reingestion scripts up-to-date with API changes

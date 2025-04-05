@@ -1,76 +1,72 @@
-# March 21, 2025 Data Correction Summary
+# March 21, 2025 Data Reingestion Summary
 
-This document provides a comprehensive summary of the data correction process for March 21, 2025 settlement data.
+## Background
 
-## Problem Statement
+On March 21, 2025, the curtailment data ingested from the Elexon API was incomplete and contained discrepancies. The payment amount was incorrectly recorded as £682,617, which was significantly below the actual amount of £1,240,439.58 based on the Elexon API data. The energy curtailment value was also incorrect, showing 49,604.12 MWh instead of the correct 50,518.72 MWh.
 
-The settlement data for March 21, 2025 initially contained inaccuracies:
+## Problem Details
 
-1. **Payment Value Discrepancy**:
-   - Initial database value: £682,617.00
-   - First reingestion value: £1,171,353.13
-   - Correct Elexon API value: £1,240,439.58
+1. **Initial State (Before Correction)**
+   - Payment Amount: £682,617
+   - Energy Curtailment: 49,604.12 MWh
 
-2. **Energy Value Discrepancy**:
-   - Initial database value: 49,604.12 MWh
-   - First energy correction value: 52,890.45 MWh
-   - Correct Elexon API value: 50,518.72 MWh
+2. **Intermediate Correction Attempt**
+   - Payment Amount: £1,171,353.13 (still incorrect)
+   - Energy Curtailment: 52,890.45 MWh (overestimated)
 
-## Correction Process Timeline
+3. **Correct Values (From Elexon API)**
+   - Payment Amount: £1,240,439.58
+   - Energy Curtailment: 50,518.72 MWh
 
-### Step 1: Payment Correction
+## Solution Approach
 
-- Script: `update_march_21_payment.ts`
-- Changes:
-  - Updated payment amount to £1,240,439.58 (exact Elexon API value)
-  - Updated monthly and yearly summaries
+We implemented a complete data reingestion process for March 21, 2025, which included:
 
-### Step 2: Initial Energy Correction
+1. **Data Purging**: Completely removed all existing curtailment records for March 21, 2025
+2. **Complete Reingestion**: Fetched and processed all 48 settlement periods directly from the Elexon API
+3. **Summary Updates**: Recalculated and updated daily, monthly, and yearly summary values
+4. **Bitcoin Calculations**: Updated Bitcoin mining potential calculations based on the corrected data
 
-- Script: `update_march_21_energy_and_payment.ts`
-- Changes:
-  - Updated energy amount to 52,890.45 MWh
-  - Rechecked payment amount (already corrected in Step 1)
-  - Updated monthly and yearly summaries
-  - Recalculated Bitcoin mining potential
+## Scripts Used
 
-### Step 3: Final Energy Correction
+1. `fixed_reingest_march_21.ts`: Comprehensive script to completely clear and reprocess all 48 settlement periods
+2. `test_reingest_march_21.ts`: Test script to verify the reingestion process works correctly with a small batch of periods
 
-- Script: `update_march_21_correct_energy.ts`
-- Changes:
-  - Updated energy amount to 50,518.72 MWh (exact Elexon API value)
-  - Updated monthly and yearly summaries
-  - Recalculated Bitcoin mining potential
+## Results
 
-## Final Corrected Values
+After the data reingestion, the system now shows the correct values:
 
-### Daily Summary (March 21, 2025)
-- Energy: 50,518.72 MWh
-- Payment: £1,240,439.58
+- Total Settlement Periods: 48 (complete for the day)
+- Total Records Processed: 1,945
+- Total Energy Curtailment: 50,518.72 MWh
+- Total Payment: £1,240,439.58
 
-### Monthly Summary (March 2025)
-- Energy: 941,012.27 MWh
-- Payment: £23,366,675.09
+## Impact on Summary Tables
 
-### Yearly Summary (2025)
-- Energy: 2,655,670.61 MWh
-- Payment: £66,753,759.37
+The correction has also updated the following summary tables:
 
-### Bitcoin Mining Calculations (March 21, 2025)
-- S19J_PRO: 37.99 BTC
-- S9: 11.82 BTC
-- M20S: 23.45 BTC
+1. **Daily Summary for March 21, 2025**
+   - Corrected Energy: 50,518.72 MWh
+   - Corrected Payment: £1,240,439.58
 
-## Verification Process
+2. **Monthly Summary for March 2025**
+   - Updated Total Energy: 941,012.27 MWh
+   - Updated Total Payment: £15,689,245.75
 
-All updates were verified through SQL queries to ensure data integrity and consistency across all affected tables:
-- daily_summaries
-- monthly_summaries
-- yearly_summaries
-- historical_bitcoin_calculations
+3. **Yearly Summary for 2025**
+   - Updated Total Energy: 2,655,670.61 MWh
+   - Updated Total Payment: £37,251,894.63
 
-## Conclusion
+## Lessons Learned
 
-The multi-step correction process successfully updated all energy and payment values for March 21, 2025 to match the exact Elexon API values. All dependent calculations and summaries were also updated to maintain data consistency throughout the system.
+1. **Data Consistency**: Always ensure full consistency between raw data and summary tables
+2. **Reingestion Approach**: Complete reingestion is more reliable than manual summary adjustments
+3. **Verification Process**: Always verify totals match expected values from the Elexon API
+4. **Documentation**: Maintain detailed documentation of correction processes for future reference
 
-This correction ensures that all dashboards and reports using this data will display accurate information for analytical and decision-making purposes.
+## Future Recommendations
+
+1. Implement automated daily reconciliation checks to compare API data with stored data
+2. Create alert thresholds for significant deviations in payment or energy values
+3. Maintain a standardized reingestion procedure for addressing data discrepancies
+4. Implement transaction locking during reingestion to prevent concurrent issues
