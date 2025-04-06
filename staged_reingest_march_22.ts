@@ -15,15 +15,13 @@ import { fetchBidsOffers } from "./server/services/elexon";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from 'url';
-import { Logger } from "./server/utils/logger";
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const logger = new Logger("march_22_reingest");
+// Use console.log instead of logger to avoid errors
 const TARGET_DATE = '2025-03-22';
-const START_PERIOD = 1; // Change these values to process different batches
-const END_PERIOD = 6;  // Recommended batch size: 6 periods per batch
+const START_PERIOD = 47; // Start with the missing periods (47-48)
+const END_PERIOD = 48;  // Recommended batch size: 6 periods per batch
 const BMU_MAPPING_PATH = path.join(__dirname, "server/data/bmuMapping.json");
 const API_THROTTLE_MS = 500; // Delay between API calls to avoid rate limits
 

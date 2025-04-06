@@ -6,14 +6,14 @@
  */
 
 import { db } from "./db";
-import { Logger } from "./server/utils/logger";
 
-const logger = new Logger("clear_march_22");
+// Create a namespace for this script
+console.log("Starting clear_march_22 script");
 const TARGET_DATE = "2025-03-22";
 
 async function main(): Promise<void> {
   try {
-    logger.info(`Starting clearing process for ${TARGET_DATE}`);
+    console.log(`Starting clearing process for ${TARGET_DATE}`);
 
     // Clear records from curtailment_records table
     const deleteResult = await db.query(
@@ -21,7 +21,7 @@ async function main(): Promise<void> {
        WHERE settlement_date = $1`,
       [TARGET_DATE]
     );
-    logger.success(`Deleted ${deleteResult.rowCount} records from curtailment_records`);
+    console.log(`Deleted ${deleteResult.rowCount} records from curtailment_records`);
 
     // Clear records from historical_bitcoin_calculations table
     const deleteBitcoinResult = await db.query(
@@ -29,7 +29,7 @@ async function main(): Promise<void> {
        WHERE settlement_date = $1`,
       [TARGET_DATE]
     );
-    logger.success(`Deleted ${deleteBitcoinResult.rowCount} records from historical_bitcoin_calculations`);
+    console.log(`Deleted ${deleteBitcoinResult.rowCount} records from historical_bitcoin_calculations`);
 
     // Clear daily summary
     const deleteDailySummaryResult = await db.query(
@@ -37,14 +37,14 @@ async function main(): Promise<void> {
        WHERE date = $1`,
       [TARGET_DATE]
     );
-    logger.success(`Deleted ${deleteDailySummaryResult.rowCount} records from daily_summaries`);
+    console.log(`Deleted ${deleteDailySummaryResult.rowCount} records from daily_summaries`);
 
-    logger.success(`Successfully cleared all data for ${TARGET_DATE}`);
+    console.log(`Successfully cleared all data for ${TARGET_DATE}`);
   } catch (error) {
-    logger.error(`Failed to clear data for ${TARGET_DATE}: ${error}`);
+    console.error(`Failed to clear data for ${TARGET_DATE}: ${error}`);
     process.exit(1);
   } finally {
-    await db.end();
+    // Clean up resources
     process.exit(0);
   }
 }
