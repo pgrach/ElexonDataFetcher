@@ -51,9 +51,9 @@ Here are reference numbers from successful reingests:
 - 48 complete settlement periods
 
 ### March 21, 2025
-- 1,945 curtailment records
-- 49,604 MWh of curtailed energy
-- £1,171,353.13 in payments
+- 2,015 curtailment records
+- 50,518.72 MWh of curtailed energy
+- £1,240,439.58 in payments
 - 48 complete settlement periods
 
 ## Behind The Scenes
@@ -85,21 +85,35 @@ The script performs these key operations:
 - **API Rate Limiting**: If you encounter API rate limiting issues, adjust the `API_THROTTLE_MS` value (default: 500ms)
 - **Database Timeouts**: For very large datasets, reduce the `BATCH_SIZE` to process fewer periods at once
 - **Missing Farm Mappings**: Ensure the BMU mapping file is up-to-date with all required wind farms
-- **Process Timeout Issues**: Use the staged approach from `reingest_march_21.ts` or `staged_reingest_march_28.ts` for very large datasets
+- **Process Timeout Issues**: Use the staged approach from `staged_reingest_march_21.ts` or `staged_reingest_march_28.ts` for very large datasets
 
 ### Using Staged Reingestion
 
 If the complete reingest script times out, use the staged approach:
 
-1. Modify the `START_PERIOD` and `END_PERIOD` variables in the script to process a smaller batch:
+1. Create a staged reingestion script based on `staged_reingest_march_21.ts` for the target date
+2. Set the `START_PERIOD` and `END_PERIOD` variables to process a smaller batch:
    ```typescript
-   const START_PERIOD = 1;  // First batch: periods 1-10
-   const END_PERIOD = 10;
+   const START_PERIOD = 1;  // First batch: periods 1-6 
+   const END_PERIOD = 6;
    ```
 
-2. Run the script for each batch, incrementing the period numbers each time
-3. Monitor the progress and continue until all 48 periods are processed
-4. The script will automatically update all summary tables between batches
+3. Run the script for each batch, incrementing the period numbers each time
+4. For high-volume dates, use smaller batch sizes (4-6 periods) to prevent timeouts
+5. After completing all batches, run a dedicated summary update script (like `update_march_21_summaries.ts`)
+
+### Recommended Batch Sizes
+
+Based on our experience with March 21 and March 28 reingestions:
+
+| Volume Level | Records | MWh Range | Recommended Batch Size |
+|--------------|---------|-----------|------------------------|
+| Low          | < 1,000 | < 30,000  | 8-12 periods           |
+| Medium       | 1-2,000 | 30-60,000 | 6-8 periods            |
+| High         | 2-3,000 | 60-80,000 | 4-6 periods            |
+| Very High    | > 3,000 | > 80,000  | 3-4 periods            |
+
+For March 21, we found that processing 4-6 periods at a time was optimal to handle the large volume while avoiding timeouts.
 
 ## Examples and Use Cases
 
@@ -123,16 +137,49 @@ Verification Check for 2025-04-10: {
 Update successful at 2025-04-10T12:34:56.789Z
 ```
 
-### Example 2: Staged Reingestion (For Large Datasets)
+### Example 2: Staged Reingestion for March 21, 2025
 
-For dates with large volumes of data (like March 28, 2025), use the staged approach:
+For dates with medium to high data volume (like March 21, 2025), use the staged approach with smaller batches:
 
 ```bash
-# First batch - periods 1-10
-npx tsx staged_reingest_march_28.ts  # After setting START_PERIOD=1 and END_PERIOD=10
+# Staged reingestion in 8 batches of 6 periods each
+npx tsx staged_reingest_march_21.ts  # After setting START_PERIOD=1 and END_PERIOD=6
+npx tsx staged_reingest_march_21.ts  # After setting START_PERIOD=7 and END_PERIOD=12
+npx tsx staged_reingest_march_21.ts  # After setting START_PERIOD=13 and END_PERIOD=18
+# ... continue with remaining batches
 
-# Second batch - periods 11-20
-npx tsx staged_reingest_march_28.ts  # After setting START_PERIOD=11 and END_PERIOD=20
+# After all batches complete, update summary tables
+npx tsx update_march_21_summaries.ts
+```
+
+Expected final output:
+```
+=== Updating Summaries for March 21, 2025 ===
+Raw totals from database:
+- Energy: 50518.72 MWh
+- Payment: -1240439.58
+Daily summary updated for 2025-03-21:
+- Energy: 50518.72 MWh
+- Payment: £-1240439.58
+Monthly summary updated for 2025-03:
+- Energy: 941012.27 MWh
+- Payment: £-23366675.09
+Yearly summary updated for 2025:
+- Energy: 2655670.60 MWh
+- Payment: £-66753759.37
+Updating Bitcoin calculations for 2025-03-21...
+```
+
+### Example 3: Staged Reingestion for March 28, 2025
+
+For dates with very high data volume (like March 28, 2025), use even smaller batch sizes:
+
+```bash
+# First batch - periods 1-4
+npx tsx staged_reingest_march_28.ts  # After setting START_PERIOD=1 and END_PERIOD=4
+
+# Second batch - periods 5-8
+npx tsx staged_reingest_march_28.ts  # After setting START_PERIOD=5 and END_PERIOD=8
 
 # Continue with remaining batches...
 ```
@@ -149,7 +196,7 @@ SUCCESS: All 48 settlement periods are now in the database!
 SUCCESS: Final payment total £-3784089.62 matches expected total (within £100 margin)
 ```
 
-### Example 3: Critical Date Processing
+### Example 4: Critical Date Processing
 
 For direct targeting of specific settlement periods:
 
