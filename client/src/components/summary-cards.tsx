@@ -128,15 +128,10 @@ export default function SummaryCards({
         : format(date, "PP");
 
   // Check if there's no data for the selected date
-  // Debug logging to see what's coming from the API
+  // Add some debug logging to see what's coming from the API
   console.log(`[DEBUG] Summary data for ${formattedDate}:`, summaryData);
-  
-  // Check if there's data for the selected date (fixed logic to properly evaluate positive numbers)
   const hasCurtailmentData =
-    !isSummaryLoading && 
-    summaryData && 
-    summaryData.totalCurtailedEnergy && 
-    Number(summaryData.totalCurtailedEnergy) > 0;
+    !isSummaryLoading && Number(summaryData.totalCurtailedEnergy) > 0;
 
   // If there's no data, show a message instead of empty cards
   if (!hasCurtailmentData && !isSummaryLoading) {
