@@ -131,7 +131,7 @@ export default function SummaryCards({
   // Add some debug logging to see what's coming from the API
   console.log(`[DEBUG] Summary data for ${formattedDate}:`, summaryData);
   const hasCurtailmentData =
-    !isSummaryLoading && Number(summaryData.totalCurtailedEnergy) > 0;
+    !isSummaryLoading && summaryData && Number(summaryData.totalCurtailedEnergy) > 0;
 
   // If there's no data, show a message instead of empty cards
   if (!hasCurtailmentData && !isSummaryLoading) {
@@ -257,7 +257,7 @@ export default function SummaryCards({
     Number(summaryData.totalPayment) === 0
       ? 0
       : Number(bitcoinData.valueAtCurrentPrice) /
-        Number(summaryData.totalPayment);
+        Math.abs(Number(summaryData.totalPayment));
 
   // Regular view when data is available
   return (
@@ -343,7 +343,7 @@ export default function SummaryCards({
                       <div className="text-4xl font-bold text-red-600 mb-2">
                         {Number.isNaN(Number(summaryData.totalPayment))
                           ? "£0"
-                          : formatGBP(Number(summaryData.totalPayment))}
+                          : formatGBP(Math.abs(Number(summaryData.totalPayment)))}
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -351,7 +351,7 @@ export default function SummaryCards({
                         Full amount: £
                         {Number.isNaN(Number(summaryData.totalPayment))
                           ? "0"
-                          : Number(summaryData.totalPayment).toLocaleString(
+                          : Math.abs(Number(summaryData.totalPayment)).toLocaleString(
                               undefined,
                               { maximumFractionDigits: 2 }
                             )}
@@ -365,10 +365,9 @@ export default function SummaryCards({
                     Paid to idle wind farms
                   </p>
                 </div>
-                {Number(summaryData.totalCurtailedEnergy) > 0 &&
-                  Number(summaryData.totalPayment) > 0 && (
+                {Number(summaryData.totalCurtailedEnergy) > 0 && (
                     <p className="text-lg text-muted-foreground mt-2 border-t pt-2 border-dashed border-slate-200">
-                      £{(Number(summaryData.totalPayment) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh
+                      £{(Math.abs(Number(summaryData.totalPayment)) / Number(summaryData.totalCurtailedEnergy)).toFixed(2)} per MWh
                     </p>
                   )}
               </>
