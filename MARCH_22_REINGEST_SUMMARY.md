@@ -1,69 +1,73 @@
 # March 22, 2025 Data Reingestion Summary
 
-## Overview
-This document summarizes the process and results of reingesting all settlement period data for March 22, 2025 to correct incomplete data. The original data showed only 46 out of 48 settlement periods, with periods 47 and 48 missing. Additionally, the payment amount needed verification.
+## Current Status
 
-## Reingestion Process
+- **Date**: March 22, 2025
+- **Current Data**: 
+  - 898 curtailment records across 46 settlement periods
+  - Missing periods 47-48 (23:00 hour)
+  - Total Energy: 25,525.77 MWh
+  - Total Payment: £63,809.23
+  - Bitcoin Mined: 19.54671363 BTC
 
-### Steps Taken
-1. Cleared all existing data for March 22, 2025 using `clear_march_22_data.ts`
-2. Created `staged_reingest_march_22.ts` applying the batch processing approach from our previous March 21 reingestion
-3. Processed all 48 settlement periods in smaller batches of 6 periods each to prevent API timeouts:
-   - Batch 1: Periods 1-6
-   - Batch 2: Periods 7-12
-   - Batch 3: Periods 13-18
-   - Batch 4: Periods 19-24
-   - Batch 5: Periods 25-30
-   - Batch 6: Periods 31-36
-   - Batch 7: Periods 37-42
-   - Batch 8: Periods 43-48
-4. Updated summary tables for daily, monthly, and yearly totals using `update_march_22_summaries.ts`
-5. Recalculated Bitcoin mining potential for all miner models
+## Reingestion Approach
 
-### Improvements from March 21 Reingestion
-1. **Batched database inserts**: Instead of inserting records one by one, we used batch inserts to reduce database load
-2. **Better error handling**: Added comprehensive error handling and logging
-3. **Verification after each stage**: Added verification steps for each batch to track missing periods
-4. **Explicit connection cleanup**: Added proper database connection cleanup in finally blocks
-5. **Structured logging**: Used the Logger utility for more consistent logging
+The reingestion process uses a staged approach where settlement periods are processed in smaller batches to prevent timeout issues with the Elexon API. This approach follows the same pattern used successfully for the March 21 reingestion.
 
-## Results
-- **All 48 settlement periods** were successfully processed
-- **[Number] curtailment records** were ingested
-- **Total volume**: [Final volume] MWh
-- **Total payment**: £[Final payment amount]
-- **Bitcoin mining potential**: [Final BTC amount] BTC
+### Scripts Created
 
-## Payment Verification
+1. **clear_march_22_data_simplified.ts**
+   - Completely removes all existing data for March 22, 2025
+   - Deletes from curtailment_records, historical_bitcoin_calculations, and daily_summaries tables
 
-| Metric | Amount |
-|--------|--------|
-| Original payment | £63,809.23 |
-| Final payment | £[Final amount] |
-| Difference | £[Difference] |
-| Percentage difference | [Percentage]% |
+2. **staged_reingest_march_22_simplified.ts**
+   - Processes a batch of settlement periods
+   - Configured to prioritize missing periods 47-48
+   - Fetches data from the Elexon API
+   - Filters valid wind farm curtailment records
+   - Inserts them into the database
+   - Provides a summary of processed data
 
-## Settlement Period Analysis
-The data shows significant variation in curtailment volume and payment across different settlement periods:
-- Highest payment periods: [Period numbers]
-- Highest volume periods: [Period numbers]
-- Previously missing periods (47-48): [Volume] MWh, £[Payment amount]
+3. **update_march_22_summaries_simplified.ts**
+   - Updates daily, monthly, and yearly summary tables
+   - Recalculates Bitcoin mining potential
+   - Should be run after all settlement periods are processed
 
-## Hourly Analysis
-Our hourly breakdown now shows a complete 24-hour view, with the previously missing data from 23:00 hour now properly populated:
+## Running the Reingestion
 
-| Hour | Original Volume (MWh) | New Volume (MWh) | Change |
-|------|----------------------|-----------------|--------|
-| 23:00 | 0.00 | [New value] | +[New value] |
+The reingestion process should be executed in the following order:
 
-## Conclusion
-The March 22, 2025 data reingestion was successfully completed, with all 48 settlement periods properly processed. The staged batch processing approach proved effective and significantly more robust than our previous methods.
+1. First, clear all existing data:
+   ```
+   npx tsx clear_march_22_data_simplified.ts
+   ```
 
-### Lessons Applied:
-1. Batch sizes of 6 periods work well for moderate data volumes
-2. Proper API throttling is essential for reliable data retrieval
-3. Clearing Bitcoin calculations before reingestion prevents duplicates
-4. Final verification ensures data integrity across the entire dataset
-5. The Logger utility provides clearer status updates and error reporting
+2. Process the missing settlement periods (47-48):
+   ```
+   npx tsx staged_reingest_march_22_simplified.ts
+   ```
 
-The reingestion process has been documented as a standard procedure in the updated `DATA_REINGEST_GUIDE.md`.
+3. Run the remainder of the settlement periods if needed (can edit START_PERIOD and END_PERIOD in the script):
+   ```
+   # Edit the script to set START_PERIOD=1 and END_PERIOD=46
+   npx tsx staged_reingest_march_22_simplified.ts
+   ```
+
+4. Update summary tables and Bitcoin calculations:
+   ```
+   npx tsx update_march_22_summaries_simplified.ts
+   ```
+
+## Verification
+
+After running the reingestion, the data should show:
+- All 48 settlement periods present
+- Data for the 23:00 hour correctly showing in the hourly breakdown chart
+- The correct total energy and payment values
+
+## Expected Results
+
+Based on the March 21 pattern, we expect:
+- Complete data for all 48 settlement periods
+- No missing hourly data in the visualization
+- Bitcoin calculations properly reflecting the full dataset
