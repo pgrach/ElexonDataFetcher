@@ -269,16 +269,14 @@ async function processBitcoinCalculations(date: string): Promise<{
           
           // Insert the calculation record
           await db.insert(historicalBitcoinCalculations).values({
-            id: `${date}_${period}_${farmId}_${minerModel}`,
             settlementDate: date,
             settlementPeriod: period,
             farmId,
-            farmName: group.farmName,
             minerModel,
-            curtailedEnergy: group.totalEnergy.toString(),
-            difficulty: difficulty.toString(),
             bitcoinMined: bitcoinMined.toString(),
-            lastUpdated: new Date()
+            difficulty: difficulty.toString(),
+            curtailedEnergy: group.totalEnergy.toString(), // Add this field back
+            calculatedAt: new Date()
           });
           
           recordsProcessed++;
