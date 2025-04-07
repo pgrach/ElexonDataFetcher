@@ -11,49 +11,51 @@
  * 4. Updates all summary tables in a cascade
  */
 
-import { format } from 'date-fns';
-import { processAllPeriods } from './fix_bmu_mapping';
+import { processAllPeriods } from './process_all_periods';
 import { processFullCascade } from './process_bitcoin_optimized';
+import { format } from 'date-fns';
 
 async function fixDate(date: string): Promise<void> {
-  console.log(`\n=== Starting Complete Data Fix for ${date} ===\n`);
-  
   try {
-    // Step 1: Process all periods for curtailment data
-    console.log(`\n==== Step 1: Processing Curtailment Records ====\n`);
+    console.log(`\n=== Starting Data Fix for ${date} ===\n`);
+    
+    // Step 1: Process curtailment data for all 48 periods
+    console.log('\n--- Step 1: Processing Curtailment Records ---\n');
     const curtailmentResult = await processAllPeriods(date);
     
     if (curtailmentResult.totalRecords === 0) {
-      console.log(`\nNo curtailment records found for ${date}, skipping Bitcoin calculations`);
+      console.log(`No curtailment data found for ${date}, stopping process`);
       return;
     }
     
-    console.log(`\nProcessed ${curtailmentResult.totalRecords} curtailment records across ${curtailmentResult.totalPeriods} periods`);
-    console.log(`Total Energy: ${curtailmentResult.totalVolume.toFixed(2)} MWh`);
-    console.log(`Total Payment: £${curtailmentResult.totalPayment.toFixed(2)}`);
-    
-    // Step 2: Process Bitcoin calculations and cascade updates
-    console.log(`\n==== Step 2: Processing Bitcoin Calculations and Summaries ====\n`);
+    // Step 2: Process Bitcoin calculations for all miner models
+    console.log('\n--- Step 2: Processing Bitcoin Calculations ---\n');
     await processFullCascade(date);
     
-    console.log(`\n=== Complete Data Fix Successful for ${date} ===\n`);
+    console.log(`\n=== Data Fix Complete for ${date} ===\n`);
+    console.log('Summary:');
+    console.log(`- Date: ${date}`);
+    console.log(`- Curtailment Records: ${curtailmentResult.totalRecords}`);
+    console.log(`- Periods Processed: ${curtailmentResult.totalPeriods}/48`);
+    console.log(`- Total Volume: ${curtailmentResult.totalVolume.toFixed(2)} MWh`);
+    console.log(`- Total Payment: £${curtailmentResult.totalPayment.toFixed(2)}`);
+    
+    console.log('\nTo verify the fix, run:');
+    console.log(`npx tsx check_elexon_data.ts ${date}`);
   } catch (error) {
-    console.error(`\nError fixing data for ${date}:`, error);
-    console.error(`\nSuggested recovery steps:`);
-    console.error(`1. Try processing curtailment records only: npx tsx fix_bmu_mapping_minimal.ts ${date}`);
-    console.error(`2. Check the database for existing records: SELECT COUNT(*) FROM curtailment_records WHERE settlement_date = '${date}'`);
-    console.error(`3. See DATA_VERIFICATION.md for more detailed troubleshooting steps`);
+    console.error('Error fixing data:', error);
+    throw error;
   }
 }
 
 async function main() {
   try {
     // Get the date from command-line arguments or use default
-    const dateToProcess = process.argv[2] || format(new Date(), 'yyyy-MM-dd');
+    const dateToFix = process.argv[2] || format(new Date(), 'yyyy-MM-dd');
     
-    await fixDate(dateToProcess);
+    await fixDate(dateToFix);
   } catch (error) {
-    console.error('Unexpected error:', error);
+    console.error('Error in fix_incomplete_data_optimized:', error);
     process.exit(1);
   }
 }
