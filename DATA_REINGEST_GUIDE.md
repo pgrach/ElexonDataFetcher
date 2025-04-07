@@ -50,6 +50,12 @@ Here are reference numbers from successful reingests:
 - £3,784,089.62 in payments
 - 48 complete settlement periods
 
+### March 22, 2025
+- [Final record count] curtailment records
+- [Final MWh] MWh of curtailed energy
+- £[Final payment] in payments
+- 48 complete settlement periods
+
 ### March 21, 2025
 - 2,015 curtailment records
 - 50,518.72 MWh of curtailed energy
