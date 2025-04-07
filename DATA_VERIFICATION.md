@@ -111,6 +111,25 @@ The most common issue is missing settlement periods. This can happen due to:
 
 The verification tools check if all 48 periods are present and identify specific missing ones.
 
+### 1.1 No Valid Records Issue
+
+Sometimes Elexon API returns records, but they're all filtered out by our validation rules. You might see logs like:
+
+```
+[2025-03-27 P1] Records: 30 (1010.81 MWh, £10396.22)
+[2025-03-27 P1] No valid curtailment records found
+```
+
+This happens when none of the API records meet all of our filtering criteria:
+- Volume must be negative (representing curtailment)
+- Record must be flagged (soFlag or cadlFlag must be true)
+- Farm ID must be in our valid wind farm BMU IDs list
+
+If valid data should exist but is being filtered out, check:
+- The BMU mapping file to ensure it contains the expected wind farm IDs
+- The filtering logic in the processing scripts
+- Whether the API is returning properly formatted data
+
 ### 2. Data Mismatches
 
 Sometimes stored data doesn't match what's available from the API:
@@ -137,6 +156,14 @@ Problems with external services can impact verification:
 - API format changes
 
 The system provides alternative paths (like fix_data_for_march_27.ts) to handle these scenarios.
+
+### 5. Database Constraint Issues
+
+Database schema constraints can sometimes cause processing errors:
+- The `curtailment_records` table lacks a unique constraint on (settlement_date, settlement_period, farm_id)
+- This prevents using `onConflictDoUpdate` for upsert operations
+- The `fix_data_for_march_27.ts` script has been updated to handle this by checking for existing records before insertion
+- Other tables like `historical_bitcoin_calculations`, `bitcoin_monthly_summaries`, and `bitcoin_yearly_summaries` have proper unique constraints
 
 ## Best Practices for Data Verification
 
@@ -211,6 +238,33 @@ For dates with very large data volumes:
 1. Use sampling-based verification instead of full verification
 2. Increase batch sizes and timeouts in the scripts
 3. Consider using specialized scripts like `fix_incomplete_data_optimized.ts`
+
+### Database Constraint Errors
+
+If you encounter database constraint errors like `there is no unique or exclusion constraint matching the ON CONFLICT specification`:
+
+1. Use the updated `fix_data_for_march_27.ts` script which handles this issue
+2. If modifying other scripts, replace `onConflictDoUpdate` operations on the `curtailment_records` table with:
+   ```typescript
+   // Check if record already exists
+   const existingRecord = await db.query.curtailmentRecords.findFirst({
+     where: and(
+       eq(curtailmentRecords.settlementDate, record.settlementDate),
+       eq(curtailmentRecords.settlementPeriod, record.settlementPeriod),
+       eq(curtailmentRecords.farmId, record.farmId)
+     )
+   });
+   
+   if (existingRecord) {
+     // Update existing record
+     await db.update(curtailmentRecords)
+       .set({ /* fields to update */ })
+       .where(eq(curtailmentRecords.id, existingRecord.id));
+   } else {
+     // Insert new record
+     await db.insert(curtailmentRecords).values(record);
+   }
+   ```
 
 ## Conclusion
 
