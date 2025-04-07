@@ -124,6 +124,58 @@ For a typical day with 48 settlement periods:
 - M20S: 556.74644712 BTC
 - S9: 280.71290970 BTC
 
+## Verification Tools
+
+The system includes specialized tools for data verification:
+
+### Elexon Data Verification
+
+The `check_elexon_data.ts` script provides a reliable way to verify that the database records match the data from the Elexon API:
+
+```bash
+# Basic usage
+npx tsx check_elexon_data.ts [date] [sampling-method]
+
+# Examples
+npx tsx check_elexon_data.ts                     # Checks default date with progressive sampling
+npx tsx check_elexon_data.ts 2025-03-28          # Checks specific date with progressive sampling
+npx tsx check_elexon_data.ts 2025-03-28 random   # Uses random sampling of periods
+npx tsx check_elexon_data.ts 2025-03-28 fixed    # Uses fixed key periods only
+npx tsx check_elexon_data.ts 2025-03-28 full     # Attempts to check all 48 periods (may hit API limits)
+```
+
+#### Intelligent Sampling Strategies
+
+The script offers several sampling methods to balance thoroughness with API efficiency:
+
+1. **Progressive Sampling** (default): Starts with 5 key periods (1, 12, 24, 36, 48), then adds up to 15 more random periods if any issues are found. This provides efficient verification while avoiding unnecessary API calls.
+
+2. **Random Sampling**: Checks 10 randomly selected periods (including first and last) for better coverage of the day without bias toward specific times.
+
+3. **Fixed Key Periods**: Only checks strategic periods (1, 12, 24, 36, 48) representing morning, midday, afternoon, evening, and night. Fast but may miss issues in other periods.
+
+4. **Full Verification**: Attempts to check all 48 periods, but may hit API rate limits. Use sparingly and only when necessary.
+
+#### Features
+
+This script:
+1. Uses intelligent sampling strategies to effectively find data inconsistencies
+2. Compares record counts, energy volumes, and payment amounts against the API
+3. Provides actionable instructions if discrepancies are found
+4. Verifies consistency between curtailment_records and daily_summaries tables
+5. Includes a data quality assessment with severity ratings (Minor/Moderate/Major/Critical)
+
+If discrepancies are found, the script provides the exact commands needed to reprocess the data:
+```
+=== Reingestion Required ===
+Run the following commands to update the data:
+1. npx tsx server/services/curtailment.ts process-date 2025-03-22
+2. For each model (S19J_PRO, S9, M20S):
+   npx tsx server/services/bitcoinService.ts process-date 2025-03-22 MODEL_NAME
+3. npx tsx server/services/bitcoinService.ts recalculate-monthly 2025-03
+4. npx tsx server/services/bitcoinService.ts recalculate-yearly 2025
+```
+
 ## Troubleshooting
 
 If the process fails, check these common issues:
@@ -132,6 +184,7 @@ If the process fails, check these common issues:
 2. **API Timeouts**: For large datasets, increase the batch size or add more pauses
 3. **Duplicate Records**: Verify the ON CONFLICT clauses are working correctly
 4. **Missing Periods**: Look for API errors in the logs that might indicate missing data
+5. **Data Consistency**: Use verification tools like `check_elexon_data.ts` to identify inconsistencies
 
 ## Maintenance Recommendations
 
@@ -139,3 +192,4 @@ If the process fails, check these common issues:
 - Monitor memory usage for large datasets
 - Consider increasing batch sizes for faster processing if resources allow
 - Periodically verify historical data integrity using the verification functions
+- Run the `check_elexon_data.ts` script weekly on random dates to ensure ongoing data consistency
