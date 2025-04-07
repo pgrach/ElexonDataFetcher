@@ -100,6 +100,22 @@ The repair process follows a defined sequence to ensure complete data integrity:
 4. **Update Summary Tables**: Recalculate all summary tables (daily, monthly, yearly)
 5. **Verify Repair**: Confirm the repair was successful by comparing before/after states
 
+### Using fix_incomplete_data_optimized.ts
+
+For targeted repair operations without verification, you can use the optimized fix script:
+
+```bash
+npx tsx fix_incomplete_data_optimized.ts [date]
+```
+
+This script efficiently processes a specific date by:
+- Handling all 48 periods in batches to avoid API rate limits
+- Fetching difficulty data only once per date for all calculations
+- Processing all miner models (S19J_PRO, S9, M20S) in a single pass
+- Updating all summary tables in a cascade
+
+The optimized version is significantly faster than individual processing scripts and avoids redundant API calls.
+
 ## Common Data Issues
 
 ### Missing Periods
@@ -167,9 +183,26 @@ If summaries remain inconsistent after repair:
 
 For persistent data issues:
 1. Try the force-fix option: `npx tsx verify_and_fix_data.ts <date> force-fix`
-2. Check for schema changes or database migrations
-3. Verify the BMU mapping file is up-to-date
-4. Consider reprocessing adjacent dates if the issue spans multiple days
+2. Use the complete cascade process: `npx tsx process_complete_cascade.ts <date>`
+3. Check for schema changes or database migrations
+4. Verify the BMU mapping file is up-to-date
+5. Consider reprocessing adjacent dates if the issue spans multiple days
+
+### Complete Cascade Processing
+
+For situations requiring full reprocessing with optimized performance:
+
+```bash
+npx tsx process_complete_cascade.ts [date]
+```
+
+This script provides the most comprehensive approach by:
+1. Processing all 48 settlement periods with proper batching
+2. Calculating Bitcoin mining potential for all miner models
+3. Updating all monthly and yearly summaries
+4. Implementing proper retry logic and error handling
+
+This is ideal for critical dates or when you need to ensure the entire data pipeline is correctly processed.
 
 ## Conclusion
 
