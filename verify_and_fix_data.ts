@@ -101,11 +101,12 @@ async function loadBmuMapping(): Promise<Record<string, { name: string, leadPart
     console.log('Loading BMU mapping from data/bmu_mapping.json...');
     const mappingFile = await fs.readFile(path.join('data', 'bmu_mapping.json'), 'utf-8');
     bmuMapping = JSON.parse(mappingFile);
-    console.log(`Loaded ${Object.keys(bmuMapping).length} BMU mappings`);
-    return bmuMapping;
+    console.log(`Loaded ${Object.keys(bmuMapping || {}).length} BMU mappings`);
+    return bmuMapping || {};
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
-    throw error;
+    bmuMapping = {};
+    return {};
   }
 }
 
@@ -212,7 +213,7 @@ async function checkPeriod(date: string, period: number): Promise<{
     
     // Calculate totals for API records
     const apiVolume = validApiRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-    const apiPayment = validApiRecords.reduce((sum, r) => sum + Math.abs(r.payment), 0);
+    const apiPayment = validApiRecords.reduce((sum, r) => sum + Math.abs(r.volume) * r.originalPrice * -1, 0);
     
     // Calculate totals for DB records
     const dbVolume = dbRecords.reduce((sum, r) => sum + Math.abs(Number(r.volume)), 0);
@@ -337,7 +338,7 @@ async function verifyData(date: string, samplingMethod: string = 'progressive'):
       result.totalMismatch++;
       result.mismatchedPeriods.push(period);
       result.isPassing = false;
-    } else if (checkResult.status === 'missing' && checkResult.apiCount > 0) {
+    } else if (checkResult.status === 'missing' && checkResult.apiCount && checkResult.apiCount > 0) {
       result.missingPeriods.push(period);
       result.isPassing = false;
     }
@@ -382,7 +383,7 @@ async function verifyData(date: string, samplingMethod: string = 'progressive'):
       if (checkResult.status === 'mismatch') {
         result.totalMismatch++;
         result.mismatchedPeriods.push(period);
-      } else if (checkResult.status === 'missing' && checkResult.apiCount > 0) {
+      } else if (checkResult.status === 'missing' && checkResult.apiCount && checkResult.apiCount > 0) {
         result.missingPeriods.push(period);
       }
       
@@ -456,38 +457,15 @@ async function fixData(date: string): Promise<{
   
   // Step 1: Process curtailment data
   console.log('Step 1: Processing curtailment records...');
-  
-  // Step 1: Use direct import to run the process_all_periods script
-  console.log(`Running: process_all_periods.ts for ${date}`);
-  try {
-    // Import and run the function directly
-    const processAllPeriodsModule = await import('./process_all_periods.ts');
-    const curtailmentResult = await processAllPeriodsModule.processAllPeriods(date);
-    console.log('Curtailment processing completed successfully');
-    console.log(`Processed ${curtailmentResult.totalPeriods} periods`);
-    console.log(`Total records: ${curtailmentResult.totalRecords}`);
-    console.log(`Total volume: ${curtailmentResult.totalVolume.toFixed(2)} MWh`);
-    console.log(`Total payment: £${curtailmentResult.totalPayment.toFixed(2)}`);
-  } catch (error) {
-    console.error('Failed to run processAllPeriods:', error);
-    throw error;
-  }
+  const curtailmentResult = await processAllPeriods(date);
   
   // Step 2: Process Bitcoin calculations with full cascade updates
   console.log('\nStep 2: Processing Bitcoin calculations and updating summaries...');
-  try {
-    // Import and run the function directly
-    const bitcoinModule = await import('./process_bitcoin_optimized.ts');
-    await bitcoinModule.processFullCascade(date);
-    console.log('Bitcoin processing and summaries completed successfully');
-  } catch (error) {
-    console.error('Failed to run processFullCascade:', error);
-    throw error;
-  }
+  await processFullCascade(date);
   
   return {
-    curtailmentResult: 'Completed via process_all_periods.ts',
-    bitcoinResult: 'Completed via process_bitcoin_optimized.ts'
+    curtailmentResult,
+    bitcoinResult: 'Completed successfully'
   };
 }
 
