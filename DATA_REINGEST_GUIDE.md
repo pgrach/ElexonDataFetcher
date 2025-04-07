@@ -1,223 +1,157 @@
-# Data Reingest Guide
+# Data Reingestion Guide
 
-This guide explains how to use the data reingest reference file to fix incomplete or corrupted data for any date in the system. This process is particularly useful when you need to ensure all 48 settlement periods for a specific date are properly ingested from the Elexon API.
+## Overview
+This guide outlines the process for reingesting settlement data to ensure correct and complete representation in our database. Use this guide when discrepancies are discovered between expected payment amounts or when data appears to be missing or incomplete.
 
-## Problem Background
+## When to Reingest Data
 
-When settlement period data is incomplete for a date (for example, having only some of the 48 periods), it causes several issues:
+Consider reingestion when:
+1. Payment amounts differ significantly from expected values 
+2. Settlement periods are missing from the database
+3. API data has been updated or corrected since initial ingestion
+4. Bitcoin mining calculations need to be recalculated with updated parameters
 
-1. **Incomplete Data Visualization**: Charts will show gaps or partial data for the affected date
-2. **Inaccurate Summaries**: Daily, monthly, and yearly summaries may be incorrect
-3. **Missing Bitcoin Calculations**: Bitcoin mining calculations will be incomplete
+## Reingestion Workflow
 
-## Solution Overview
+### 1. Verify Current Data Status
+First, analyze the current data to understand the extent of the issue:
 
-The `data_reingest_reference.ts` script provides a complete solution that:
+```sql
+-- Check for completeness of periods
+SELECT 
+  COUNT(DISTINCT settlement_period) as period_count,
+  MIN(settlement_period) as min_period,
+  MAX(settlement_period) as max_period
+FROM curtailment_records
+WHERE settlement_date = 'YYYY-MM-DD';
 
-1. Clears existing data for the target date
-2. Fetches all 48 settlement periods from the Elexon API
-3. Processes the data in manageable batches to avoid timeouts
-4. Updates all relevant summary tables (daily, monthly, yearly)
-5. Recalculates all Bitcoin mining potential values
-6. Verifies the data integrity after processing
+-- Check for total volumes and payments
+SELECT 
+  COUNT(*) as record_count,
+  SUM(volume) as total_volume,
+  SUM(payment) as total_payment
+FROM curtailment_records
+WHERE settlement_date = 'YYYY-MM-DD';
 
-## Usage Instructions
+-- Identify specific missing periods
+WITH all_periods AS (
+  SELECT generate_series(1, 48) as period
+)
+SELECT a.period
+FROM all_periods a
+LEFT JOIN (
+  SELECT DISTINCT settlement_period
+  FROM curtailment_records
+  WHERE settlement_date = 'YYYY-MM-DD'
+) c ON a.period = c.settlement_period
+WHERE c.settlement_period IS NULL
+ORDER BY a.period;
+```
 
-1. **Identify the problematic date** you need to fix (for example, if charts show incomplete data)
+### 2. Choose the Appropriate Reingestion Strategy
 
-2. **Run the script** with the target date:
-   ```bash
-   npx tsx data_reingest_reference.ts 2025-04-10
-   ```
-
-3. **Monitor the logs** to track progress:
-   - The script generates a log file named `reingest_YYYY-MM-DD.log` 
-   - The console will also display progress information
-   - Look for the "Update successful" message at the end
-
-4. **Verify the results**:
-   - Check that the daily summary has been updated with correct values
-   - Verify that Bitcoin calculations exist for all periods
-   - Confirm that charts and data visualizations now show complete data
-
-## Key Performance Numbers
-
-Here are reference numbers from successful reingests:
-
-### March 28, 2025
-- 4,684 curtailment records
-- 99,904 MWh of curtailed energy
-- £3,784,089.62 in payments
-- 48 complete settlement periods
-
-### March 22, 2025
-- [Final record count] curtailment records
-- [Final MWh] MWh of curtailed energy
-- £[Final payment] in payments
-- 48 complete settlement periods
-
-### March 21, 2025
-- 2,015 curtailment records
-- 50,518.72 MWh of curtailed energy
-- £1,240,439.58 in payments
-- 48 complete settlement periods
-
-## Behind The Scenes
-
-The script performs these key operations:
-
-1. **Database Clearing**: Removes existing records for the target date from:
-   - `curtailment_records`
-   - `historical_bitcoin_calculations`
-   - `daily_summaries`
-
-2. **Data Processing**:
-   - Processes periods in batches (recommended: 5-10 periods per batch) to avoid timeouts
-   - Maps BMU IDs to farm IDs using the mapping file
-   - Calculates volumes and payments for each record
-   - Handles API rate limiting with throttled requests
-
-3. **Summary Updates**:
-   - Updates daily summary for the target date
-   - Recalculates monthly summary for the affected month
-   - Updates yearly summary for the affected year
-
-4. **Bitcoin Recalculations**:
-   - Recalculates Bitcoin mining potential for each farm and period
-   - Updates monthly and yearly Bitcoin summaries
-
-## Troubleshooting
-
-- **API Rate Limiting**: If you encounter API rate limiting issues, adjust the `API_THROTTLE_MS` value (default: 500ms)
-- **Database Timeouts**: For very large datasets, reduce the `BATCH_SIZE` to process fewer periods at once
-- **Missing Farm Mappings**: Ensure the BMU mapping file is up-to-date with all required wind farms
-- **Process Timeout Issues**: Use the staged approach from `staged_reingest_march_21.ts` or `staged_reingest_march_28.ts` for very large datasets
-
-### Using Staged Reingestion
-
-If the complete reingest script times out, use the staged approach:
-
-1. Create a staged reingestion script based on `staged_reingest_march_21.ts` for the target date
-2. Set the `START_PERIOD` and `END_PERIOD` variables to process a smaller batch:
-   ```typescript
-   const START_PERIOD = 1;  // First batch: periods 1-6 
-   const END_PERIOD = 6;
-   ```
-
-3. Run the script for each batch, incrementing the period numbers each time
-4. For high-volume dates, use smaller batch sizes (4-6 periods) to prevent timeouts
-5. After completing all batches, run a dedicated summary update script (like `update_march_21_summaries.ts`)
-
-### Recommended Batch Sizes
-
-Based on our experience with March 21 and March 28 reingestions:
-
-| Volume Level | Records | MWh Range | Recommended Batch Size |
-|--------------|---------|-----------|------------------------|
-| Low          | < 1,000 | < 30,000  | 8-12 periods           |
-| Medium       | 1-2,000 | 30-60,000 | 6-8 periods            |
-| High         | 2-3,000 | 60-80,000 | 4-6 periods            |
-| Very High    | > 3,000 | > 80,000  | 3-4 periods            |
-
-For March 21, we found that processing 4-6 periods at a time was optimal to handle the large volume while avoiding timeouts.
-
-## Examples and Use Cases
-
-### Example 1: Complete Reingestion
-
-For a standard date with manageable data volume, use the complete reingestion approach:
+#### Strategy 1: Complete Reingestion
+Use this when many periods are missing or when the data is significantly corrupted.
 
 ```bash
-# Process all 48 settlement periods for April 10, 2025
-npx tsx data_reingest_reference.ts 2025-04-10
+# Step 1: Create a script based on complete_reingest_march_XX.ts
+# Step 2: Run the reingestion
+npx tsx complete_reingest_YYYY_MM_DD.ts
 ```
 
-Expected output:
-```
-Verification Check for 2025-04-10: {
-  "records": "2235",
-  "periods": "48",
-  "volume": "52842.38",
-  "payment": "-1486395.76"
-}
-Update successful at 2025-04-10T12:34:56.789Z
-```
-
-### Example 2: Staged Reingestion for March 21, 2025
-
-For dates with medium to high data volume (like March 21, 2025), use the staged approach with smaller batches:
+#### Strategy 2: Targeted Period Reingestion
+Use this when only specific periods are missing or problematic.
 
 ```bash
-# Staged reingestion in 8 batches of 6 periods each
-npx tsx staged_reingest_march_21.ts  # After setting START_PERIOD=1 and END_PERIOD=6
-npx tsx staged_reingest_march_21.ts  # After setting START_PERIOD=7 and END_PERIOD=12
-npx tsx staged_reingest_march_21.ts  # After setting START_PERIOD=13 and END_PERIOD=18
-# ... continue with remaining batches
-
-# After all batches complete, update summary tables
-npx tsx update_march_21_summaries.ts
+# Step 1: Create a script based on fix_march_XX_last_periods.ts
+# Step 2: Set START_PERIOD and END_PERIOD to target the specific ranges
+# Step 3: Run the targeted reingestion
+npx tsx fix_YYYY_MM_DD_periods.ts
 ```
 
-Expected final output:
-```
-=== Updating Summaries for March 21, 2025 ===
-Raw totals from database:
-- Energy: 50518.72 MWh
-- Payment: -1240439.58
-Daily summary updated for 2025-03-21:
-- Energy: 50518.72 MWh
-- Payment: £-1240439.58
-Monthly summary updated for 2025-03:
-- Energy: 941012.27 MWh
-- Payment: £-23366675.09
-Yearly summary updated for 2025:
-- Energy: 2655670.60 MWh
-- Payment: £-66753759.37
-Updating Bitcoin calculations for 2025-03-21...
-```
-
-### Example 3: Staged Reingestion for March 28, 2025
-
-For dates with very high data volume (like March 28, 2025), use even smaller batch sizes:
+#### Strategy 3: Staged Reingestion
+Use this for incremental reingestion of large datasets to avoid timeouts.
 
 ```bash
-# First batch - periods 1-4
-npx tsx staged_reingest_march_28.ts  # After setting START_PERIOD=1 and END_PERIOD=4
-
-# Second batch - periods 5-8
-npx tsx staged_reingest_march_28.ts  # After setting START_PERIOD=5 and END_PERIOD=8
-
-# Continue with remaining batches...
+# Step 1: Create a script based on staged_reingest_march_XX.ts
+# Step 2: Run the staged reingestion, processing periods in batches
+npx tsx staged_reingest_YYYY_MM_DD.ts
 ```
 
-Expected final output:
-```
-Current Status for 2025-03-28:
-- Settlement Periods: 48/48
-- Records: 4684
-- Total Volume: 99904.22 MWh
-- Total Payment: £-3784089.62
-
-SUCCESS: All 48 settlement periods are now in the database!
-SUCCESS: Final payment total £-3784089.62 matches expected total (within £100 margin)
-```
-
-### Example 4: Critical Date Processing
-
-For direct targeting of specific settlement periods:
+### 3. Update Summary Tables
+After reingestion, ensure that all summary tables are updated:
 
 ```bash
-# Process only settlement periods 44-48 for March 9, 2025
-npx tsx optimized_critical_date_processor.ts 2025-03-09 44 48
+npx tsx update_summaries.ts
+# Or create a specific script for the targeted date
+npx tsx update_YYYY_MM_DD_summaries.ts
 ```
 
-Expected output:
+### 4. Verify Results
+Validate that the reingestion was successful:
+
+```sql
+-- Check for completeness
+SELECT 
+  COUNT(*) as record_count,
+  COUNT(DISTINCT settlement_period) as period_count,
+  SUM(volume) as total_volume,
+  SUM(payment) as total_payment
+FROM curtailment_records
+WHERE settlement_date = 'YYYY-MM-DD';
+
+-- Verify Bitcoin calculations
+SELECT
+  SUM(bitcoin_mined) as total_bitcoin
+FROM historical_bitcoin_calculations
+WHERE settlement_date = 'YYYY-MM-DD';
 ```
-Verification Check for 2025-03-09 (periods 44-48): {
-  "processedPeriods": "5",
-  "recordsAdded": "126",
-  "volume": "2856.43",
-  "payment": "-85418.22"
-}
-Critical period processing complete at 2025-03-09T15:22:33.456Z
-```
+
+## Script Templates
+
+### Template 1: Complete Reingestion
+
+Key components:
+- Clear all existing data for the date
+- Process all 48 settlement periods
+- Update summary tables and Bitcoin calculations
+
+### Template 2: Targeted Period Fix
+
+Key components:
+- Identify specific missing or problematic periods
+- Clear only the affected period data
+- Reingest only those specific periods
+- Update summary tables based on the complete dataset
+
+### Template 3: Data Verification
+
+Key components:
+- Compare local database records with API data
+- Identify discrepancies in record counts, volumes, or payments
+- Generate a report of problematic periods
+
+## Common Issues and Solutions
+
+### API Rate Limiting
+- Implement throttling between API calls (using delay function)
+- Process in smaller batches with pauses between batches
+
+### Database Schema Changes
+- Check column names and data types before writing scripts
+- Adapt insert statements to match current schema
+- Use database introspection to verify schema at runtime
+
+### Missing BMU Mappings
+- Implement hardcoded mappings for common farm IDs
+- Skip records with unknown BMU IDs
+- Consider adding a mapping table for future use
+
+### Bitcoin Calculation Adjustments
+- Use consistent difficulty value across all calculations
+- Consider adding mining model comparison for optimization studies
+
+## Recent Example Dates
+- March 21, 2025: Complete reingestion successful (50,518.72 MWh, £1,240,439.58)
+- March 22, 2025: Missing settlement periods 47-48
+- March 28, 2025: Expected total payment of £3,784,089.62
