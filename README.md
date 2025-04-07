@@ -232,6 +232,10 @@ If the process fails, check these common issues:
 3. **Duplicate Records**: Verify the ON CONFLICT clauses are working correctly
 4. **Missing Periods**: Look for API errors in the logs that might indicate missing data
 5. **Data Consistency**: Use verification tools like `check_elexon_data.ts` to identify inconsistencies
+6. **DynamoDB Connection Issues**: If you're experiencing problems with DynamoDB for Bitcoin difficulty data:
+   - Use `fix_data_for_march_27.ts` as a template and modify for your specific date
+   - The script uses a fixed difficulty value (71e12) instead of fetching from DynamoDB
+   - See detailed instructions in `FIXING_INCOMPLETE_DATA.md`
 
 ## File Organization and Project Structure
 
@@ -263,6 +267,7 @@ The project includes several scripts for data processing and verification. Here'
 These scripts are kept for backward compatibility or specific use cases but are not needed for regular operation:
 
 - **fix_incomplete_data.ts**: Legacy version of fix_incomplete_data_optimized.ts
+- **fix_data_for_march_27.ts**: Special processor that works without DynamoDB for the specific date of March 27, 2025
 - **process_bitcoin.ts**: Legacy non-optimized Bitcoin processor
 - **process_curtailment.ts**: Legacy script for processing curtailment data only
 - **process_monthly.ts**: Legacy script for updating monthly summaries only

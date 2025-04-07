@@ -1,165 +1,121 @@
 # Fixing Incomplete Data
 
-This document explains how to fix incomplete data for specific dates in the database.
+This document provides a guide for fixing incomplete or inconsistent data in the system. It explains the different scripts available and when to use each one.
 
-## Background
+## Available Scripts
 
-The system relies on properly ingested curtailment data from the Elexon API, which is then used to calculate Bitcoin mining potential. If data for a specific date is incomplete or missing, it can lead to incorrect calculations and summaries throughout the system.
+### 1. `fix_data_for_march_27.ts`
 
-## Verification
+This script is specifically designed to process data for March 27, 2025 without relying on DynamoDB for difficulty data.
 
-To check if a date has incomplete data, use the `check_elexon_data.ts` script:
-
+**Usage:**
 ```bash
-# Check with progressive sampling (starts with key periods, expands if issues found)
-npx tsx check_elexon_data.ts 2025-03-25
-
-# Check with fixed sampling (periods 1, 12, 24, 36, 48)
-npx tsx check_elexon_data.ts 2025-03-25 fixed
-
-# Check with random sampling (10 random periods)
-npx tsx check_elexon_data.ts 2025-03-25 random
-
-# Check all periods (warning: may hit API limits)
-npx tsx check_elexon_data.ts 2025-03-25 full
+npx tsx fix_data_for_march_27.ts
 ```
 
-## Fixing Incomplete Data
+**Features:**
+- Uses a fixed difficulty value to avoid DynamoDB connection issues
+- Handles Elexon API rate limiting with batch processing and delays
+- Processes all 48 settlement periods for the specified date
+- Updates all related Bitcoin calculations and summary tables
+- Robust error handling and logging
 
-### Option 1: Optimized All-in-One Fix (Recommended)
+**When to use:**
+- When you need to specifically fix data for March 27, 2025
+- When you're experiencing DynamoDB connectivity issues
 
-To fully process a date with missing or incomplete data, use the optimized script that ensures all 48 periods are processed and DynamoDB is accessed only once:
+### 2. `fix_incomplete_data.ts`
 
+A general purpose script for fixing incomplete data for any date.
+
+**Usage:**
 ```bash
-npx tsx fix_incomplete_data_optimized.ts 2025-03-25
+npx tsx fix_incomplete_data.ts <DATE>
 ```
 
-This optimized script will:
-1. Process all 48 settlement periods in small batches to avoid API limits
-2. Calculate Bitcoin mining for all miner models with a single DynamoDB fetch
-3. Update all summaries (daily, monthly, yearly) automatically
+**Features:**
+- Processes a specific date (format: YYYY-MM-DD)
+- Updates curtailment records, Bitcoin calculations, and summary tables
+- Uses DynamoDB for Bitcoin difficulty data
 
-### Option 2: Standard All-in-One Fix
+**When to use:**
+- When you need to fix data for a specific date 
+- When DynamoDB is accessible
 
-The standard fix script processes data in the original way:
+### 3. `fix_incomplete_data_optimized.ts`
 
+An optimized version of the incomplete data fixer.
+
+**Usage:**
 ```bash
-npx tsx fix_incomplete_data.ts 2025-03-25
+npx tsx fix_incomplete_data_optimized.ts <DATE>
 ```
 
-This script will:
-1. Process curtailment records for the date
-2. Process Bitcoin calculations for each miner model (S19J_PRO, S9, M20S) separately
-3. Update monthly summaries
-4. Update yearly summaries
+**Features:**
+- More efficient processing than the regular fix_incomplete_data.ts
+- Processes all 48 periods in batches with efficient API usage
+- Fetches difficulty data only once per date
+- Handles all miner models in a single pass
 
-### Option 3: Optimized Step-by-Step Fix
+**When to use:**
+- When you need the most efficient data fixing for larger datasets
+- When DynamoDB is accessible
 
-If you prefer to fix the data step by step using the optimized components:
+### 4. `verify_and_fix_data.ts`
 
-#### Step 1: Process All Curtailment Periods
+Combined verification and fixing utility.
 
+**Usage:**
 ```bash
-npx tsx process_all_periods.ts 2025-03-25
+npx tsx verify_and_fix_data.ts <DATE> [action] [sampling-method]
 ```
 
-#### Step 2: Process All Bitcoin Calculations with Single DynamoDB Access
+**Features:**
+- Verifies data against Elexon API before fixing
+- Multiple sampling methods to efficiently check data
+- Automatic fixing when verification fails
+- Detailed logs of verification and repair
 
-```bash
-npx tsx process_bitcoin_optimized.ts 2025-03-25
-```
+**When to use:**
+- When you want to verify data before fixing
+- When you want more control over the verification process
 
-#### Step 3: Complete Cascade (if you want to run steps 1-2 in sequence)
+## Data Verification Process
 
-```bash
-npx tsx process_complete_cascade.ts 2025-03-25
-```
+Before fixing data, it's recommended to verify if the data actually needs fixing. The `verify_and_fix_data.ts` script automates this process.
 
-### Option 4: Standard Step-by-Step Fix
+Verification involves:
+1. Checking if all 48 settlement periods have data
+2. Comparing data with Elexon API to ensure accuracy
+3. Checking consistency between related tables
 
-If you prefer to use the original approach:
+## Common Data Integrity Issues
 
-#### Step 1: Process Curtailment Data
-
-```bash
-npx tsx process_curtailment.ts 2025-03-25
-```
-
-#### Step 2: Process Bitcoin Calculations for Each Model
-
-```bash
-npx tsx process_bitcoin.ts 2025-03-25 S19J_PRO
-npx tsx process_bitcoin.ts 2025-03-25 S9
-npx tsx process_bitcoin.ts 2025-03-25 M20S
-```
-
-#### Step 3: Update Monthly Summaries
-
-```bash
-npx tsx process_monthly.ts 2025-03
-```
-
-#### Step 4: Update Yearly Summaries
-
-```bash
-npx tsx process_yearly.ts 2025
-```
-
-## Verifying the Fix
-
-After the fix, run the verification script again to make sure all issues are resolved:
-
-```bash
-npx tsx check_elexon_data.ts 2025-03-25
-```
-
-## Sample Commands for March 25, 2025
-
-Here are the exact commands to fix the data for March 25, 2025 using the optimized approach:
-
-```bash
-# Optimized all-in-one fix (recommended)
-npx tsx fix_incomplete_data_optimized.ts 2025-03-25
-
-# Or optimized step-by-step:
-npx tsx process_all_periods.ts 2025-03-25
-npx tsx process_bitcoin_optimized.ts 2025-03-25
-```
-
-If you prefer the standard approach:
-
-```bash
-# Standard all-in-one fix
-npx tsx fix_incomplete_data.ts 2025-03-25
-
-# Or standard step-by-step:
-npx tsx process_curtailment.ts 2025-03-25
-npx tsx process_bitcoin.ts 2025-03-25 S19J_PRO
-npx tsx process_bitcoin.ts 2025-03-25 S9
-npx tsx process_bitcoin.ts 2025-03-25 M20S
-npx tsx process_monthly.ts 2025-03
-npx tsx process_yearly.ts 2025
-```
-
-## Optimizations
-
-The optimized scripts introduce important improvements:
-
-1. **Complete Period Coverage**: The `process_all_periods.ts` script ensures all 48 settlement periods are processed in small batches to avoid API rate limits.
-
-2. **Efficient DynamoDB Access**: The `process_bitcoin_optimized.ts` script fetches difficulty data from DynamoDB only once per date instead of multiple times for each miner model and settlement period.
-
-3. **Parallel Processing**: The optimized scripts use batched processing to handle multiple operations concurrently.
-
-4. **Enhanced Error Handling**: Robust retry logic and better error reporting in the optimized scripts.
+1. **Missing Periods**: Not all 48 settlement periods have data
+2. **Inconsistent Data**: Curtailment records don't match Elexon API data
+3. **Summary Discrepancies**: Summary tables don't reflect the actual data in the base tables
+4. **DynamoDB Connection Issues**: Difficulty data is not available or accessible
 
 ## Troubleshooting
 
-If you encounter any issues during the data fix process:
+### DynamoDB Connection Issues
 
-1. **API Rate Limiting**: The Elexon API has rate limits. If you hit these limits, wait a few minutes before trying again.
-2. **Database Errors**: Ensure your database connection is properly configured.
-3. **Validation Errors**: Check the logs for specific validation errors that might indicate issues with the data.
-4. **Missing Modules**: Ensure all required dependencies are installed.
+If you're experiencing problems with DynamoDB connections:
 
-If the fix process fails, you can retry individual steps using the step-by-step approach.
+1. Use `fix_data_for_march_27.ts` as a template and modify it for your specific date
+2. The script uses a fixed difficulty value (71e12) to avoid DynamoDB dependency
+3. Adjust the `DATE_TO_PROCESS` constant to target a different date
+
+### API Rate Limiting
+
+If you're hitting Elexon API rate limits:
+
+1. Increase the `BATCH_DELAY_MS` constant to add more delay between batches
+2. Decrease the `BATCH_SIZE` constant to process fewer periods in parallel
+
+### Database Consistency
+
+To ensure consistency between tables:
+
+1. Always run the complete process (curtailment > Bitcoin > summaries)
+2. After fixing, verify data with `verify_and_fix_data.ts` to ensure consistency
