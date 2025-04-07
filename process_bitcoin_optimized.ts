@@ -245,13 +245,12 @@ async function processBitcoinCalculations(date: string): Promise<{
         }>();
         
         for (const record of periodRecords) {
-          const farmId = record.bmUnitId;
-          const farmName = record.bmUnitName || farmId;
+          const farmId = record.farmId; // Use farmId directly from the record
           
           if (!farmGroups.has(farmId)) {
             farmGroups.set(farmId, {
               farmId,
-              farmName,
+              farmName: record.leadPartyName || farmId,
               records: [],
               totalEnergy: 0
             });
@@ -275,7 +274,7 @@ async function processBitcoinCalculations(date: string): Promise<{
             minerModel,
             bitcoinMined: bitcoinMined.toString(),
             difficulty: difficulty.toString(),
-            curtailedEnergy: group.totalEnergy.toString(), // Add this field back
+            // curtailedEnergy field doesn't exist in the schema, removed it
             calculatedAt: new Date()
           });
           
@@ -315,10 +314,9 @@ async function updateMonthlyBitcoinSummaries(date: string): Promise<void> {
     console.log(`\n=== Updating Monthly Bitcoin Summaries for ${yearMonth} ===\n`);
     
     for (const minerModel of MINER_MODELS) {
-      // Calculate monthly totals
+      // Calculate monthly totals - no curtailedEnergy field in historicalBitcoinCalculations table
       const monthlyData = await db
         .select({
-          totalEnergy: sql<string>`SUM(${historicalBitcoinCalculations.curtailedEnergy}::numeric)`,
           totalBitcoin: sql<string>`SUM(${historicalBitcoinCalculations.bitcoinMined}::numeric)`
         })
         .from(historicalBitcoinCalculations)
@@ -329,29 +327,40 @@ async function updateMonthlyBitcoinSummaries(date: string): Promise<void> {
           )
         );
       
-      if (!monthlyData[0]?.totalEnergy || !monthlyData[0]?.totalBitcoin) {
+      if (!monthlyData[0]?.totalBitcoin) {
         console.log(`No data found for ${minerModel} in ${yearMonth}`);
         continue;
       }
+      
+      // Get total curtailed energy from curtailment_records for the month
+      const monthlyEnergyData = await db
+        .select({
+          totalEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`
+        })
+        .from(curtailmentRecords)
+        .where(
+          sql`DATE_TRUNC('month', ${curtailmentRecords.settlementDate}::date) = DATE_TRUNC('month', ${date}::date)`
+        );
+      
+      const totalEnergy = monthlyEnergyData[0]?.totalEnergy || '0';
       
       // Update or insert monthly summary
       await db.insert(bitcoinMonthlySummaries).values({
         yearMonth,
         minerModel,
-        curtailedEnergy: monthlyData[0].totalEnergy,
         bitcoinMined: monthlyData[0].totalBitcoin,
+        valueAtMining: '0', // Set default value
         updatedAt: new Date()
       }).onConflictDoUpdate({
         target: [bitcoinMonthlySummaries.yearMonth, bitcoinMonthlySummaries.minerModel],
         set: {
-          curtailedEnergy: monthlyData[0].totalEnergy,
           bitcoinMined: monthlyData[0].totalBitcoin,
           updatedAt: new Date()
         }
       });
       
       console.log(`Updated monthly summary for ${minerModel} in ${yearMonth}:`);
-      console.log(`- Energy: ${Number(monthlyData[0].totalEnergy).toFixed(2)} MWh`);
+      console.log(`- Energy: ${Number(totalEnergy).toFixed(2)} MWh`);
       console.log(`- Bitcoin: ${Number(monthlyData[0].totalBitcoin).toFixed(8)} BTC`);
     }
   } catch (error) {
@@ -369,10 +378,9 @@ async function updateYearlyBitcoinSummaries(date: string): Promise<void> {
     console.log(`\n=== Updating Yearly Bitcoin Summaries for ${year} ===\n`);
     
     for (const minerModel of MINER_MODELS) {
-      // Calculate yearly totals from monthly summaries
+      // Calculate yearly totals from monthly summaries - just bitcoin totals
       const yearlyData = await db
         .select({
-          totalEnergy: sql<string>`SUM(${bitcoinMonthlySummaries.curtailedEnergy}::numeric)`,
           totalBitcoin: sql<string>`SUM(${bitcoinMonthlySummaries.bitcoinMined}::numeric)`
         })
         .from(bitcoinMonthlySummaries)
@@ -383,29 +391,40 @@ async function updateYearlyBitcoinSummaries(date: string): Promise<void> {
           )
         );
       
-      if (!yearlyData[0]?.totalEnergy || !yearlyData[0]?.totalBitcoin) {
+      if (!yearlyData[0]?.totalBitcoin) {
         console.log(`No data found for ${minerModel} in ${year}`);
         continue;
       }
+      
+      // Get yearly energy from curtailment_records
+      const yearlyEnergyData = await db
+        .select({
+          totalEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`
+        })
+        .from(curtailmentRecords)
+        .where(
+          sql`EXTRACT(YEAR FROM ${curtailmentRecords.settlementDate}) = ${parseInt(year, 10)}`
+        );
+        
+      const totalEnergy = yearlyEnergyData[0]?.totalEnergy || '0';
       
       // Update or insert yearly summary
       await db.insert(bitcoinYearlySummaries).values({
         year,
         minerModel,
-        curtailedEnergy: yearlyData[0].totalEnergy,
         bitcoinMined: yearlyData[0].totalBitcoin,
+        valueAtMining: '0', // Default value
         updatedAt: new Date()
       }).onConflictDoUpdate({
         target: [bitcoinYearlySummaries.year, bitcoinYearlySummaries.minerModel],
         set: {
-          curtailedEnergy: yearlyData[0].totalEnergy,
           bitcoinMined: yearlyData[0].totalBitcoin,
           updatedAt: new Date()
         }
       });
       
       console.log(`Updated yearly summary for ${minerModel} in ${year}:`);
-      console.log(`- Energy: ${Number(yearlyData[0].totalEnergy).toFixed(2)} MWh`);
+      console.log(`- Energy: ${Number(totalEnergy).toFixed(2)} MWh`);
       console.log(`- Bitcoin: ${Number(yearlyData[0].totalBitcoin).toFixed(8)} BTC`);
     }
   } catch (error) {
