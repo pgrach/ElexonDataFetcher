@@ -98,11 +98,22 @@ async function loadBmuMapping(): Promise<Record<string, { name: string, leadPart
   if (bmuMapping) return bmuMapping;
   
   try {
-    console.log('Loading BMU mapping from data/bmu_mapping.json...');
-    const mappingFile = await fs.readFile(path.join('data', 'bmu_mapping.json'), 'utf-8');
-    bmuMapping = JSON.parse(mappingFile);
-    console.log(`Loaded ${Object.keys(bmuMapping).length} BMU mappings`);
-    return bmuMapping;
+    // Try the server BMU mapping first (it's more complete)
+    try {
+      console.log('Loading BMU mapping from server/data/bmuMapping.json...');
+      const mappingFile = await fs.readFile(path.join('server', 'data', 'bmuMapping.json'), 'utf-8');
+      bmuMapping = JSON.parse(mappingFile);
+      console.log(`Loaded ${Object.keys(bmuMapping).length} BMU mappings`);
+      return bmuMapping;
+    } catch (serverError) {
+      console.warn('Could not load server BMU mapping, falling back to data directory version:', serverError);
+      // Fallback to the data directory version
+      console.log('Loading BMU mapping from data/bmu_mapping.json...');
+      const mappingFile = await fs.readFile(path.join('data', 'bmu_mapping.json'), 'utf-8');
+      bmuMapping = JSON.parse(mappingFile);
+      console.log(`Loaded ${Object.keys(bmuMapping).length} BMU mappings`);
+      return bmuMapping;
+    }
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
     throw error;
