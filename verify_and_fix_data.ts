@@ -101,11 +101,12 @@ async function loadBmuMapping(): Promise<Record<string, { name: string, leadPart
     console.log('Loading BMU mapping from data/bmu_mapping.json...');
     const mappingFile = await fs.readFile(path.join('data', 'bmu_mapping.json'), 'utf-8');
     bmuMapping = JSON.parse(mappingFile);
-    console.log(`Loaded ${Object.keys(bmuMapping).length} BMU mappings`);
-    return bmuMapping;
+    console.log(`Loaded ${Object.keys(bmuMapping || {}).length} BMU mappings`);
+    return bmuMapping || {};
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
-    throw error;
+    bmuMapping = {};
+    return {};
   }
 }
 
@@ -212,7 +213,7 @@ async function checkPeriod(date: string, period: number): Promise<{
     
     // Calculate totals for API records
     const apiVolume = validApiRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-    const apiPayment = validApiRecords.reduce((sum, r) => sum + Math.abs(r.payment), 0);
+    const apiPayment = validApiRecords.reduce((sum, r) => sum + Math.abs(r.volume) * r.originalPrice * -1, 0);
     
     // Calculate totals for DB records
     const dbVolume = dbRecords.reduce((sum, r) => sum + Math.abs(Number(r.volume)), 0);
@@ -337,7 +338,7 @@ async function verifyData(date: string, samplingMethod: string = 'progressive'):
       result.totalMismatch++;
       result.mismatchedPeriods.push(period);
       result.isPassing = false;
-    } else if (checkResult.status === 'missing' && checkResult.apiCount > 0) {
+    } else if (checkResult.status === 'missing' && checkResult.apiCount && checkResult.apiCount > 0) {
       result.missingPeriods.push(period);
       result.isPassing = false;
     }
@@ -382,7 +383,7 @@ async function verifyData(date: string, samplingMethod: string = 'progressive'):
       if (checkResult.status === 'mismatch') {
         result.totalMismatch++;
         result.mismatchedPeriods.push(period);
-      } else if (checkResult.status === 'missing' && checkResult.apiCount > 0) {
+      } else if (checkResult.status === 'missing' && checkResult.apiCount && checkResult.apiCount > 0) {
         result.missingPeriods.push(period);
       }
       

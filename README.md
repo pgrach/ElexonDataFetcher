@@ -124,13 +124,81 @@ For a typical day with 48 settlement periods:
 - M20S: 556.74644712 BTC
 - S9: 280.71290970 BTC
 
-## Verification Tools
+## Data Verification and Repair Tools
 
-The system includes specialized tools for data verification:
+The system includes comprehensive tools for data verification and repair:
 
-### Elexon Data Verification
+### Comprehensive Data Verification and Repair Utility
 
-The `check_elexon_data.ts` script provides a reliable way to verify that the database records match the data from the Elexon API:
+The `verify_and_fix_data.ts` utility provides a powerful all-in-one solution for verifying and repairing data integrity issues:
+
+```bash
+# Basic usage
+npx tsx verify_and_fix_data.ts [date] [action] [sampling-method]
+
+# Examples
+npx tsx verify_and_fix_data.ts                        # Verifies today's data using progressive sampling
+npx tsx verify_and_fix_data.ts 2025-04-01             # Verifies specific date using progressive sampling
+npx tsx verify_and_fix_data.ts 2025-04-01 verify      # Only verifies without fixing
+npx tsx verify_and_fix_data.ts 2025-04-01 fix         # Verifies and fixes if needed
+npx tsx verify_and_fix_data.ts 2025-04-01 fix random  # Uses random sampling for verification
+npx tsx verify_and_fix_data.ts 2025-04-01 force-fix   # Forces reprocessing without verification
+```
+
+#### Available Actions
+
+- **verify** (default): Only performs verification without fixing
+- **fix**: Verifies and automatically fixes if issues are found
+- **force-fix**: Skips verification and forces a complete reprocessing of the date
+
+#### Intelligent Sampling Strategies
+
+The verification utility offers several sampling methods to balance thoroughness with API efficiency:
+
+1. **Progressive Sampling** (default): Starts with 5 key periods (1, 12, 24, 36, 48), then adds up to 10 more random periods if issues are found. Efficiently identifies problems while minimizing API calls.
+
+2. **Random Sampling**: Checks 10 randomly selected periods for better coverage without bias toward specific times.
+
+3. **Fixed Key Periods**: Only checks strategic periods (1, 12, 24, 36, 48) representing morning, midday, afternoon, evening, and night. Fast but may miss issues in other periods.
+
+4. **Full Verification**: Attempts to check all 48 periods, but may hit API rate limits. Use sparingly.
+
+#### Comprehensive Repair Process
+
+When issues are found, the repair process follows these steps:
+
+1. **Curtailment Reprocessing**: Clears existing curtailment records and fetches fresh data from the Elexon API for all 48 periods
+2. **Bitcoin Calculation**: Recalculates Bitcoin mining potential for all three miner models (S19J_PRO, S9, M20S) based on the updated curtailment data
+3. **Summary Updates**: Updates all daily, monthly, and yearly summary tables in a full cascade
+4. **Verification**: Confirms the repairs were successful by comparing initial and final data states
+
+#### Features
+
+This utility:
+1. Combines verification and repair capabilities in a single tool
+2. Uses intelligent sampling strategies to effectively find data inconsistencies
+3. Provides automatic repair for identified issues
+4. Generates detailed logs with before/after comparisons
+5. Supports both targeted fixes and forced reprocessing for known issues
+
+#### Logs and Reporting
+
+Each verification and repair operation generates a detailed log file in the `logs` directory:
+
+```
+logs/verify_and_fix_YYYY-MM-DD_HHMMSS.log
+```
+
+These logs contain:
+- Initial database state
+- Verification results for each checked period
+- Repair actions taken (if any)
+- Final database state after repair
+- Detailed statistics about changes made
+
+### Legacy Elexon Data Verification
+
+The `check_elexon_data.ts` script provides a lightweight verification that the database records match the data from the Elexon API:
 
 ```bash
 # Basic usage
@@ -143,27 +211,6 @@ npx tsx check_elexon_data.ts 2025-03-28 random   # Uses random sampling of perio
 npx tsx check_elexon_data.ts 2025-03-28 fixed    # Uses fixed key periods only
 npx tsx check_elexon_data.ts 2025-03-28 full     # Attempts to check all 48 periods (may hit API limits)
 ```
-
-#### Intelligent Sampling Strategies
-
-The script offers several sampling methods to balance thoroughness with API efficiency:
-
-1. **Progressive Sampling** (default): Starts with 5 key periods (1, 12, 24, 36, 48), then adds up to 15 more random periods if any issues are found. This provides efficient verification while avoiding unnecessary API calls.
-
-2. **Random Sampling**: Checks 10 randomly selected periods (including first and last) for better coverage of the day without bias toward specific times.
-
-3. **Fixed Key Periods**: Only checks strategic periods (1, 12, 24, 36, 48) representing morning, midday, afternoon, evening, and night. Fast but may miss issues in other periods.
-
-4. **Full Verification**: Attempts to check all 48 periods, but may hit API rate limits. Use sparingly and only when necessary.
-
-#### Features
-
-This script:
-1. Uses intelligent sampling strategies to effectively find data inconsistencies
-2. Compares record counts, energy volumes, and payment amounts against the API
-3. Provides actionable instructions if discrepancies are found
-4. Verifies consistency between curtailment_records and daily_summaries tables
-5. Includes a data quality assessment with severity ratings (Minor/Moderate/Major/Critical)
 
 If discrepancies are found, the script provides the exact commands needed to reprocess the data:
 ```
@@ -186,10 +233,58 @@ If the process fails, check these common issues:
 4. **Missing Periods**: Look for API errors in the logs that might indicate missing data
 5. **Data Consistency**: Use verification tools like `check_elexon_data.ts` to identify inconsistencies
 
+## File Organization and Project Structure
+
+The project includes several scripts for data processing and verification. Here's an overview of the key files and their purposes:
+
+### Core Data Processing Scripts
+
+- **process_all_periods.ts**: Main script for processing all 48 settlement periods for a specific date
+- **process_bitcoin_optimized.ts**: Optimized script for calculating Bitcoin mining potential with single DynamoDB fetch
+- **process_complete_cascade.ts**: Processes the full data cascade (curtailment → Bitcoin → summaries)
+
+### Data Verification and Repair
+
+- **verify_and_fix_data.ts**: Comprehensive utility to verify and fix data integrity issues (recommended)
+- **check_elexon_data.ts**: Lightweight utility to check data against Elexon API
+
+### Fixed-Purpose Scripts
+
+- **fix_incomplete_data_optimized.ts**: Optimized script for fixing incomplete data with all miner models at once
+- **update_summaries.ts**: Updates summary tables for specific dates
+
+### Specialized Tools
+
+- **run_wind_data_migration.ts**: Ensures wind_generation_data table is properly set up
+- **update_wind_generation_data.ts**: Updates wind generation data from Elexon API
+
+### Optional/Legacy Scripts
+
+These scripts are kept for backward compatibility or specific use cases but are not needed for regular operation:
+
+- **fix_incomplete_data.ts**: Legacy version of fix_incomplete_data_optimized.ts
+- **process_bitcoin.ts**: Legacy non-optimized Bitcoin processor
+- **process_curtailment.ts**: Legacy script for processing curtailment data only
+- **process_monthly.ts**: Legacy script for updating monthly summaries only
+- **process_yearly.ts**: Legacy script for updating yearly summaries only
+- **update_summaries_for_march_25.ts**: One-time script for a specific date (can be removed)
+- **verify_dates.ts**: Specialized verification script for specific dates
+- **verify_service.ts**: Legacy verification service
+
 ## Maintenance Recommendations
 
 - Run the process during off-peak hours to minimize database load
 - Monitor memory usage for large datasets
 - Consider increasing batch sizes for faster processing if resources allow
 - Periodically verify historical data integrity using the verification functions
-- Run the `check_elexon_data.ts` script weekly on random dates to ensure ongoing data consistency
+- Run the `verify_and_fix_data.ts` script weekly on random dates to ensure ongoing data consistency
+
+### Recommended Cleanup
+
+The following files can be safely removed or archived as they have been replaced by more optimized versions:
+
+1. **fix_incomplete_data.ts** - Replaced by fix_incomplete_data_optimized.ts
+2. **process_bitcoin.ts** - Replaced by process_bitcoin_optimized.ts  
+3. **update_summaries_for_march_25.ts** - One-time use script for a specific date
+4. **backup/miningPotentialRoutes.ts** - Deprecated routes
+5. **backup/miningPotentialService.ts** - Deprecated service
