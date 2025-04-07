@@ -408,7 +408,7 @@ async function manualUpdateMonthlyBitcoinSummary(yearMonth: string): Promise<voi
 }
 
 // Process command line arguments if run directly
-if (process.argv[1].includes('bitcoinService.ts')) {
+if (process.argv[1] && process.argv[1].includes('bitcoinService.ts')) {
   const args = process.argv.slice(2);
   
   (async () => {
