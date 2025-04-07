@@ -456,15 +456,38 @@ async function fixData(date: string): Promise<{
   
   // Step 1: Process curtailment data
   console.log('Step 1: Processing curtailment records...');
-  const curtailmentResult = await processAllPeriods(date);
+  
+  // Step 1: Use direct import to run the process_all_periods script
+  console.log(`Running: process_all_periods.ts for ${date}`);
+  try {
+    // Import and run the function directly
+    const processAllPeriodsModule = await import('./process_all_periods.ts');
+    const curtailmentResult = await processAllPeriodsModule.processAllPeriods(date);
+    console.log('Curtailment processing completed successfully');
+    console.log(`Processed ${curtailmentResult.totalPeriods} periods`);
+    console.log(`Total records: ${curtailmentResult.totalRecords}`);
+    console.log(`Total volume: ${curtailmentResult.totalVolume.toFixed(2)} MWh`);
+    console.log(`Total payment: £${curtailmentResult.totalPayment.toFixed(2)}`);
+  } catch (error) {
+    console.error('Failed to run processAllPeriods:', error);
+    throw error;
+  }
   
   // Step 2: Process Bitcoin calculations with full cascade updates
   console.log('\nStep 2: Processing Bitcoin calculations and updating summaries...');
-  await processFullCascade(date);
+  try {
+    // Import and run the function directly
+    const bitcoinModule = await import('./process_bitcoin_optimized.ts');
+    await bitcoinModule.processFullCascade(date);
+    console.log('Bitcoin processing and summaries completed successfully');
+  } catch (error) {
+    console.error('Failed to run processFullCascade:', error);
+    throw error;
+  }
   
   return {
-    curtailmentResult,
-    bitcoinResult: 'Completed successfully'
+    curtailmentResult: 'Completed via process_all_periods.ts',
+    bitcoinResult: 'Completed via process_bitcoin_optimized.ts'
   };
 }
 
