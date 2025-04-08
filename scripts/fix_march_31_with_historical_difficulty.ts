@@ -94,6 +94,12 @@ async function getCurtailmentRecords(date: string) {
  * Calculate Bitcoin mined for a specific volume and miner model
  */
 function calculateBitcoin(volumeMwh: number, minerModel: string, difficulty: number): number {
+  // Volume should always be positive (absolute value is taken in the calling function)
+  if (volumeMwh < 0) {
+    console.warn(`Warning: Negative volume (${volumeMwh}) received in calculateBitcoin. Converting to absolute value.`);
+    volumeMwh = Math.abs(volumeMwh);
+  }
+  
   // Get miner stats
   const { hashrate, power } = minerModels[minerModel];
   
@@ -113,22 +119,24 @@ function calculateBitcoin(volumeMwh: number, minerModel: string, difficulty: num
 }
 
 /**
- * Delete existing Bitcoin calculation records for the target date and miner model
+ * Count existing Bitcoin calculation records for the target date and miner model
+ * We'll use UPSERT instead of DELETE + INSERT to handle duplicates
  */
-async function deleteExistingRecords(date: string, minerModel: string) {
+async function countExistingRecords(date: string, minerModel: string): Promise<number> {
   try {
-    // Use a direct SQL query for deletion to ensure it works properly
     const result = await db.execute(sql`
-      DELETE FROM historical_bitcoin_calculations
+      SELECT COUNT(*) as count
+      FROM historical_bitcoin_calculations
       WHERE settlement_date = ${date}
       AND miner_model = ${minerModel}
     `);
     
-    console.log(`Deleted ${result.rowCount} existing records for ${date} and ${minerModel}`);
-    return true;
+    const count = parseInt(result.rows[0].count as string);
+    console.log(`Found ${count} existing records for ${date} and ${minerModel}`);
+    return count;
   } catch (error) {
-    console.error(`Error deleting records for ${date} and ${minerModel}:`, error);
-    return false;
+    console.error(`Error counting records for ${date} and ${minerModel}:`, error);
+    return 0;
   }
 }
 
@@ -143,28 +151,44 @@ async function processRecords(date: string, minerModel: string, difficulty: numb
   let totalBitcoin = 0;
   
   for (const record of records) {
-    const volumeMwh = parseFloat(record.volume as string);
+    // Use absolute value to ensure positive energy values for calculations
+    const volumeMwh = Math.abs(parseFloat(record.volume as string));
+    if (insertCount % 100 === 0) {
+      console.log(`Processing record: period=${record.settlement_period}, farm=${record.farm_id}, volume=${volumeMwh} MWh (absolute value)`);
+    }
+    
     const bitcoinMined = calculateBitcoin(volumeMwh, minerModel, difficulty);
     totalBitcoin += bitcoinMined;
     
+    // Direct SQL execution of UPSERT
     try {
-      await db.insert(historicalBitcoinCalculations).values({
-        settlementDate: date,
-        settlementPeriod: record.settlement_period as number,
-        farmId: record.farm_id as string,
-        minerModel: minerModel,
-        bitcoinMined: bitcoinMined.toString(),
-        difficulty: difficulty.toString(),
-        calculatedAt: new Date()
-      });
+      const upsertQuery = sql`
+        INSERT INTO historical_bitcoin_calculations (
+          settlement_date, settlement_period, farm_id, miner_model, bitcoin_mined, difficulty, calculated_at
+        ) VALUES (
+          ${date}, 
+          ${record.settlement_period}, 
+          ${record.farm_id}, 
+          ${minerModel}, 
+          ${bitcoinMined.toString()}, 
+          ${difficulty.toString()}, 
+          ${new Date()}
+        )
+        ON CONFLICT (settlement_date, settlement_period, farm_id, miner_model) 
+        DO UPDATE SET 
+          bitcoin_mined = ${bitcoinMined.toString()}, 
+          difficulty = ${difficulty.toString()},
+          calculated_at = ${new Date()}
+      `;
       
+      await db.execute(upsertQuery);
       insertCount++;
       
       if (insertCount % 50 === 0) {
-        console.log(`Inserted ${insertCount}/${records.length} records...`);
+        console.log(`Processed ${insertCount}/${records.length} records...`);
       }
     } catch (error) {
-      console.error(`Error inserting record for period ${record.settlement_period}, farm ${record.farm_id}:`, error);
+      console.error(`Error processing record for period ${record.settlement_period}, farm ${record.farm_id}:`, error);
     }
   }
   
@@ -255,16 +279,13 @@ async function main() {
     for (const minerModel of minerModelList) {
       console.log(`\n- Processing ${minerModel}`);
       
-      // Step 2.1: Delete existing records
-      const deleteSuccess = await deleteExistingRecords(TARGET_DATE, minerModel);
-      if (!deleteSuccess) {
-        console.error(`Failed to delete records for ${minerModel}, skipping...`);
-        continue;
-      }
+      // Step 2.1: Check existing records
+      const existingCount = await countExistingRecords(TARGET_DATE, minerModel);
+      console.log(`Will update ${existingCount} existing records or insert new ones for ${minerModel}`);
       
-      // Step 2.2: Process all records with the correct difficulty
+      // Step 2.2: Process all records with the correct difficulty using UPSERT
       const { insertCount, totalBitcoin } = await processRecords(TARGET_DATE, minerModel, difficulty);
-      console.log(`Inserted ${insertCount} records with total ${totalBitcoin} BTC for ${minerModel}`);
+      console.log(`Processed ${insertCount} records with total ${totalBitcoin} BTC for ${minerModel}`);
     }
     
     // Step 3: Update monthly and yearly summaries
