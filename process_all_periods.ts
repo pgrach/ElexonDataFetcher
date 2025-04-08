@@ -20,31 +20,20 @@ const API_RATE_LIMIT_DELAY_MS = 500;
 const SMALL_BATCH_SIZE = 4; // Number of periods to process in parallel
 
 // BMU mapping cache
-let bmuMapping: any[] | null = null;
+let bmuMapping: Record<string, { name: string, leadParty: string }> | null = null;
 
 /**
- * Load the BMU mapping file and extract elexonBmUnit IDs
+ * Load the BMU mapping file once
  */
-async function loadBmuMapping(): Promise<any[]> {
+async function loadBmuMapping(): Promise<Record<string, { name: string, leadParty: string }>> {
   if (bmuMapping) return bmuMapping;
   
   try {
-    // Try the server BMU mapping first (it's more complete)
-    try {
-      console.log('Loading BMU mapping from server/data/bmuMapping.json...');
-      const mappingFile = await fs.readFile(path.join('server', 'data', 'bmuMapping.json'), 'utf-8');
-      bmuMapping = JSON.parse(mappingFile);
-      console.log(`Loaded ${bmuMapping.length} BMU mappings`);
-      return bmuMapping;
-    } catch (serverError) {
-      console.warn('Could not load server BMU mapping, falling back to data directory version:', serverError);
-      // Fallback to the data directory version
-      console.log('Loading BMU mapping from data/bmu_mapping.json...');
-      const mappingFile = await fs.readFile(path.join('data', 'bmu_mapping.json'), 'utf-8');
-      bmuMapping = JSON.parse(mappingFile);
-      console.log(`Loaded ${bmuMapping.length} BMU mappings`);
-      return bmuMapping;
-    }
+    console.log('Loading BMU mapping from data/bmu_mapping.json...');
+    const mappingFile = await fs.readFile(path.join('data', 'bmu_mapping.json'), 'utf-8');
+    bmuMapping = JSON.parse(mappingFile);
+    console.log(`Loaded ${Object.keys(bmuMapping).length} BMU mappings`);
+    return bmuMapping;
   } catch (error) {
     console.error('Error loading BMU mapping:', error);
     throw error;
@@ -52,22 +41,14 @@ async function loadBmuMapping(): Promise<any[]> {
 }
 
 /**
- * Filter for valid wind farm BMUs based on elexonBmUnit ID
+ * Filter for valid wind farm BMUs
  */
 async function loadWindFarmIds(): Promise<Set<string>> {
   const mapping = await loadBmuMapping();
   const windFarmIds = new Set<string>();
   
-  // Extract the elexonBmUnit IDs from the mapping
-  for (const bmu of mapping) {
-    if (bmu.elexonBmUnit) {
-      windFarmIds.add(bmu.elexonBmUnit);
-    }
-    
-    // Also add nationalGridBmUnit as some IDs may match this format
-    if (bmu.nationalGridBmUnit) {
-      windFarmIds.add(bmu.nationalGridBmUnit);
-    }
+  for (const [id, details] of Object.entries(mapping)) {
+    windFarmIds.add(id);
   }
   
   console.log(`Loaded ${windFarmIds.size} wind farm BMU IDs`);
@@ -109,34 +90,35 @@ async function processSettlementPeriod(
     
     // Log the records we're about to process
     const totalVolume = validRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-    // Calculate payment based on volume and price (just like in elexon.ts)
-    const totalPayment = validRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice * -1), 0);
+    const totalPayment = validRecords.reduce((sum, r) => sum + Math.abs(r.payment), 0);
     console.log(`[${date} P${period}] Records: ${validRecords.length} (${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)})`);
     
     // Insert all records in a single batch
     const batchInserts = validRecords.map(record => {
-      // Calculate payment based on volume and price
-      const paymentValue = Math.abs(record.volume) * record.originalPrice * -1;
+      // Store payment values as negative in the database (they're positive in API)
+      const paymentValue = -Math.abs(record.payment);
       
       return {
-        // Don't include id - it's an auto-incrementing serial in the DB
+        id: `${date}_${period}_${record.id}_${Math.abs(record.volume)}`,
         settlementDate: date,
         settlementPeriod: period,
-        farmId: record.id, // Changed from bmUnitId to farmId to match schema
-        volume: record.volume.toString(), // Convert to string for numeric type
-        payment: paymentValue.toString(), // Payment is calculated as volume * originalPrice * -1
-        originalPrice: record.originalPrice.toString(), // Use actual price values
-        finalPrice: record.finalPrice.toString(),       // Use actual price values
+        bmUnitId: record.id,
+        volume: record.volume,
+        payment: paymentValue.toString(),
+        acceptanceNumber: record.acceptanceNumber || null,
         soFlag: record.soFlag || false,
         cadlFlag: record.cadlFlag || false,
-        leadPartyName: record.leadPartyName || null
-        // Removed bmUnitName and timestamp as they're not in the schema
+        leadPartyName: record.leadPartyName || null,
+        bmUnitName: record.bmUnitName || null,
+        timestamp: addMinutes(new Date(`${date}T00:00:00Z`), (period - 1) * 30)
       };
     });
     
-    // Insert all records - we already cleared existing records for this date
-    // so we don't need onConflictDoNothing
-    await db.insert(curtailmentRecords).values(batchInserts);
+    // Insert all records
+    await db.insert(curtailmentRecords).values(batchInserts)
+      .onConflictDoNothing({
+        target: [curtailmentRecords.id]
+      });
     
     return {
       records: validRecords.length,
