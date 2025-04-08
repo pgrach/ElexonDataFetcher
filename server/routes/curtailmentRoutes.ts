@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
-import { calculateBitcoinForBMU, processHistoricalCalculations, processSingleDay, calculateMonthlyBitcoinSummary } from '../services/bitcoinService';
+import { calculateMonthlyBitcoinSummary } from '../services/bitcoinService';
+import { calculateBitcoin } from '../utils/bitcoin';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
 import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
@@ -182,7 +183,7 @@ router.get('/mining-potential', async (req, res) => {
       });
     }
 
-    const bitcoinMined = calculateBitcoinForBMU(totalEnergy, minerModel, Number(difficulty));
+    const bitcoinMined = calculateBitcoin(totalEnergy, minerModel, Number(difficulty));
 
     res.json({
       bitcoinMined,

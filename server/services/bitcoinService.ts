@@ -61,10 +61,10 @@ export async function calculateMonthlyBitcoinSummary(
     }
     
     // Delete existing summary if any
-    const yearMonth = `${year}-${month}`;
+    const yearMonth2 = `${year}-${month}`; // Using a different variable name to avoid redeclaration
     await db.execute(sql`
       DELETE FROM bitcoin_monthly_summaries
-      WHERE year_month = ${yearMonth}
+      WHERE year_month = ${yearMonth2}
       AND miner_model = ${minerModel}
     `);
     
