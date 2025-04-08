@@ -13,6 +13,82 @@ import {
 import { eq, and, sql, desc, inArray, gte, lte, sum } from 'drizzle-orm';
 
 /**
+ * Calculate Bitcoin for a BMU based on energy, miner model, and difficulty
+ * 
+ * @param energyMWh - Energy in MWh
+ * @param minerModel - Miner model (e.g., 'S19J_PRO')
+ * @param difficulty - Bitcoin network difficulty
+ * @returns Potential Bitcoin mined
+ */
+export function calculateBitcoinForBMU(
+  energyMWh: number,
+  minerModel: string,
+  difficulty: number
+): number {
+  try {
+    // Convert MWh to kWh
+    const energyKWh = energyMWh * 1000;
+    
+    // Miner model specifications (terahashes per second and power consumption in watts)
+    const minerSpecs: Record<string, { hashrate: number, power: number }> = {
+      'S19J_PRO': { hashrate: 100, power: 3050 },
+      'S19_XP': { hashrate: 140, power: 3010 },
+      'S21_XP': { hashrate: 190, power: 3100 },
+      'M50S': { hashrate: 166, power: 3300 },
+      'M50': { hashrate: 132, power: 3348 }
+    };
+    
+    // Use specified miner or default to S19J_PRO
+    const miner = minerSpecs[minerModel] || minerSpecs['S19J_PRO'];
+    
+    // Calculate how many miners this energy could power
+    const hoursInDay = 24;
+    const minerDailyEnergyKWh = (miner.power / 1000) * hoursInDay;
+    const minersSupported = energyKWh / minerDailyEnergyKWh;
+    
+    // Calculate total hashrate these miners would produce (TH/s)
+    const totalHashrateTHs = minersSupported * miner.hashrate;
+    
+    // Convert TH/s to H/s for the Bitcoin formula
+    const totalHashrateHs = totalHashrateTHs * 1e12;
+    
+    // Bitcoin mining formula: 
+    // BTC = (hashrate * block_reward * seconds_per_day) / (difficulty * 2^32)
+    const blockReward = 6.25; // Current block reward in BTC
+    const secondsPerDay = 86400;
+    const divisor = difficulty * Math.pow(2, 32);
+    
+    // Calculate Bitcoin mined per day
+    const bitcoinMined = (totalHashrateHs * blockReward * secondsPerDay) / divisor;
+    
+    return bitcoinMined;
+  } catch (error) {
+    console.error('Error calculating Bitcoin:', error);
+    return 0;
+  }
+}
+
+/**
+ * Process historical Bitcoin calculations for a specific date and miner model
+ */
+export async function processHistoricalCalculations(
+  date: string,
+  minerModel: string
+): Promise<number> {
+  // Implementation needed
+  return 0;
+}
+
+/**
+ * Process a single day's worth of Bitcoin calculations
+ */
+export async function processSingleDay(
+  date: string
+): Promise<void> {
+  // Implementation needed
+}
+
+/**
  * Calculate Monthly Bitcoin Summary
  * 
  * @param yearMonth - Year and month in format 'YYYY-MM'
@@ -26,11 +102,14 @@ export async function calculateMonthlyBitcoinSummary(
     console.log(`Calculating monthly Bitcoin summary for ${yearMonth} and ${minerModel}...`);
     
     // Extract year and month from YYYY-MM format
-    const [year, month] = yearMonth.split('-');
+    const parts = yearMonth.split('-');
     
-    if (!year || !month) {
+    if (parts.length !== 2) {
       throw new Error(`Invalid year-month format: ${yearMonth}, expected 'YYYY-MM'`);
     }
+    
+    const year = parts[0];
+    const month = parts[1];
     
     // Calculate start and end date for the month
     const startDate = `${year}-${month}-01`;
@@ -53,7 +132,8 @@ export async function calculateMonthlyBitcoinSummary(
         AND miner_model = ${minerModel}
     `);
     
-    const data = result[0] as any;
+    const rows = result as any[];
+    const data = rows.length > 0 ? rows[0] : null;
     
     if (!data || !data.total_bitcoin) {
       console.log(`No Bitcoin data found for ${yearMonth} and ${minerModel}`);
@@ -61,20 +141,24 @@ export async function calculateMonthlyBitcoinSummary(
     }
     
     // Delete existing summary if any
-    const yearMonth = `${year}-${month}`;
     await db.execute(sql`
       DELETE FROM bitcoin_monthly_summaries
       WHERE year_month = ${yearMonth}
       AND miner_model = ${minerModel}
     `);
     
-    // Insert new summary
-    await db.insert(bitcoinMonthlySummaries).values({
-      yearMonth: yearMonth,
-      minerModel: minerModel,
-      bitcoinMined: data.total_bitcoin.toString(),
-      updatedAt: new Date()
-    });
+    // Insert new summary using the correct column names
+    await db.execute(sql`
+      INSERT INTO bitcoin_monthly_summaries 
+      (year_month, miner_model, bitcoin_mined, value_at_mining, updated_at)
+      VALUES (
+        ${yearMonth},
+        ${minerModel},
+        ${data.total_bitcoin.toString()},
+        '0', 
+        ${new Date().toISOString()}
+      )
+    `);
     
     console.log(`Monthly Bitcoin summary updated for ${yearMonth} and ${minerModel}: ${data.total_bitcoin} BTC`);
   } catch (error) {
@@ -102,8 +186,10 @@ export async function manualUpdateYearlyBitcoinSummary(year: string): Promise<vo
     
     // Convert result to array of miner models
     const minerModels: string[] = [];
-    for (let i = 0; i < minerModelsResult.length; i++) {
-      const row = minerModelsResult[i] as any;
+    const minerModelResults = minerModelsResult as any[];
+    
+    for (let i = 0; i < minerModelResults.length; i++) {
+      const row = minerModelResults[i] as any;
       if (row.miner_model) {
         minerModels.push(row.miner_model);
       }
@@ -130,9 +216,11 @@ export async function manualUpdateYearlyBitcoinSummary(year: string): Promise<vo
           AND miner_model = ${minerModel}
       `);
       
+      const monthlyResults = monthlyResult as any[];
       let data: any = null;
-      if (monthlyResult.length > 0) {
-        data = monthlyResult[0] as any;
+      
+      if (monthlyResults.length > 0) {
+        data = monthlyResults[0];
       }
       
       if (!data || !data.total_bitcoin) {
@@ -148,7 +236,8 @@ export async function manualUpdateYearlyBitcoinSummary(year: string): Promise<vo
         ) as exists
       `);
       
-      const tableExists = tableExistsResult[0] && (tableExistsResult[0] as any).exists === true;
+      const tableExistsResults = tableExistsResult as any[];
+      const tableExists = tableExistsResults.length > 0 && tableExistsResults[0].exists === true;
       
       if (!tableExists) {
         console.log(`Warning: bitcoin_yearly_summaries table doesn't exist. Skipping yearly summary update.`);
@@ -162,15 +251,15 @@ export async function manualUpdateYearlyBitcoinSummary(year: string): Promise<vo
         AND miner_model = ${minerModel}
       `);
       
-      // Insert new yearly summary
+      // Insert new yearly summary with all required fields
       await db.execute(sql`
         INSERT INTO bitcoin_yearly_summaries 
-        (year, miner_model, bitcoin_mined, months_count, updated_at)
+        (year, miner_model, bitcoin_mined, value_at_mining, updated_at)
         VALUES (
           ${year},
           ${minerModel},
           ${data.total_bitcoin.toString()},
-          ${data.months_count || 0},
+          '0', // Default value for value_at_mining
           ${new Date().toISOString()}
         )
       `);
