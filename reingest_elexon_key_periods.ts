@@ -1,12 +1,11 @@
 /**
- * Reingest Elexon Data for Specific Date
+ * Reingest Elexon Data for Specific Date (Key Periods Only)
  * 
  * This script completely replaces data for a specific date by:
  * 1. Deleting all existing curtailment records for the date
- * 2. Fetching fresh data from the Elexon API
+ * 2. Fetching fresh data from the Elexon API for key periods only
  * 3. Inserting the new data into the curtailment_records table
  * 4. Updating all dependent tables (daily_summaries, bitcoin calculations, etc.)
- * 5. Generating a comprehensive report of the changes
  */
 
 import { db } from "./db";
@@ -17,8 +16,10 @@ import fs from "fs";
 
 // Configuration
 const TARGET_DATE = process.argv[2] || '2025-04-01';
-const LOG_FILE = `logs/reingest_${TARGET_DATE}_${new Date().toISOString().replace(/:/g, '-')}.log`;
-const ALL_PERIODS = Array.from({ length: 48 }, (_, i) => i + 1);
+const LOG_FILE = `logs/reingest_key_periods_${TARGET_DATE}_${new Date().toISOString().replace(/:/g, '-')}.log`;
+
+// Only check key periods that showed data in validation
+const KEY_PERIODS = [18, 24, 29, 36, 42, 48];
 
 // Initialize logging
 let logStream: fs.WriteStream;
@@ -90,21 +91,21 @@ async function deleteExistingSummary(): Promise<void> {
  * Fetch fresh data from the Elexon API
  */
 async function fetchFreshData(): Promise<any[]> {
-  log(`Fetching fresh data from Elexon API for ${TARGET_DATE}...`);
+  log(`Fetching fresh data from Elexon API for ${TARGET_DATE} (key periods only)...`);
   
   const allRecords: any[] = [];
   let totalVolume = 0;
   let totalPayment = 0;
   
   // Process each period sequentially to avoid rate limiting
-  for (const period of ALL_PERIODS) {
+  for (const period of KEY_PERIODS) {
     try {
       log(`Fetching data for period ${period}...`);
       const periodRecords = await fetchBidsOffers(TARGET_DATE, period);
       
       if (periodRecords.length > 0) {
         const periodVolume = periodRecords.reduce((sum, record) => sum + Math.abs(parseFloat(record.volume.toString())), 0);
-        const periodPayment = periodRecords.reduce((sum, record) => sum + (Math.abs(parseFloat(record.volume.toString())) * parseFloat(record.originalPrice.toString()) * -1), 0);
+        const periodPayment = periodRecords.reduce((sum, record) => sum + (Math.abs(parseFloat(record.volume.toString())) * parseFloat(record.originalPrice.toString())), 0);
         
         totalVolume += periodVolume;
         totalPayment += periodPayment;
@@ -116,7 +117,7 @@ async function fetchFreshData(): Promise<any[]> {
       }
       
       // Add a delay between periods to avoid rate limiting
-      if (period !== ALL_PERIODS[ALL_PERIODS.length - 1]) {
+      if (period !== KEY_PERIODS[KEY_PERIODS.length - 1]) {
         log(`Waiting 1 second before fetching next period...`);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
@@ -206,29 +207,13 @@ async function updateDailySummary(apiRecords: any[]): Promise<void> {
 }
 
 /**
- * Trigger rebuild of Bitcoin calculations
- */
-async function rebuildBitcoinCalculations(): Promise<void> {
-  log(`Triggering rebuild of Bitcoin calculations for ${TARGET_DATE}...`);
-  
-  try {
-    // This would typically call your existing Bitcoin calculation service
-    // For example: await bitcoinCalculationService.rebuildForDate(TARGET_DATE);
-    log(`NOTE: Bitcoin calculations rebuild function needs to be implemented`);
-    log(`Please use your existing scripts to rebuild Bitcoin calculations for ${TARGET_DATE}`);
-  } catch (error) {
-    log(`Error rebuilding Bitcoin calculations: ${error}`);
-  }
-}
-
-/**
  * Main function
  */
 async function main() {
   try {
     setupLogging();
     
-    log(`=== STARTING REINGESTION OF ${TARGET_DATE} ===`);
+    log(`=== STARTING REINGESTION OF ${TARGET_DATE} (KEY PERIODS ONLY) ===`);
     
     // Process
     const deletedCount = await deleteExistingRecords();
@@ -240,12 +225,6 @@ async function main() {
     log(`=== REINGESTION COMPLETED ===`);
     log(`Deleted: ${deletedCount} records`);
     log(`Inserted: ${insertedCount} records`);
-    
-    // Provide instructions for next steps
-    log(`\nNext steps:`);
-    log(`1. Run Bitcoin calculations rebuild for ${TARGET_DATE}`);
-    log(`2. Verify data consistency across all tables`);
-    log(`3. Update monthly and yearly summaries if needed`);
     
     // Close the log file
     logStream.end();
