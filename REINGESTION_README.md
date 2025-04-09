@@ -1,97 +1,82 @@
-# Elexon Data Reingestion Process
+# Data Reingestion Utility for 2025-03-24
 
-This document describes the process for reingesting Elexon API data for specific dates when discrepancies are found between the API data and database records.
+This utility provides scripts to reingest and update data for March 24, 2025 from the Elexon API. It specifically focuses on the `curtailment_records` table and related summary tables.
 
-## Overview
+## Quick Start
 
-The reingestion process involves:
-
-1. Validating data discrepancies using the validation scripts
-2. Deleting existing data for the target date
-3. Fetching fresh data from the Elexon API
-4. Inserting the new data into the database
-5. Updating dependent tables (daily summaries, Bitcoin calculations, etc.)
-
-## Available Scripts
-
-### 1. Validation Scripts
-
-These scripts check for data discrepancies between the Elexon API and the database:
-
-- `validate_elexon_data_batch1.ts` - Validates periods 1-16
-- `validate_elexon_data_batch2.ts` - Validates periods 17-32
-- `validate_elexon_data_batch3.ts` - Validates periods 33-48
-- `validate_elexon_combine_results.ts` - Combines results from all batches
-
-Run the batch validation scripts first, then combine the results:
+Run the interactive shell script and follow the prompts:
 
 ```bash
-npx tsx validate_elexon_data_batch1.ts
-npx tsx validate_elexon_data_batch2.ts
-npx tsx validate_elexon_data_batch3.ts
-npx tsx validate_elexon_combine_results.ts
+./reingest_2025_03_24.sh
 ```
 
-### 2. Reingestion Scripts
+## Available Options
 
-Two options are available for reingestion:
+The script provides four main operations:
 
-#### Option A: Full Reingestion (All 48 Periods)
+1. **Basic Reingestion** - Updates only the `curtailment_records` table using TypeScript
+   - Uses: `server/scripts/run_reingest_2025_03_24.ts`
+   - Good for: TypeScript developers who only need to update raw data
 
-Processes all 48 settlement periods (1-48) for the target date:
+2. **Complete Reingestion** - Updates all tables (curtailment records + summaries + Bitcoin calculations)
+   - Uses: `server/scripts/update_2025_03_24_complete.ts`
+   - Good for: Full system update with all dependencies
+
+3. **Simple JS Version** - Most reliable option for updating curtailment records
+   - Uses: `server/scripts/reingest_2025_03_24_simple.js`
+   - Good for: Production use when TypeScript compilation issues might occur
+
+4. **Update Summary Tables Only** - Updates summaries after reingestion
+   - Uses: `server/scripts/update_summaries_2025_03_24.js`
+   - Good for: Use after options 1 or 3 to update summary tables
+
+## Manual Usage
+
+You can also run individual scripts directly:
 
 ```bash
-./reingest_elexon_data.sh 2025-04-01
+# Option 1: Basic TypeScript reingestion
+npx tsx server/scripts/run_reingest_2025_03_24.ts
+
+# Option 2: Complete reingestion with all tables
+npx tsx server/scripts/update_2025_03_24_complete.ts
+
+# Option 3: Simple JS version (most reliable)
+node server/scripts/reingest_2025_03_24_simple.js
+
+# Option 4: Update summaries only
+node server/scripts/update_summaries_2025_03_24.js
 ```
 
-This is thorough but can take a long time due to API rate limits.
+## How It Works
 
-#### Option B: Key Periods Reingestion (Faster)
+1. **Data Fetching**: Each script connects to the Elexon API and fetches curtailment data for March 24, 2025.
 
-Only processes settlement periods known to have curtailment data for the target date:
+2. **Data Processing**: 
+   - Filters data to include only wind farms (using the BMU mapping file)
+   - Processes valid curtailment records (negative volume with SO or CADL flags)
+   - Calculates payment values based on original prices
 
-```bash
-./reingest_elexon_key_periods.sh 2025-04-01
-```
-
-This is much faster and covers the essential data.
-
-### 3. Bitcoin Calculation Update
-
-After reingestion, updates the Bitcoin calculations for the target date:
-
-```bash
-./update_bitcoin_daily_summaries_for_date.sh 2025-04-01
-```
-
-### 4. Combined Process (Recommended)
-
-Executes the key periods reingestion and Bitcoin update in a single command:
-
-```bash
-./reingest_and_update_bitcoin.sh 2025-04-01
-```
-
-## Logging
-
-All scripts generate detailed logs in the `logs` directory:
-
-- Validation logs: `logs/validation_*.log`
-- Reingestion logs: `logs/reingest_*.log`
-- Bitcoin update logs: `logs/update_bitcoin_*.log`
-- Combined logs: `logs/combined_reingestion_*.log`
+3. **Database Updates**:
+   - Clears existing records for the target date
+   - Inserts new records from the API
+   - Updates summary tables with aggregated values
 
 ## Troubleshooting
 
-If reingestion fails:
+If you encounter issues:
 
-1. Check the log files for error messages
-2. Verify that the date format is correct (YYYY-MM-DD)
-3. Ensure API connectivity (the scripts rely on the Elexon API)
-4. Check for database constraints that might be preventing updates
+1. **TypeScript Errors**: Use option 3 (simple JS version) which avoids TypeScript compilation issues
+2. **API Rate Limiting**: The scripts include rate limiting controls but may still hit limits if run repeatedly
+3. **Database Errors**: Check PostgreSQL connection and ensure the schema is correctly set up
+4. **Summary Table Errors**: If summary tables aren't updating correctly, use option 4 to update them separately
 
-## Notes
+## For Developers
 
-- The reingestion process will delete and replace **all** data for the target date
-- Monthly and yearly summaries should be updated separately if needed
-- Wind generation data for daily summaries will need to be updated using the `update_daily_summary_wind_data.ts` script
+The reingestion system follows the same pattern as the main data pipeline:
+
+1. `elexon.ts` - Handles API communication
+2. `reingest_2025_03_24.ts` - Processes and stores data
+3. `update_summaries_2025_03_24.js` - Updates summary tables
+
+The TypeScript and JavaScript versions are functionally equivalent, but the JavaScript version bypasses TypeScript compilation issues that might occur in some environments.
