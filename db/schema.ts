@@ -27,13 +27,14 @@ export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calcula
   calculatedAt: timestamp("calculated_at").defaultNow(),
 });
 
-// Define the bitcoin_daily_summaries table (though it's managed outside of Drizzle)
+// Define the bitcoin_daily_summaries table 
 export const bitcoinDailySummaries = pgTable("bitcoin_daily_summaries", {
   id: serial("id").primaryKey(),
   summaryDate: date("summary_date").notNull(),
   minerModel: text("miner_model").notNull(),
   bitcoinMined: numeric("bitcoin_mined").notNull(),
-  averageDifficulty: numeric("average_difficulty").notNull(),
+  // averageDifficulty column removed to follow DRY principle
+  // as this data is already available in historical_bitcoin_calculations
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

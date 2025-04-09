@@ -16,12 +16,11 @@ async function updateDailyBitcoinSummary(date: string, minerModel: string): Prom
   try {
     console.log(`Updating daily Bitcoin summary for ${date} and ${minerModel}...`);
     
-    // Calculate total Bitcoin mined and average difficulty for the day
+    // Calculate total Bitcoin mined for the day
     console.log(`Executing query for ${date} and ${minerModel}...`);
     const result = await db.execute(sql`
       SELECT
-        SUM(CAST(bitcoin_mined AS NUMERIC)) as total_bitcoin,
-        AVG(CAST(difficulty AS NUMERIC)) as average_difficulty
+        SUM(CAST(bitcoin_mined AS NUMERIC)) as total_bitcoin
       FROM
         historical_bitcoin_calculations
       WHERE
@@ -45,12 +44,11 @@ async function updateDailyBitcoinSummary(date: string, minerModel: string): Prom
       AND miner_model = ${minerModel}
     `);
     
-    // Insert new summary using the schema
+    // Insert new summary using the schema (without average_difficulty)
     await db.insert(bitcoinDailySummaries).values({
       summaryDate: date,
       minerModel: minerModel,
       bitcoinMined: data.total_bitcoin.toString(),
-      averageDifficulty: data.average_difficulty.toString(),
       updatedAt: new Date(),
       createdAt: new Date()
     });
