@@ -101,7 +101,7 @@ export async function processDailyCurtailment(date: string): Promise<void> {
           const periodResults = await Promise.all(
             validRecords.map(async record => {
               const volume = Math.abs(record.volume);
-              const payment = volume * record.originalPrice * -1; // Multiply by -1 to ensure payment is negative
+              const payment = volume * record.originalPrice;
 
               try {
                 const result = await db.insert(curtailmentRecords).values({
