@@ -8,9 +8,148 @@ import { db } from '../../db';
 import { 
   historicalBitcoinCalculations, 
   bitcoinMonthlySummaries, 
-  bitcoinYearlySummaries 
+  bitcoinYearlySummaries,
+  curtailmentRecords
 } from '../../db/schema';
 import { eq, and, sql, desc, inArray, gte, lte, sum } from 'drizzle-orm';
+import { calculateBitcoin } from '../utils/bitcoin';
+import { getDifficultyData } from './dynamodbService';
+
+/**
+ * Process Bitcoin calculations for a single day and miner model
+ * 
+ * @param date - The settlement date in format 'YYYY-MM-DD'
+ * @param minerModel - The miner model (e.g., 'S19J_PRO', 'S9', 'M20S')
+ */
+export async function processSingleDay(
+  date: string,
+  minerModel: string
+): Promise<void> {
+  try {
+    console.log(`Processing Bitcoin calculations for ${date} with miner model ${minerModel}`);
+    
+    // Step 1: Get the network difficulty for this date
+    const difficulty = await getDifficultyData(date);
+    console.log(`Using difficulty ${difficulty} for ${date}`);
+    
+    // Step 2: Delete any existing calculations for this date and model to avoid duplicates
+    await db.delete(historicalBitcoinCalculations)
+      .where(and(
+        eq(historicalBitcoinCalculations.settlementDate, date),
+        eq(historicalBitcoinCalculations.minerModel, minerModel)
+      ));
+    
+    console.log(`Deleted existing calculations for ${date} and ${minerModel}`);
+    
+    // Step 3: Get all curtailment records for this date
+    const records = await db.select({
+      settlementPeriod: curtailmentRecords.settlementPeriod,
+      farmId: curtailmentRecords.farmId,
+      leadPartyName: curtailmentRecords.leadPartyName,
+      volume: curtailmentRecords.volume
+    })
+    .from(curtailmentRecords)
+    .where(eq(curtailmentRecords.settlementDate, date));
+    
+    if (records.length === 0) {
+      console.log(`No curtailment records found for ${date}`);
+      return;
+    }
+    
+    console.log(`Found ${records.length} curtailment records for ${date}`);
+    
+    // Step 4: Calculate Bitcoin for each curtailment record
+    let totalBitcoin = 0;
+    const insertPromises = [];
+    
+    for (const record of records) {
+      // Convert volume (MWh) to positive number for calculation
+      const mwh = Math.abs(Number(record.volume));
+      
+      // Skip records with zero or invalid volume
+      if (mwh <= 0 || isNaN(mwh)) {
+        continue;
+      }
+      
+      // Calculate Bitcoin mined
+      const bitcoinMined = calculateBitcoin(mwh, minerModel, difficulty);
+      totalBitcoin += bitcoinMined;
+      
+      // Insert the calculation record
+      insertPromises.push(
+        db.insert(historicalBitcoinCalculations).values({
+          settlementDate: date,
+          settlementPeriod: Number(record.settlementPeriod),
+          minerModel: minerModel,
+          farmId: record.farmId,
+          bitcoinMined: bitcoinMined.toString(),
+          difficulty: difficulty.toString()
+        })
+      );
+    }
+    
+    // Execute all inserts
+    await Promise.all(insertPromises);
+    
+    console.log(`Successfully processed ${insertPromises.length} Bitcoin calculations for ${date} and ${minerModel}`);
+    console.log(`Total Bitcoin calculated: ${totalBitcoin.toFixed(8)}`);
+    
+    // Calculate monthly summary for the month containing this date
+    const yearMonth = date.substring(0, 7); // YYYY-MM
+    await calculateMonthlyBitcoinSummary(yearMonth, minerModel);
+    
+    // Update yearly summary for the year containing this date
+    const year = date.substring(0, 4); // YYYY
+    await manualUpdateYearlyBitcoinSummary(year);
+    
+  } catch (error) {
+    console.error(`Error processing Bitcoin calculations for ${date} and ${minerModel}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Process historical calculations for a date range and multiple miner models
+ * 
+ * @param startDate - Start date in YYYY-MM-DD format
+ * @param endDate - End date in YYYY-MM-DD format
+ * @param minerModels - Array of miner models to process
+ */
+export async function processHistoricalCalculations(
+  startDate: string,
+  endDate: string,
+  minerModels: string[]
+): Promise<void> {
+  try {
+    console.log(`Processing historical calculations from ${startDate} to ${endDate}`);
+    
+    // Get all dates in the range
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const dates: string[] = [];
+    
+    // Generate all dates in the range
+    const current = new Date(start);
+    while (current <= end) {
+      dates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    
+    console.log(`Processing ${dates.length} days and ${minerModels.length} miner models`);
+    
+    // Process each date and miner model
+    for (const date of dates) {
+      for (const minerModel of minerModels) {
+        await processSingleDay(date, minerModel);
+      }
+    }
+    
+    console.log(`Successfully processed historical calculations from ${startDate} to ${endDate}`);
+  } catch (error) {
+    console.error(`Error processing historical calculations:`, error);
+    throw error;
+  }
+}
 
 /**
  * Calculate Monthly Bitcoin Summary
