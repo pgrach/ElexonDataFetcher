@@ -27,12 +27,22 @@ export const historicalBitcoinCalculations = pgTable("historical_bitcoin_calcula
   calculatedAt: timestamp("calculated_at").defaultNow(),
 });
 
+// Define the bitcoin_daily_summaries table (though it's managed outside of Drizzle)
+export const bitcoinDailySummaries = pgTable("bitcoin_daily_summaries", {
+  id: serial("id").primaryKey(),
+  summaryDate: date("summary_date").notNull(),
+  minerModel: text("miner_model").notNull(),
+  bitcoinMined: numeric("bitcoin_mined").notNull(),
+  averageDifficulty: numeric("average_difficulty").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const bitcoinMonthlySummaries = pgTable("bitcoin_monthly_summaries", {
   id: serial("id").primaryKey(),
   yearMonth: text("year_month").notNull(),
   minerModel: text("miner_model").notNull(),
   bitcoinMined: numeric("bitcoin_mined").notNull(),
-  valueAtMining: numeric("value_at_mining").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -42,7 +52,6 @@ export const bitcoinYearlySummaries = pgTable("bitcoin_yearly_summaries", {
   year: text("year").notNull(),
   minerModel: text("miner_model").notNull(),
   bitcoinMined: numeric("bitcoin_mined").notNull(),
-  valueAtMining: numeric("value_at_mining").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -149,6 +158,8 @@ export const selectIngestionProgressSchema = createSelectSchema(ingestionProgres
 
 export const insertHistoricalBitcoinCalculationSchema = createInsertSchema(historicalBitcoinCalculations);
 export const selectHistoricalBitcoinCalculationSchema = createSelectSchema(historicalBitcoinCalculations);
+export const insertBitcoinDailySummarySchema = createInsertSchema(bitcoinDailySummaries);
+export const selectBitcoinDailySummarySchema = createSelectSchema(bitcoinDailySummaries);
 export const insertBitcoinMonthlySummarySchema = createInsertSchema(bitcoinMonthlySummaries);
 export const selectBitcoinMonthlySummarySchema = createSelectSchema(bitcoinMonthlySummaries);
 export const insertBitcoinYearlySummarySchema = createInsertSchema(bitcoinYearlySummaries);
@@ -194,6 +205,8 @@ export type InsertWindGenerationData = typeof windGenerationData.$inferInsert;
 
 export type HistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferSelect;
 export type InsertHistoricalBitcoinCalculation = typeof historicalBitcoinCalculations.$inferInsert;
+export type BitcoinDailySummary = typeof bitcoinDailySummaries.$inferSelect;
+export type InsertBitcoinDailySummary = typeof bitcoinDailySummaries.$inferInsert;
 export type BitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferSelect;
 export type InsertBitcoinMonthlySummary = typeof bitcoinMonthlySummaries.$inferInsert;
 export type BitcoinYearlySummary = typeof bitcoinYearlySummaries.$inferSelect;

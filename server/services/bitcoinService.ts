@@ -9,6 +9,7 @@ import {
   historicalBitcoinCalculations, 
   bitcoinMonthlySummaries, 
   bitcoinYearlySummaries,
+  bitcoinDailySummaries,
   curtailmentRecords
 } from '../../db/schema';
 import { eq, and, sql, desc, inArray, gte, lte, sum } from 'drizzle-orm';
@@ -304,12 +305,11 @@ export async function manualUpdateYearlyBitcoinSummary(year: string): Promise<vo
       // Insert new yearly summary
       await db.execute(sql`
         INSERT INTO bitcoin_yearly_summaries 
-        (year, miner_model, bitcoin_mined, months_count, updated_at)
+        (year, miner_model, bitcoin_mined, updated_at)
         VALUES (
           ${year},
           ${minerModel},
           ${data.total_bitcoin.toString()},
-          ${data.months_count || 0},
           ${new Date().toISOString()}
         )
       `);

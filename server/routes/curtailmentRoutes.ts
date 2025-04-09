@@ -4,7 +4,7 @@ import { calculateMonthlyBitcoinSummary } from '../services/bitcoinService';
 import { calculateBitcoin } from '../utils/bitcoin';
 import { BitcoinCalculation } from '../types/bitcoin';
 import { db } from "@db";
-import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries, bitcoinYearlySummaries } from "@db/schema";
+import { historicalBitcoinCalculations, curtailmentRecords, bitcoinMonthlySummaries, bitcoinYearlySummaries, bitcoinDailySummaries } from "@db/schema";
 import { and, eq, sql, between, inArray } from "drizzle-orm";
 import { getDifficultyData } from '../services/dynamodbService';
 import axios from 'axios';
