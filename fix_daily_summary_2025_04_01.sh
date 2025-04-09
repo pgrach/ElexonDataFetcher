@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# Exit on error
-set -e
+# This script runs the fix_daily_summary_2025_04_01.ts script to correct daily summary values.
 
-echo "==========================================================="
-echo "Fix Daily Summary for 2025-04-01"
-echo "==========================================================="
+echo "===================================================
+     DAILY SUMMARY FIX for 2025-04-01
+==================================================="
 
-# Make the script executable
-chmod +x fix_daily_summary_2025_04_01.sh
-
-# Execute the TypeScript script using tsx
 echo "Starting fix process..."
 npx tsx fix_daily_summary_2025_04_01.ts
 
-echo "Fix process completed."
-echo "==========================================================="
+# Check exit status
+if [ $? -eq 0 ]; then
+  echo -e "\nDaily summary fixed successfully!"
+else
+  echo -e "\nError fixing daily summary. Check log file for details."
+  exit 1
+fi
