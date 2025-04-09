@@ -8,6 +8,12 @@ This utility provides scripts to reingest and update data for April 1, 2025 from
 4. Updating the yearly summary for 2025
 5. Updating Bitcoin calculations for all supported miner models
 
+## Latest Updates
+
+- **Added Duplicate Protection** - Enhanced transaction processing and verification to ensure no duplicate records are created during reingestion
+- **Improved Batch Insertions** - Added batch processing for more efficient record insertion
+- **Verification Steps** - Added verification steps after deletions and insertions to ensure data integrity
+
 ## Quick Start
 
 Run the interactive shell script and follow the prompts:
@@ -72,5 +78,28 @@ If you encounter issues during the reingestion process:
 2. **Database Locks**: If database is locked, ensure no other processes are writing to the same tables
 3. **Missing BMU Mapping**: Verify that `data/bmu_mapping.json` exists and contains valid wind farm BMU IDs
 4. **Partial Updates**: If the process fails partway through, you can run specific parts (options 2-4) to complete the update
+5. **Duplicate Data**: If you encounter duplicate data issues despite the built-in protection, verify all running processes and manually clean the duplicates with SQL using:
+   ```sql
+   -- Check for duplicates
+   SELECT settlement_date, settlement_period, farm_id, COUNT(*) 
+   FROM curtailment_records 
+   WHERE settlement_date = '2025-04-01'
+   GROUP BY settlement_date, settlement_period, farm_id
+   HAVING COUNT(*) > 1;
+   
+   -- Remove duplicates (if found)
+   DELETE FROM curtailment_records 
+   WHERE id IN (
+     SELECT id FROM (
+       SELECT id, ROW_NUMBER() OVER(
+         PARTITION BY settlement_date, settlement_period, farm_id
+         ORDER BY created_at
+       ) AS row_num 
+       FROM curtailment_records 
+       WHERE settlement_date = '2025-04-01'
+     ) t 
+     WHERE row_num > 1
+   );
+   ```
 
 For detailed logs of the process, check the console output during execution.
