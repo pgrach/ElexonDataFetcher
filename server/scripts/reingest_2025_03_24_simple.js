@@ -5,8 +5,8 @@
  * with the existing environment configuration.
  */
 
-import { db } from "../../db/index.js";
-import { curtailmentRecords } from "../../db/schema.js";
+import { db } from "@db";
+import { curtailmentRecords } from "@db/schema";
 import { eq } from "drizzle-orm";
 import { readFile } from "fs/promises";
 import path from "path";
