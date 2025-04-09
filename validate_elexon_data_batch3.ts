@@ -1,19 +1,20 @@
 /**
- * Validate Elexon API Data for 2025-04-01
+ * Validate Elexon API Data - Batch 3 (Periods 33-48)
  * 
  * This script fetches data directly from the Elexon API for 2025-04-01
  * and compares it with the data stored in the curtailment_records table.
+ * 
+ * This file processes periods 33-48 to avoid timeouts.
  */
 
 import { fetchBidsOffers } from "./elexon_validation";
-import { db } from "./db";
 import { curtailmentRecords } from "./db/schema";
+import { db } from "./db";
 import { eq } from "drizzle-orm";
 
 const TARGET_DATE = '2025-04-01';
-// Select a smaller set of critical periods to ensure script completes
-// Still covers morning, afternoon, and evening
-const PERIODS_TO_CHECK = [18, 24, 29, 36, 42, 48];
+// Check periods 33-48 in this batch
+const PERIODS_TO_CHECK = Array.from({ length: 16 }, (_, i) => i + 33);
 
 // Create a class to accumulate totals
 class VolumeAccumulator {
@@ -34,7 +35,7 @@ class VolumeAccumulator {
   }
   
   printSummary(source: string) {
-    console.log(`\n=== ${source} Summary ===`);
+    console.log(`\n=== ${source} Summary (Batch 3: Periods 33-48) ===`);
     console.log(`Records: ${this.recordCount}`);
     console.log(`Periods with data: ${this.periodCount}`);
     console.log(`Total volume: ${this.totalVolume.toFixed(2)} MWh`);
@@ -44,7 +45,7 @@ class VolumeAccumulator {
 
 async function validateElexonData(): Promise<void> {
   try {
-    console.log(`\n=== Validating Elexon API Data for ${TARGET_DATE} ===\n`);
+    console.log(`\n=== Validating Elexon API Data for ${TARGET_DATE} (Batch 3: Periods 33-48) ===\n`);
     
     // Fetch data from database
     const dbRecords = await db
@@ -75,17 +76,17 @@ async function validateElexonData(): Promise<void> {
       dbByPeriod[period].count++;
     }
     
-    // Populate DB accumulator
+    // Populate DB accumulator (only for periods in this batch)
     for (const period in dbByPeriod) {
-      const data = dbByPeriod[parseInt(period)];
-      dbData.addPeriodData(parseInt(period), data.volume, data.payment, data.count);
+      const periodNum = parseInt(period);
+      if (PERIODS_TO_CHECK.includes(periodNum)) {
+        const data = dbByPeriod[periodNum];
+        dbData.addPeriodData(periodNum, data.volume, data.payment, data.count);
+      }
     }
     
-    // Fetch data from Elexon API for selected key periods with rate limiting
-    console.log(`\nFetching data from Elexon API for ${PERIODS_TO_CHECK.length} key periods (with rate limiting)...`);
-    
-    // Process periods sequentially to avoid rate limiting
-    console.log("\nProcessing each period sequentially to avoid rate limiting...");
+    // Fetch data from Elexon API for periods in this batch
+    console.log(`\nFetching data from Elexon API for periods 33-48...`);
     
     // Process each period one at a time
     for (const period of PERIODS_TO_CHECK) {
@@ -118,17 +119,8 @@ async function validateElexonData(): Promise<void> {
     apiData.printSummary("Elexon API");
     dbData.printSummary("Database");
     
-    // We no longer need this since we're checking all periods
-    // Keep a note of which periods have data in both API and DB
-    const periodsInBoth = new Set<number>();
-    for (const period of PERIODS_TO_CHECK) {
-      if (dbByPeriod[period] && apiData.periodCounts[period]) {
-        periodsInBoth.add(period);
-      }
-    }
-    
-    // Compare totals between API and DB
-    console.log("\n=== Comparison ===");
+    // Compare totals between API and DB for this batch
+    console.log("\n=== Batch 3 Comparison (Periods 33-48) ===");
     const volumeDiff = Math.abs(apiData.totalVolume - dbData.totalVolume);
     const paymentDiff = Math.abs(apiData.totalPayment - Math.abs(dbData.totalPayment));
     const recordDiff = Math.abs(apiData.recordCount - dbData.recordCount);
@@ -143,12 +135,12 @@ async function validateElexonData(): Promise<void> {
     console.log(`Records in API: ${apiData.recordCount}`);
     console.log(`Records in DB: ${dbData.recordCount}`);
     
-    // Calculate missing periods
+    // Calculate missing periods in this batch
     const apiPeriods = new Set(Object.keys(apiData.periodCounts).map(p => parseInt(p)));
-    const dbPeriods = new Set(Object.keys(dbByPeriod).map(p => parseInt(p)));
+    const dbPeriodsInBatch = new Set(PERIODS_TO_CHECK.filter(p => dbByPeriod[p]));
     
-    const missingInDb = [...apiPeriods].filter(p => !dbPeriods.has(p));
-    const missingInApi = [...dbPeriods].filter(p => !apiPeriods.has(p));
+    const missingInDb = [...apiPeriods].filter(p => !dbPeriodsInBatch.has(p));
+    const missingInApi = [...dbPeriodsInBatch].filter(p => !apiPeriods.has(p));
     
     if (missingInDb.length > 0) {
       console.log(`\nPeriods in API but missing in DB: ${missingInDb.join(', ')}`);
@@ -158,19 +150,59 @@ async function validateElexonData(): Promise<void> {
       console.log(`\nPeriods in DB but missing in API: ${missingInApi.join(', ')}`);
     }
     
-    // Conclusion
+    // Conclusion for this batch
     const threshold = 0.01; // 1% threshold for discrepancy
-    const volumePercentDiff = (volumeDiff / apiData.totalVolume) * 100;
+    let volumePercentDiff = 0;
     
-    if (volumePercentDiff > threshold) {
-      console.log(`\n⚠️ Data discrepancy detected: ${volumePercentDiff.toFixed(2)}% difference in volume`);
-      console.log(`Consider reingesting data from the Elexon API for ${TARGET_DATE}`);
+    if (apiData.totalVolume > 0) {
+      volumePercentDiff = (volumeDiff / apiData.totalVolume) * 100;
+      
+      if (volumePercentDiff > threshold) {
+        console.log(`\n⚠️ Data discrepancy detected: ${volumePercentDiff.toFixed(2)}% difference in volume for batch 3`);
+      } else {
+        console.log(`\n✓ Batch 3 validation passed: ${volumePercentDiff.toFixed(2)}% difference is within threshold`);
+      }
     } else {
-      console.log(`\n✓ Data validation passed: ${volumePercentDiff.toFixed(2)}% difference is within threshold`);
+      console.log(`\nNo volume data from API for comparison in batch 3`);
     }
+    
+    // Create a results file for batch 3
+    await writeResults('batch3_results.json', {
+      apiData: {
+        totalVolume: apiData.totalVolume,
+        totalPayment: apiData.totalPayment,
+        recordCount: apiData.recordCount,
+        periodCount: apiData.periodCount,
+        periods: apiData.periodCounts
+      },
+      dbData: {
+        totalVolume: dbData.totalVolume,
+        totalPayment: dbData.totalPayment,
+        recordCount: dbData.recordCount,
+        periodCount: dbData.periodCount
+      },
+      differences: {
+        volumeDiff,
+        paymentDiff,
+        recordDiff,
+        volumePercentDiff,
+        missingInDb,
+        missingInApi
+      }
+    });
     
   } catch (error) {
     console.error(`Error validating Elexon data:`, error);
+  }
+}
+
+async function writeResults(fileName: string, data: any): Promise<void> {
+  try {
+    const fs = require('fs');
+    await fs.promises.writeFile(fileName, JSON.stringify(data, null, 2));
+    console.log(`Results written to ${fileName}`);
+  } catch (error) {
+    console.error(`Error writing results:`, error);
   }
 }
 

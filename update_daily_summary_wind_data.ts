@@ -52,15 +52,16 @@ async function updateDailySummaryWindData(date: string): Promise<void> {
   console.log(`  Offshore: ${offshore_total.toFixed(2)} MW`);
 
   // Update the daily summary
-  await db
-    .update(dailySummaries)
-    .set({
-      totalWindGeneration: total,
-      windOnshoreGeneration: onshore_total,
-      windOffshoreGeneration: offshore_total,
-      lastUpdated: new Date()
-    })
-    .where(eq(dailySummaries.summaryDate, new Date(date)));
+  // Use raw SQL to handle the data types correctly
+  await db.execute(sql`
+    UPDATE daily_summaries
+    SET 
+      total_wind_generation = ${total},
+      wind_onshore_generation = ${onshore_total},
+      wind_offshore_generation = ${offshore_total},
+      last_updated = NOW()
+    WHERE summary_date = ${date}
+  `);
 
   console.log(`Successfully updated daily summary for ${date} with wind generation data`);
 }
