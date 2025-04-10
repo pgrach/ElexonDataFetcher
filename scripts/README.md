@@ -2,6 +2,21 @@
 
 This directory contains scripts for reprocessing curtailment data from the Elexon API. These scripts allow you to refresh data for specific dates, ensuring accurate and up-to-date information throughout the system.
 
+## BMU Mapping Fix
+
+Before running the reprocessing scripts, you should run the BMU mapping fix script to ensure farm data is correctly processed:
+
+```bash
+# Run from the project root directory
+./fix-bmu-mapping.sh
+```
+
+This script synchronizes two different BMU mapping files that are used by different parts of the system:
+- `server/data/bmuMapping.json` (used by elexon.ts)
+- `data/bmu_mapping.json` (used by curtailment_enhanced.ts)
+
+Without this fix, you might see hourly breakdowns working correctly but "No farm data available" in the individual farm details view.
+
 ## Available Scripts
 
 ### 1. Reprocess April 3, 2025 Data
