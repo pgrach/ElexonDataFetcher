@@ -11,12 +11,6 @@ echo "4. Recalculate Bitcoin mining potential"
 echo "5. Verify data integrity"
 echo ""
 
-read -p "Do you want to proceed? (y/n): " confirm
-if [[ $confirm != [yY] ]]; then
-    echo "Operation cancelled."
-    exit 0
-fi
-
 echo "Starting reprocessing..."
 echo ""
 

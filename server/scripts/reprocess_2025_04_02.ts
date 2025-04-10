@@ -32,42 +32,38 @@ async function clearExistingData(): Promise<void> {
   
   try {
     // 1. Clear curtailment_records
-    const deletedRecords = await db.delete(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE))
-      .returning({ id: curtailmentRecords.id });
+    await db.delete(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
     
-    console.log(`Deleted ${deletedRecords.length} curtailment records`);
+    console.log(`Cleared curtailment records for ${TARGET_DATE}`);
     
     // 2. Clear historical_bitcoin_calculations
     for (const minerModel of MINER_MODELS) {
-      const deletedCalcs = await db.delete(historicalBitcoinCalculations)
+      await db.delete(historicalBitcoinCalculations)
         .where(and(
           eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
           eq(historicalBitcoinCalculations.minerModel, minerModel)
-        ))
-        .returning({ id: historicalBitcoinCalculations.id });
+        ));
       
-      console.log(`Deleted ${deletedCalcs.length} historical Bitcoin calculations for ${minerModel}`);
+      console.log(`Cleared historical Bitcoin calculations for ${TARGET_DATE} and ${minerModel}`);
     }
     
     // 3. Clear bitcoin_daily_summaries
     for (const minerModel of MINER_MODELS) {
-      const deletedSummaries = await db.delete(bitcoinDailySummaries)
+      await db.delete(bitcoinDailySummaries)
         .where(and(
           eq(bitcoinDailySummaries.summaryDate, TARGET_DATE),
           eq(bitcoinDailySummaries.minerModel, minerModel)
-        ))
-        .returning({ id: bitcoinDailySummaries.id });
+        ));
       
-      console.log(`Deleted ${deletedSummaries.length} Bitcoin daily summaries for ${minerModel}`);
+      console.log(`Cleared Bitcoin daily summaries for ${TARGET_DATE} and ${minerModel}`);
     }
     
     // 4. Delete daily_summary for this date
-    const deletedDailySummary = await db.delete(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, TARGET_DATE))
-      .returning({ id: dailySummaries.id });
+    await db.delete(dailySummaries)
+      .where(eq(dailySummaries.summaryDate, TARGET_DATE));
     
-    console.log(`Deleted ${deletedDailySummary.length} daily summaries`);
+    console.log(`Cleared daily summary for ${TARGET_DATE}`);
     
     console.log(`\n==== Successfully cleared all existing data for ${TARGET_DATE} ====\n`);
   } catch (error) {
