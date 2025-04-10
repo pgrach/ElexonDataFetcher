@@ -1,9 +1,11 @@
 /**
- * Direct Bitcoin Calculation Processing for 2025-04-02
+ * Bitcoin Calculation Processing Script
  * 
- * This script processes Bitcoin calculations for 2025-04-02 using
- * a more direct approach, avoiding DynamoDB and using a hardcoded
- * difficulty value.
+ * This script processes Bitcoin calculations for a specific date using
+ * a direct approach with a configurable difficulty value.
+ * 
+ * Usage: 
+ * npx tsx server/scripts/process_bitcoin_calculations.ts --date=YYYY-MM-DD [--difficulty=123456789]
  */
 
 import { db } from "@db";
@@ -18,42 +20,67 @@ import { calculateBitcoin } from "../utils/bitcoin";
 import { eq, and, sql } from "drizzle-orm";
 import { performance } from "perf_hooks";
 
-// Target date
-const TARGET_DATE = '2025-04-02';
+// Get command line arguments
+const args = process.argv.slice(2);
+let targetDate = '';
+let difficulty: number | null = null;
+
+// Parse command line arguments
+for (const arg of args) {
+  if (arg.startsWith('--date=')) {
+    targetDate = arg.substring(7);
+  } else if (arg.startsWith('--difficulty=')) {
+    difficulty = Number(arg.substring(13));
+  }
+}
+
+// Validate arguments
+if (!targetDate || !targetDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+  console.error('Error: Please provide a valid date in the format --date=YYYY-MM-DD');
+  process.exit(1);
+}
+
+if (difficulty && isNaN(difficulty)) {
+  console.error('Error: Difficulty must be a valid number');
+  process.exit(1);
+}
+
+// Default difficulty for 2025 (use a typical value if specific value not provided)
+const DEFAULT_DIFFICULTY = difficulty || 113757508810853;
 
 // Miner models to process
 const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
 
-// Default difficulty for 2025-04-02 (use a recent value if actual value not available)
-const DEFAULT_DIFFICULTY = 113757508810853; // This is a typical value from earlier April 2025 records
+console.log(`\n==== Bitcoin Calculation Processing for ${targetDate} ====`);
+console.log(`Using difficulty: ${DEFAULT_DIFFICULTY}\n`);
 
 /**
  * Clear existing Bitcoin calculations for the target date
  */
 async function clearExistingCalculations(): Promise<void> {
-  console.log(`\n==== Clearing existing Bitcoin calculations for ${TARGET_DATE} ====\n`);
+  console.log(`\n==== Clearing existing Bitcoin calculations for ${targetDate} ====\n`);
   
   try {
     // 1. Clear historical_bitcoin_calculations
     for (const minerModel of MINER_MODELS) {
       await db.delete(historicalBitcoinCalculations)
         .where(and(
-          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+          eq(historicalBitcoinCalculations.settlementDate, targetDate),
           eq(historicalBitcoinCalculations.minerModel, minerModel)
         ));
       
-      console.log(`Cleared historical Bitcoin calculations for ${TARGET_DATE} and ${minerModel}`);
+      console.log(`Cleared historical Bitcoin calculations for ${targetDate} and ${minerModel}`);
     }
     
     // 2. Clear bitcoin_daily_summaries
     for (const minerModel of MINER_MODELS) {
       await db.delete(bitcoinDailySummaries)
         .where(and(
-          eq(bitcoinDailySummaries.summaryDate, TARGET_DATE),
+          eq(bitcoinDailySummaries.summaryDate, targetDate),
           eq(bitcoinDailySummaries.minerModel, minerModel)
         ));
       
-      console.log(`Cleared Bitcoin daily summaries for ${TARGET_DATE} and ${minerModel}`);
+      console.log(`Cleared Bitcoin daily summaries for ${targetDate} and ${minerModel}`);
     }
     
     console.log(`\n==== Successfully cleared existing Bitcoin calculations ====\n`);
@@ -68,7 +95,7 @@ async function clearExistingCalculations(): Promise<void> {
  */
 async function processCalculations(minerModel: string): Promise<number> {
   try {
-    console.log(`Processing Bitcoin calculations for ${TARGET_DATE} with miner model ${minerModel}`);
+    console.log(`Processing Bitcoin calculations for ${targetDate} with miner model ${minerModel}`);
     
     // Get all curtailment records for this date
     const records = await db.select({
@@ -78,14 +105,14 @@ async function processCalculations(minerModel: string): Promise<number> {
       volume: curtailmentRecords.volume
     })
     .from(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+    .where(eq(curtailmentRecords.settlementDate, targetDate));
     
     if (records.length === 0) {
-      console.log(`No curtailment records found for ${TARGET_DATE}`);
+      console.log(`No curtailment records found for ${targetDate}`);
       return 0;
     }
     
-    console.log(`Found ${records.length} curtailment records for ${TARGET_DATE}`);
+    console.log(`Found ${records.length} curtailment records for ${targetDate}`);
     
     // Process each record
     let totalBitcoin = 0;
@@ -108,7 +135,7 @@ async function processCalculations(minerModel: string): Promise<number> {
         // Insert the calculation record using on conflict do update to handle duplicates
         insertPromises.push(
           db.insert(historicalBitcoinCalculations).values({
-            settlementDate: TARGET_DATE,
+            settlementDate: targetDate,
             settlementPeriod: Number(record.settlementPeriod),
             minerModel: minerModel,
             farmId: record.farmId,
@@ -137,7 +164,7 @@ async function processCalculations(minerModel: string): Promise<number> {
     // Execute all inserts
     await Promise.all(insertPromises);
     
-    console.log(`Successfully processed ${insertPromises.length} Bitcoin calculations for ${TARGET_DATE} and ${minerModel}`);
+    console.log(`Successfully processed ${insertPromises.length} Bitcoin calculations for ${targetDate} and ${minerModel}`);
     console.log(`Total Bitcoin calculated: ${totalBitcoin.toFixed(8)}`);
     
     return totalBitcoin;
@@ -153,7 +180,7 @@ async function processCalculations(minerModel: string): Promise<number> {
 async function updateDailySummary(minerModel: string, totalBitcoin: number): Promise<void> {
   try {
     await db.insert(bitcoinDailySummaries).values({
-      summaryDate: TARGET_DATE,
+      summaryDate: targetDate,
       minerModel: minerModel,
       bitcoinMined: totalBitcoin.toString(),
       createdAt: new Date(),
@@ -169,7 +196,7 @@ async function updateDailySummary(minerModel: string, totalBitcoin: number): Pro
       }
     });
     
-    console.log(`Updated daily summary for ${TARGET_DATE} and ${minerModel}: ${totalBitcoin} BTC`);
+    console.log(`Updated daily summary for ${targetDate} and ${minerModel}: ${totalBitcoin} BTC`);
   } catch (error) {
     console.error(`Error updating daily summary for ${minerModel}:`, error);
     throw error;
@@ -181,7 +208,7 @@ async function updateDailySummary(minerModel: string, totalBitcoin: number): Pro
  */
 async function updateMonthlySummary(minerModel: string): Promise<void> {
   try {
-    const yearMonth = TARGET_DATE.substring(0, 7); // YYYY-MM
+    const yearMonth = targetDate.substring(0, 7); // YYYY-MM
     
     // Calculate the total Bitcoin for the month
     const result = await db.execute(sql`
@@ -230,7 +257,7 @@ async function updateMonthlySummary(minerModel: string): Promise<void> {
  */
 async function updateYearlySummary(minerModel: string): Promise<void> {
   try {
-    const year = TARGET_DATE.substring(0, 4); // YYYY
+    const year = targetDate.substring(0, 4); // YYYY
     
     // Calculate the total Bitcoin for the year
     const result = await db.execute(sql`
@@ -275,6 +302,95 @@ async function updateYearlySummary(minerModel: string): Promise<void> {
 }
 
 /**
+ * Verify Bitcoin calculations were created correctly
+ */
+async function verifyBitcoinCalculations(): Promise<void> {
+  console.log(`\n==== Verifying Bitcoin calculations ====\n`);
+  
+  try {
+    for (const minerModel of MINER_MODELS) {
+      // Check historical Bitcoin calculations
+      const historicalCount = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(historicalBitcoinCalculations)
+        .where(and(
+          eq(historicalBitcoinCalculations.settlementDate, targetDate),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        ));
+      
+      console.log(`Historical Bitcoin calculations for ${minerModel}: ${historicalCount[0]?.count || 0} records`);
+      
+      // Check historical Bitcoin total
+      const historicalTotal = await db
+        .select({ total: sql<string>`SUM(bitcoin_mined::numeric)` })
+        .from(historicalBitcoinCalculations)
+        .where(and(
+          eq(historicalBitcoinCalculations.settlementDate, targetDate),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        ));
+      
+      console.log(`Total Bitcoin calculated for ${minerModel}: ${historicalTotal[0]?.total || '0'} BTC`);
+      
+      // Check daily summary
+      const dailySummary = await db
+        .select()
+        .from(bitcoinDailySummaries)
+        .where(and(
+          eq(bitcoinDailySummaries.summaryDate, targetDate),
+          eq(bitcoinDailySummaries.minerModel, minerModel)
+        ));
+      
+      if (dailySummary.length > 0) {
+        console.log(`Daily summary for ${minerModel}: ${dailySummary[0].bitcoinMined} BTC`);
+      } else {
+        console.log(`Warning: No daily summary found for ${minerModel}`);
+      }
+    }
+    
+    // Check monthly summaries
+    const yearMonth = targetDate.substring(0, 7); // YYYY-MM
+    for (const minerModel of MINER_MODELS) {
+      const monthlySummary = await db
+        .select()
+        .from(bitcoinMonthlySummaries)
+        .where(and(
+          eq(bitcoinMonthlySummaries.yearMonth, yearMonth),
+          eq(bitcoinMonthlySummaries.minerModel, minerModel)
+        ));
+      
+      if (monthlySummary.length > 0) {
+        console.log(`Monthly summary for ${yearMonth} and ${minerModel}: ${monthlySummary[0].bitcoinMined} BTC`);
+      } else {
+        console.log(`Warning: No monthly summary found for ${yearMonth} and ${minerModel}`);
+      }
+    }
+    
+    // Check yearly summaries
+    const year = targetDate.substring(0, 4); // YYYY
+    for (const minerModel of MINER_MODELS) {
+      const yearlySummary = await db
+        .select()
+        .from(bitcoinYearlySummaries)
+        .where(and(
+          eq(bitcoinYearlySummaries.year, year),
+          eq(bitcoinYearlySummaries.minerModel, minerModel)
+        ));
+      
+      if (yearlySummary.length > 0) {
+        console.log(`Yearly summary for ${year} and ${minerModel}: ${yearlySummary[0].bitcoinMined} BTC`);
+      } else {
+        console.log(`Warning: No yearly summary found for ${year} and ${minerModel}`);
+      }
+    }
+    
+    console.log(`\n==== Verification completed ====\n`);
+  } catch (error) {
+    console.error('Error verifying Bitcoin calculations:', error);
+    throw error;
+  }
+}
+
+/**
  * Reprocess Bitcoin calculations directly
  */
 async function reprocessBitcoinCalculations(): Promise<void> {
@@ -285,7 +401,7 @@ async function reprocessBitcoinCalculations(): Promise<void> {
     await clearExistingCalculations();
     
     // Step 2: Process Bitcoin calculations for each miner model
-    console.log(`\n==== Processing Bitcoin calculations for ${TARGET_DATE} ====\n`);
+    console.log(`\n==== Processing Bitcoin calculations for ${targetDate} ====\n`);
     
     for (const minerModel of MINER_MODELS) {
       console.log(`\n==== Processing ${minerModel} miner model ====\n`);
@@ -314,95 +430,6 @@ async function reprocessBitcoinCalculations(): Promise<void> {
     
   } catch (error) {
     console.error(`Error during Bitcoin reprocessing:`, error);
-    throw error;
-  }
-}
-
-/**
- * Verify Bitcoin calculations were created correctly
- */
-async function verifyBitcoinCalculations(): Promise<void> {
-  console.log(`\n==== Verifying Bitcoin calculations ====\n`);
-  
-  try {
-    for (const minerModel of MINER_MODELS) {
-      // Check historical Bitcoin calculations
-      const historicalCount = await db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(historicalBitcoinCalculations)
-        .where(and(
-          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
-        ));
-      
-      console.log(`Historical Bitcoin calculations for ${minerModel}: ${historicalCount[0]?.count || 0} records`);
-      
-      // Check historical Bitcoin total
-      const historicalTotal = await db
-        .select({ total: sql<string>`SUM(bitcoin_mined::numeric)` })
-        .from(historicalBitcoinCalculations)
-        .where(and(
-          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
-        ));
-      
-      console.log(`Total Bitcoin calculated for ${minerModel}: ${historicalTotal[0]?.total || '0'} BTC`);
-      
-      // Check daily summary
-      const dailySummary = await db
-        .select()
-        .from(bitcoinDailySummaries)
-        .where(and(
-          eq(bitcoinDailySummaries.summaryDate, TARGET_DATE),
-          eq(bitcoinDailySummaries.minerModel, minerModel)
-        ));
-      
-      if (dailySummary.length > 0) {
-        console.log(`Daily summary for ${minerModel}: ${dailySummary[0].bitcoinMined} BTC`);
-      } else {
-        console.log(`Warning: No daily summary found for ${minerModel}`);
-      }
-    }
-    
-    // Check monthly summaries
-    const yearMonth = TARGET_DATE.substring(0, 7); // YYYY-MM
-    for (const minerModel of MINER_MODELS) {
-      const monthlySummary = await db
-        .select()
-        .from(bitcoinMonthlySummaries)
-        .where(and(
-          eq(bitcoinMonthlySummaries.yearMonth, yearMonth),
-          eq(bitcoinMonthlySummaries.minerModel, minerModel)
-        ));
-      
-      if (monthlySummary.length > 0) {
-        console.log(`Monthly summary for ${yearMonth} and ${minerModel}: ${monthlySummary[0].bitcoinMined} BTC`);
-      } else {
-        console.log(`Warning: No monthly summary found for ${yearMonth} and ${minerModel}`);
-      }
-    }
-    
-    // Check yearly summaries
-    const year = TARGET_DATE.substring(0, 4); // YYYY
-    for (const minerModel of MINER_MODELS) {
-      const yearlySummary = await db
-        .select()
-        .from(bitcoinYearlySummaries)
-        .where(and(
-          eq(bitcoinYearlySummaries.year, year),
-          eq(bitcoinYearlySummaries.minerModel, minerModel)
-        ));
-      
-      if (yearlySummary.length > 0) {
-        console.log(`Yearly summary for ${year} and ${minerModel}: ${yearlySummary[0].bitcoinMined} BTC`);
-      } else {
-        console.log(`Warning: No yearly summary found for ${year} and ${minerModel}`);
-      }
-    }
-    
-    console.log(`\n==== Verification completed ====\n`);
-  } catch (error) {
-    console.error('Error verifying Bitcoin calculations:', error);
     throw error;
   }
 }
