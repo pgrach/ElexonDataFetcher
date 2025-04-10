@@ -116,8 +116,10 @@ async function processCalculations(minerModel: string): Promise<number> {
     
     // Process each record
     let totalBitcoin = 0;
-    const insertPromises = [];
+    let successfulRecords = 0;
+    const filteredRecords = [];
     
+    // First, filter records to make sure we're only processing valid curtailment records
     for (const record of records) {
       // Convert volume (MWh) to positive number for calculation
       const mwh = Math.abs(Number(record.volume));
@@ -127,47 +129,85 @@ async function processCalculations(minerModel: string): Promise<number> {
         continue;
       }
       
-      // Calculate Bitcoin mined
-      const bitcoinMined = calculateBitcoin(mwh, minerModel, DEFAULT_DIFFICULTY);
-      totalBitcoin += bitcoinMined;
+      // Only include valid records
+      filteredRecords.push({
+        ...record,
+        mwh
+      });
+    }
+    
+    console.log(`Found ${filteredRecords.length} valid curtailment records for ${targetDate} with non-zero energy`);
+    
+    // Process the records in batches to prevent memory issues
+    const batchSize = 50;
+    const batches = Math.ceil(filteredRecords.length / batchSize);
+    
+    for (let i = 0; i < batches; i++) {
+      const batch = filteredRecords.slice(i * batchSize, (i + 1) * batchSize);
+      const insertPromises = [];
       
-      try {
-        // Insert the calculation record using on conflict do update to handle duplicates
-        insertPromises.push(
-          db.insert(historicalBitcoinCalculations).values({
-            settlementDate: targetDate,
-            settlementPeriod: Number(record.settlementPeriod),
-            minerModel: minerModel,
-            farmId: record.farmId,
-            bitcoinMined: bitcoinMined.toString(),
-            difficulty: DEFAULT_DIFFICULTY.toString()
-          }).onConflictDoUpdate({
-            target: [
-              historicalBitcoinCalculations.settlementDate, 
-              historicalBitcoinCalculations.settlementPeriod, 
-              historicalBitcoinCalculations.farmId, 
-              historicalBitcoinCalculations.minerModel
-            ],
-            set: {
+      for (const record of batch) {
+        // Calculate Bitcoin mined
+        const bitcoinMined = calculateBitcoin(record.mwh, minerModel, DEFAULT_DIFFICULTY);
+        totalBitcoin += bitcoinMined;
+        
+        try {
+          // Insert the calculation record using on conflict do update to handle duplicates
+          insertPromises.push(
+            db.insert(historicalBitcoinCalculations).values({
+              settlementDate: targetDate,
+              settlementPeriod: Number(record.settlementPeriod),
+              minerModel: minerModel,
+              farmId: record.farmId,
               bitcoinMined: bitcoinMined.toString(),
-              difficulty: DEFAULT_DIFFICULTY.toString(),
-              calculatedAt: new Date()
-            }
-          })
-        );
+              difficulty: DEFAULT_DIFFICULTY.toString()
+            }).onConflictDoUpdate({
+              target: [
+                historicalBitcoinCalculations.settlementDate, 
+                historicalBitcoinCalculations.settlementPeriod, 
+                historicalBitcoinCalculations.farmId, 
+                historicalBitcoinCalculations.minerModel
+              ],
+              set: {
+                bitcoinMined: bitcoinMined.toString(),
+                difficulty: DEFAULT_DIFFICULTY.toString(),
+                calculatedAt: new Date()
+              }
+            })
+          );
+        } catch (error) {
+          console.error(`Error processing record for ${record.farmId}, period ${record.settlementPeriod}:`, error);
+          // Continue with other records
+        }
+      }
+      
+      // Execute all inserts for this batch
+      try {
+        await Promise.all(insertPromises);
+        successfulRecords += insertPromises.length;
+        console.log(`Batch ${i+1}/${batches}: Processed ${insertPromises.length} records`);
       } catch (error) {
-        console.error(`Error processing record for ${record.farmId}, period ${record.settlementPeriod}:`, error);
-        // Continue with other records
+        console.error(`Error processing batch ${i+1}:`, error);
       }
     }
     
-    // Execute all inserts
-    await Promise.all(insertPromises);
-    
-    console.log(`Successfully processed ${insertPromises.length} Bitcoin calculations for ${targetDate} and ${minerModel}`);
+    console.log(`Successfully processed ${successfulRecords} Bitcoin calculations for ${targetDate} and ${minerModel}`);
     console.log(`Total Bitcoin calculated: ${totalBitcoin.toFixed(8)}`);
     
-    return totalBitcoin;
+    // After all historical calculations are inserted, calculate the actual total from the database
+    const historicalTotal = await db
+      .select({ total: sql<string>`SUM(bitcoin_mined::numeric)` })
+      .from(historicalBitcoinCalculations)
+      .where(and(
+        eq(historicalBitcoinCalculations.settlementDate, targetDate),
+        eq(historicalBitcoinCalculations.minerModel, minerModel)
+      ));
+    
+    const dbTotal = historicalTotal[0]?.total ? parseFloat(historicalTotal[0].total) : 0;
+    console.log(`Database total for ${minerModel}: ${dbTotal} BTC`);
+    
+    // Return the actual database total, not the calculated one
+    return dbTotal;
   } catch (error) {
     console.error(`Error processing Bitcoin calculations for ${minerModel}:`, error);
     throw error;
