@@ -223,9 +223,9 @@ async function main() {
     
     // Create new daily summaries
     for (const minerModel of MINER_MODELS) {
+      // Get total Bitcoin mined for the day
       const dailyStats = await db.select({
-        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
-        difficulty: sql<string>`DISTINCT(difficulty::numeric)::text`
+        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`
       })
       .from(historicalBitcoinCalculations)
       .where(
@@ -234,6 +234,19 @@ async function main() {
           eq(historicalBitcoinCalculations.minerModel, minerModel)
         )
       );
+      
+      // Get difficulty value in a separate query
+      const difficultyQuery = await db.select({
+        difficulty: historicalBitcoinCalculations.difficulty
+      })
+      .from(historicalBitcoinCalculations)
+      .where(
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        )
+      )
+      .limit(1);
       
       if (dailyStats[0]?.totalBitcoin) {
         await db.insert(bitcoinDailySummaries).values({
@@ -266,9 +279,9 @@ async function main() {
     
     // Create new monthly summaries based on updated daily data
     for (const minerModel of MINER_MODELS) {
+      // Get total Bitcoin mined for the month
       const monthlyStats = await db.select({
-        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
-        avgDifficulty: sql<string>`AVG(difficulty::numeric)::text`
+        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`
       })
       .from(bitcoinDailySummaries)
       .where(
@@ -309,9 +322,9 @@ async function main() {
     
     // Create new yearly summaries based on updated monthly data
     for (const minerModel of MINER_MODELS) {
+      // Get total Bitcoin mined for the year
       const yearlyStats = await db.select({
-        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
-        avgDifficulty: sql<string>`AVG(difficulty::numeric)::text`
+        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`
       })
       .from(bitcoinMonthlySummaries)
       .where(
