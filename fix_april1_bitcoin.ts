@@ -41,8 +41,7 @@ async function main() {
     for (const minerModel of MINER_MODELS) {
       const existingCalcs = await db.select({
         totalRecords: sql<number>`COUNT(*)::int`,
-        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
-        difficulty: sql<string>`DISTINCT(difficulty::numeric)::text`
+        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`
       })
       .from(historicalBitcoinCalculations)
       .where(
@@ -54,8 +53,7 @@ async function main() {
 
       console.log(`Current ${minerModel} calculations:`, {
         records: existingCalcs[0]?.totalRecords || 0,
-        bitcoin: existingCalcs[0]?.totalBitcoin || "0",
-        difficulty: existingCalcs[0]?.difficulty || "N/A"
+        bitcoin: existingCalcs[0]?.totalBitcoin || "0"
       });
     }
 
@@ -76,8 +74,7 @@ async function main() {
       // Verify the new calculations
       const newCalcs = await db.select({
         totalRecords: sql<number>`COUNT(*)::int`,
-        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
-        difficulty: sql<string>`DISTINCT(difficulty::numeric)::text`
+        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`
       })
       .from(historicalBitcoinCalculations)
       .where(
@@ -89,8 +86,7 @@ async function main() {
       
       console.log(`Updated ${minerModel} calculations:`, {
         records: newCalcs[0]?.totalRecords || 0,
-        bitcoin: newCalcs[0]?.totalBitcoin || "0",
-        difficulty: newCalcs[0]?.difficulty || "N/A"
+        bitcoin: newCalcs[0]?.totalBitcoin || "0"
       });
     }
     
