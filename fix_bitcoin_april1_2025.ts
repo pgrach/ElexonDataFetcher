@@ -36,7 +36,7 @@ async function main() {
       totalEnergy: sql<string>`SUM(ABS(volume::numeric))::text`
     })
     .from(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlement_date, TARGET_DATE));
+    .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
 
     console.log(`Curtailment records for ${TARGET_DATE}:`, {
       records: curtailmentStats[0].totalRecords,
@@ -55,8 +55,8 @@ async function main() {
       .from(historicalBitcoinCalculations)
       .where(
         and(
-          eq(historicalBitcoinCalculations.settlement_date, TARGET_DATE),
-          eq(historicalBitcoinCalculations.miner_model, minerModel)
+          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
         )
       );
 
@@ -81,8 +81,8 @@ async function main() {
       await db.delete(historicalBitcoinCalculations)
         .where(
           and(
-            eq(historicalBitcoinCalculations.settlement_date, TARGET_DATE),
-            eq(historicalBitcoinCalculations.miner_model, minerModel)
+            eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+            eq(historicalBitcoinCalculations.minerModel, minerModel)
           )
         );
       
@@ -90,13 +90,13 @@ async function main() {
       
       // Get all curtailment records for this date
       const records = await db.select({
-        settlement_period: curtailmentRecords.settlement_period,
-        farm_id: curtailmentRecords.farm_id,
-        lead_party_name: curtailmentRecords.lead_party_name,
+        settlementPeriod: curtailmentRecords.settlementPeriod,
+        farmId: curtailmentRecords.farmId,
+        leadPartyName: curtailmentRecords.leadPartyName,
         volume: curtailmentRecords.volume
       })
       .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlement_date, TARGET_DATE));
+      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
       
       console.log(`Processing ${records.length} curtailment records`);
       
@@ -119,11 +119,11 @@ async function main() {
         
         // Add to values array for bulk insert
         insertValues.push({
-          settlement_date: TARGET_DATE,
-          settlement_period: Number(record.settlement_period),
-          miner_model: minerModel,
-          farm_id: record.farm_id,
-          bitcoin_mined: bitcoinMined.toString(),
+          settlementDate: TARGET_DATE,
+          settlementPeriod: Number(record.settlementPeriod),
+          minerModel: minerModel,
+          farmId: record.farmId,
+          bitcoinMined: bitcoinMined.toString(),
           difficulty: difficulty.toString()
         });
       }
@@ -153,8 +153,8 @@ async function main() {
       .from(historicalBitcoinCalculations)
       .where(
         and(
-          eq(historicalBitcoinCalculations.settlement_date, TARGET_DATE),
-          eq(historicalBitcoinCalculations.miner_model, minerModel)
+          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
         )
       );
 
@@ -170,7 +170,7 @@ async function main() {
     
     // Delete existing daily summary records for April 1
     await db.delete(bitcoinDailySummaries)
-      .where(eq(bitcoinDailySummaries.summary_date, TARGET_DATE));
+      .where(eq(bitcoinDailySummaries.summaryDate, TARGET_DATE));
     
     console.log(`Deleted existing daily summaries for ${TARGET_DATE}`);
     
@@ -183,8 +183,8 @@ async function main() {
       .from(historicalBitcoinCalculations)
       .where(
         and(
-          eq(historicalBitcoinCalculations.settlement_date, TARGET_DATE),
-          eq(historicalBitcoinCalculations.miner_model, minerModel)
+          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
         )
       );
       
@@ -210,8 +210,8 @@ async function main() {
     await db.delete(bitcoinMonthlySummaries)
       .where(
         and(
-          eq(bitcoinMonthlySummaries.year_month, yearMonth),
-          inArray(bitcoinMonthlySummaries.miner_model, MINER_MODELS)
+          eq(bitcoinMonthlySummaries.yearMonth, yearMonth),
+          inArray(bitcoinMonthlySummaries.minerModel, MINER_MODELS)
         )
       );
     
@@ -227,17 +227,17 @@ async function main() {
       .where(
         and(
           sql`summary_date::text LIKE ${yearMonth + '%'}`,
-          eq(bitcoinDailySummaries.miner_model, minerModel)
+          eq(bitcoinDailySummaries.minerModel, minerModel)
         )
       );
       
       if (monthlyStats[0]?.totalBitcoin) {
         await db.insert(bitcoinMonthlySummaries).values({
-          year_month: yearMonth,
-          miner_model: minerModel,
-          bitcoin_mined: monthlyStats[0].totalBitcoin,
-          created_at: new Date(),
-          updated_at: new Date()
+          yearMonth: yearMonth,
+          minerModel: minerModel,
+          bitcoinMined: monthlyStats[0].totalBitcoin,
+          createdAt: new Date(),
+          updatedAt: new Date()
         });
         
         console.log(`Created monthly summary for ${yearMonth} and ${minerModel}`);
@@ -254,7 +254,7 @@ async function main() {
       .where(
         and(
           eq(bitcoinYearlySummaries.year, year),
-          inArray(bitcoinYearlySummaries.miner_model, MINER_MODELS)
+          inArray(bitcoinYearlySummaries.minerModel, MINER_MODELS)
         )
       );
     
@@ -270,17 +270,17 @@ async function main() {
       .where(
         and(
           sql`year_month::text LIKE ${year + '%'}`,
-          eq(bitcoinMonthlySummaries.miner_model, minerModel)
+          eq(bitcoinMonthlySummaries.minerModel, minerModel)
         )
       );
       
       if (yearlyStats[0]?.totalBitcoin) {
         await db.insert(bitcoinYearlySummaries).values({
           year: year,
-          miner_model: minerModel,
-          bitcoin_mined: yearlyStats[0].totalBitcoin,
-          created_at: new Date(),
-          updated_at: new Date()
+          minerModel: minerModel,
+          bitcoinMined: yearlyStats[0].totalBitcoin,
+          createdAt: new Date(),
+          updatedAt: new Date()
         });
         
         console.log(`Created yearly summary for ${year} and ${minerModel}`);

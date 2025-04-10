@@ -5,15 +5,15 @@
  * using data from the curtailment_records table.
  */
 
-import { db } from "../db";
+import { db } from "./db";
 import { 
   historicalBitcoinCalculations, 
   curtailmentRecords,
   bitcoinDailySummaries
-} from "../db/schema";
+} from "./db/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { calculateBitcoin } from "../server/utils/bitcoin";
-import { getDifficultyData } from "../server/services/dynamodbService";
+import { calculateBitcoin } from "./server/utils/bitcoin";
+import { getDifficultyData } from "./server/services/dynamodbService";
 
 // Target date for processing
 const TARGET_DATE = "2025-04-01";
