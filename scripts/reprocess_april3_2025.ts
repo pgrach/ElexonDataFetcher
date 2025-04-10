@@ -14,15 +14,18 @@ import {
   historicalBitcoinCalculations 
 } from "../db/schema";
 import { eq, sql } from "drizzle-orm";
-import { processHistoricalCalculations } from "../server/services/bitcoinService";
+import { processSingleDay } from "../server/services/bitcoinService";
 import { manualUpdateYearlyBitcoinSummary } from "../server/services/bitcoinService";
-import { MINER_MODEL_LIST } from "../server/types/bitcoin";
+import { minerModels } from "../server/types/bitcoin";
 import { calculateMonthlyBitcoinSummary } from "../server/services/bitcoinService";
 
 // Target date for reprocessing
 const TARGET_DATE = "2025-04-03";
 const YEAR_MONTH = TARGET_DATE.substring(0, 7); // "2025-04" 
 const YEAR = TARGET_DATE.substring(0, 4); // "2025"
+
+// List of miner models to process
+const MINER_MODEL_LIST = Object.keys(minerModels);
 
 /**
  * Main function to orchestrate the reprocessing
@@ -72,7 +75,7 @@ async function reprocessData() {
     }
     
     // Clear existing Bitcoin calculations
-    for (const minerModel of MINER_MODEL_LIST) {
+    for (const minerModel of Object.keys(minerModels)) {
       const deletedBitcoin = await db.delete(historicalBitcoinCalculations)
         .where(
           and(
@@ -138,9 +141,9 @@ async function reprocessData() {
     console.log("\nStep 6: Processing Bitcoin calculations");
     
     // Process Bitcoin calculations for each miner model
-    for (const minerModel of MINER_MODEL_LIST) {
+    for (const minerModel of Object.keys(minerModels)) {
       console.log(`Processing Bitcoin calculations for ${minerModel}...`);
-      await processHistoricalCalculations(TARGET_DATE, minerModel);
+      await processSingleDay(TARGET_DATE, minerModel);
       
       // Verify Bitcoin calculations
       const bitcoinStats = await db
@@ -163,7 +166,7 @@ async function reprocessData() {
     console.log("\nStep 7: Updating monthly Bitcoin summaries");
     
     // Update monthly summaries
-    for (const minerModel of MINER_MODEL_LIST) {
+    for (const minerModel of Object.keys(minerModels)) {
       console.log(`Updating monthly Bitcoin summary for ${YEAR_MONTH} and ${minerModel}...`);
       await calculateMonthlyBitcoinSummary(YEAR_MONTH, minerModel);
     }
