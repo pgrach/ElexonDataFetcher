@@ -67,6 +67,28 @@ async function processM20SBitcoinCalculations(): Promise<void> {
   console.log(`\n==== Processing M20S Bitcoin Calculations for ${TARGET_DATE} ====\n`);
   
   try {
+    // First, check and delete any existing calculations for this date and miner model
+    console.log('Checking for existing calculations...');
+    const existingCalculations = await db.select({ count: sql<number>`COUNT(*)::int` })
+      .from(historicalBitcoinCalculations)
+      .where(and(
+        eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+        eq(historicalBitcoinCalculations.minerModel, MINER_MODEL)
+      ));
+      
+    const existingCount = existingCalculations[0]?.count || 0;
+    if (existingCount > 0) {
+      console.log(`Found ${existingCount} existing M20S calculations for ${TARGET_DATE}. Deleting...`);
+      await db.delete(historicalBitcoinCalculations)
+        .where(and(
+          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+          eq(historicalBitcoinCalculations.minerModel, MINER_MODEL)
+        ));
+      console.log('Deleted existing calculations successfully.');
+    } else {
+      console.log('No existing calculations found.');
+    }
+    
     // Get Bitcoin difficulty for the target date
     const difficulty = await getDifficultyData(TARGET_DATE);
     const difficultyData = { difficulty };
@@ -79,8 +101,7 @@ async function processM20SBitcoinCalculations(): Promise<void> {
       settlementDate: curtailmentRecords.settlementDate,
       settlementPeriod: curtailmentRecords.settlementPeriod,
       volume: curtailmentRecords.volume,
-      farmId: curtailmentRecords.farmId,
-      leadParty: curtailmentRecords.leadParty
+      farmId: curtailmentRecords.farmId
     })
     .from(curtailmentRecords)
     .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
@@ -98,7 +119,11 @@ async function processM20SBitcoinCalculations(): Promise<void> {
     
     for (const record of curtailmentData) {
       // Skip positive volumes (we're only interested in curtailment - negative volumes)
-      if (record.volume >= 0) {
+      const volumeValue = typeof record.volume === 'string' 
+        ? parseFloat(record.volume) 
+        : record.volume;
+        
+      if (volumeValue >= 0) {
         continue;
       }
       
