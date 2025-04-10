@@ -29,7 +29,8 @@ import path from "path";
 import { fileURLToPath } from 'url';
 
 // Set target date
-const TARGET_DATE = '2025-04-03';
+// Changed from April 3 to April 1, which is more likely to have data
+const TARGET_DATE = '2025-04-01';
 
 // Default difficulty for 2025 Bitcoin calculations
 const DEFAULT_DIFFICULTY = 113757508810853;
