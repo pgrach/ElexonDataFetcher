@@ -89,7 +89,7 @@ async function updateMonthlySummaries(): Promise<void> {
   // First, check if we have daily summaries for the month
   const dailySummariesCount = await db.select({ count: sql<number>`COUNT(*)::int` })
     .from(bitcoinDailySummaries)
-    .where(sql`SUBSTRING(summary_date, 1, 7) = ${yearMonth}`);
+    .where(sql`TO_CHAR(summary_date, 'YYYY-MM') = ${yearMonth}`);
   
   if (!dailySummariesCount[0] || dailySummariesCount[0].count === 0) {
     console.log(`No Bitcoin daily summaries found for ${yearMonth}`);
@@ -104,7 +104,7 @@ async function updateMonthlySummaries(): Promise<void> {
       const monthlyTotal = await db.execute(sql`
         SELECT SUM(bitcoin_mined::NUMERIC) as total_bitcoin
         FROM bitcoin_daily_summaries
-        WHERE SUBSTRING(summary_date, 1, 7) = ${yearMonth}
+        WHERE TO_CHAR(summary_date, 'YYYY-MM') = ${yearMonth}
         AND miner_model = ${minerModel}
       `);
       
@@ -148,7 +148,7 @@ async function updateYearlySummaries(): Promise<void> {
   // First, check if we have monthly summaries for the year
   const monthlySummariesCount = await db.select({ count: sql<number>`COUNT(*)::int` })
     .from(bitcoinMonthlySummaries)
-    .where(sql`SUBSTRING(year_month, 1, 4) = ${year}`);
+    .where(sql`LEFT(year_month, 4) = ${year}`);
   
   if (!monthlySummariesCount[0] || monthlySummariesCount[0].count === 0) {
     console.log(`No Bitcoin monthly summaries found for ${year}`);
@@ -163,7 +163,7 @@ async function updateYearlySummaries(): Promise<void> {
       const yearlyTotal = await db.execute(sql`
         SELECT SUM(bitcoin_mined::NUMERIC) as total_bitcoin
         FROM bitcoin_monthly_summaries
-        WHERE SUBSTRING(year_month, 1, 4) = ${year}
+        WHERE LEFT(year_month, 4) = ${year}
         AND miner_model = ${minerModel}
       `);
       
