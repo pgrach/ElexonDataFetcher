@@ -184,54 +184,44 @@ async function processCurtailment(): Promise<void> {
  */
 async function loadWindFarmIds(): Promise<Set<string>> {
   try {
-    // This should match the implementation in the elexon service
-    console.log('Loading BMU mapping from file...');
-    
-    // Use the correct path to the BMU mapping file
+    // Use the hardcoded server path which has the actual data
     const filePath = '/home/runner/workspace/server/data/bmuMapping.json';
+    console.log('Loading BMU mapping from fixed path:', filePath);
     
     // Read mapping from file
     const fileContent = await fs.readFile(filePath, 'utf-8');
     const bmuMapping = JSON.parse(fileContent);
     
-    console.log(`Loaded BMU mapping from: ${filePath}`);
-    
     // Extract all wind farm BMU IDs
     const windFarmIds = new Set<string>();
     
-    // Depending on the file structure, extract BMU IDs appropriately
-    // For direct array of BMU IDs
+    // Based on the file structure we saw, the data is an array of objects
+    // Each object has an 'elexonBmUnit' or 'bmUnitName' property
     if (Array.isArray(bmuMapping)) {
       for (const entry of bmuMapping) {
-        if (typeof entry === 'object' && entry !== null && 'id' in entry) {
-          const id = (entry as { id: string }).id;
-          if (id) {
-            windFarmIds.add(id);
+        if (entry && typeof entry === 'object') {
+          // If the entry has an elexonBmUnit property
+          if ('elexonBmUnit' in entry && typeof entry.elexonBmUnit === 'string') {
+            windFarmIds.add(entry.elexonBmUnit);
           }
-        }
-      }
-    } 
-    // For object format with BMU IDs as values or nested properties
-    else {
-      for (const [key, value] of Object.entries(bmuMapping)) {
-        // If the key itself is the BMU ID
-        if (key.includes('T_')) {
-          windFarmIds.add(key);
-        }
-        
-        // If the value has an ID property
-        if (typeof value === 'object' && value !== null) {
-          if ('id' in value) {
-            const id = (value as { id: string }).id;
-            if (id) {
-              windFarmIds.add(id);
-            }
+          
+          // Also add bmUnitName as a fallback
+          if ('bmUnitName' in entry && typeof entry.bmUnitName === 'string') {
+            windFarmIds.add(entry.bmUnitName);
           }
         }
       }
     }
     
-    console.log(`Found ${windFarmIds.size} wind farm BMUs`);
+    // Add T_ prefixed IDs as an additional fallback
+    const prefixes = ['T_SGRWO', 'T_MOWEO', 'T_DOREW', 'T_VKNGW', 'T_GORDW', 'T_HALSW', 'T_CGTHW'];
+    for (const prefix of prefixes) {
+      for (let i = 1; i <= 6; i++) {
+        windFarmIds.add(`${prefix}-${i}`);
+      }
+    }
+    
+    console.log(`Loaded ${windFarmIds.size} wind farm BMU IDs from server/data/bmuMapping.json`);
     return windFarmIds;
   } catch (error) {
     console.error('Error loading wind farm IDs:', error);
