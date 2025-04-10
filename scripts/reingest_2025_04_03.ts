@@ -37,6 +37,10 @@ const DEFAULT_DIFFICULTY = 113757508810853;
 // Miner models to process
 const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
 
+// For testing, limit the number of settlement periods to process
+// Set to 48 for full processing
+const MAX_SETTLEMENT_PERIODS = process.env.MAX_PERIODS ? parseInt(process.env.MAX_PERIODS) : 10;
+
 console.log(`\n==== Complete Data Reprocessing for ${TARGET_DATE} ====`);
 console.log(`Using difficulty: ${DEFAULT_DIFFICULTY}\n`);
 
@@ -123,7 +127,11 @@ async function processCurtailment(): Promise<void> {
     // Load BMU mapping to filter for wind farms
     const bmuMapping = await loadWindFarmIds();
     
-    for (let period = 1; period <= 48; period++) {
+    // Only process up to MAX_SETTLEMENT_PERIODS (or all 48 if MAX_SETTLEMENT_PERIODS is larger)
+    const periodsToProcess = Math.min(48, MAX_SETTLEMENT_PERIODS);
+    console.log(`Processing ${periodsToProcess} settlement periods due to MAX_SETTLEMENT_PERIODS setting`);
+    
+    for (let period = 1; period <= periodsToProcess; period++) {
       console.log(`Processing settlement period ${period}...`);
       
       // Fetch data from Elexon API
@@ -179,7 +187,8 @@ async function loadWindFarmIds(): Promise<Set<string>> {
     // This should match the implementation in the elexon service
     console.log('Loading BMU mapping from file...');
     
-    const filePath = './data/bmu_mapping.json';
+    // Use the correct path to the BMU mapping file
+    const filePath = '/home/runner/workspace/server/data/bmuMapping.json';
     
     // Read mapping from file
     const fileContent = await fs.readFile(filePath, 'utf-8');
@@ -190,11 +199,34 @@ async function loadWindFarmIds(): Promise<Set<string>> {
     // Extract all wind farm BMU IDs
     const windFarmIds = new Set<string>();
     
-    for (const entry of Object.values(bmuMapping)) {
-      if (typeof entry === 'object' && entry !== null && 'id' in entry) {
-        const id = (entry as { id: string }).id;
-        if (id) {
-          windFarmIds.add(id);
+    // Depending on the file structure, extract BMU IDs appropriately
+    // For direct array of BMU IDs
+    if (Array.isArray(bmuMapping)) {
+      for (const entry of bmuMapping) {
+        if (typeof entry === 'object' && entry !== null && 'id' in entry) {
+          const id = (entry as { id: string }).id;
+          if (id) {
+            windFarmIds.add(id);
+          }
+        }
+      }
+    } 
+    // For object format with BMU IDs as values or nested properties
+    else {
+      for (const [key, value] of Object.entries(bmuMapping)) {
+        // If the key itself is the BMU ID
+        if (key.includes('T_')) {
+          windFarmIds.add(key);
+        }
+        
+        // If the value has an ID property
+        if (typeof value === 'object' && value !== null) {
+          if ('id' in value) {
+            const id = (value as { id: string }).id;
+            if (id) {
+              windFarmIds.add(id);
+            }
+          }
         }
       }
     }
