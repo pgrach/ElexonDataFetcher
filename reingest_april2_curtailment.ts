@@ -132,7 +132,7 @@ async function fetchBidsOffers(date: string, period: number, retryCount = 0): Pr
     let allData: ElexonBidOffer[] = [];
     
     // Fetch bids
-    const bidUrl = `${ELEXON_BASE_URL}/datasets/BOALF/sp?settlementDate=${date}&settlementPeriod=${period}&bidFlag=true`;
+    const bidUrl = `${ELEXON_BASE_URL}/balancing/settlement/stack/all/bid/${date}/${period}`;
     const bidsResponse = await axios.get(bidUrl, {
       headers: { 'Accept': 'application/json' },
       timeout: 30000
@@ -146,7 +146,7 @@ async function fetchBidsOffers(date: string, period: number, retryCount = 0): Pr
     await delay(500);
     
     // Fetch offers
-    const offerUrl = `${ELEXON_BASE_URL}/datasets/BOALF/sp?settlementDate=${date}&settlementPeriod=${period}&bidFlag=false`;
+    const offerUrl = `${ELEXON_BASE_URL}/balancing/settlement/stack/all/offer/${date}/${period}`;
     const offersResponse = await axios.get(offerUrl, {
       headers: { 'Accept': 'application/json' },
       timeout: 30000
