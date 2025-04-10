@@ -5,15 +5,10 @@
  * using data from the curtailment_records table.
  */
 
-import { db } from "../db";
-import { 
-  historicalBitcoinCalculations, 
-  curtailmentRecords,
-  bitcoinDailySummaries
-} from "../db/schema";
+import { db } from "../db/index.js";
+import { curtailmentRecords, historicalBitcoinCalculations } from "../db/schema.js";
 import { eq, and, sql } from "drizzle-orm";
-import { calculateBitcoin } from "../server/utils/bitcoin";
-import { getDifficultyData } from "../server/services/dynamodbService";
+import { processSingleDay } from "../server/services/bitcoinService.js";
 
 // Target date for processing
 const TARGET_DATE = "2025-04-01";
@@ -25,104 +20,93 @@ async function main() {
   try {
     console.log(`\n===== FIXING BITCOIN CALCULATIONS FOR ${TARGET_DATE} =====\n`);
 
-    // Step 1: Analyze current curtailment records
-    const curtailmentCount = await db.select({
-      count: sql<number>`COUNT(*)::int`
+    // Step 1: Analyze current state
+    const curtailmentStats = await db.select({
+      totalRecords: sql<number>`COUNT(*)::int`,
+      totalPeriods: sql<number>`COUNT(DISTINCT settlement_period)::int`,
+      totalFarms: sql<number>`COUNT(DISTINCT farm_id)::int`,
+      totalEnergy: sql<string>`SUM(ABS(volume))::text`
     })
     .from(curtailmentRecords)
     .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
 
-    console.log(`Found ${curtailmentCount[0].count} curtailment records for ${TARGET_DATE}`);
+    console.log(`Curtailment records for ${TARGET_DATE}:`, {
+      records: curtailmentStats[0].totalRecords,
+      periods: curtailmentStats[0].totalPeriods,
+      farms: curtailmentStats[0].totalFarms,
+      energy: Number(curtailmentStats[0].totalEnergy).toFixed(2) + " MWh"
+    });
 
-    // Step 2: Process each miner model
+    // Check existing Bitcoin calculations before deletion
     for (const minerModel of MINER_MODELS) {
-      console.log(`\nProcessing ${minerModel}...`);
-      
-      // Delete existing calculations for this date and model
-      const deleteResult = await db.delete(historicalBitcoinCalculations)
-        .where(
-          and(
-            eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-            eq(historicalBitcoinCalculations.minerModel, minerModel)
-          )
-        )
-        .returning({ id: historicalBitcoinCalculations.id });
-      
-      console.log(`Deleted ${deleteResult.length} existing calculations for ${minerModel}`);
-      
-      // Get difficulty for the date
-      const difficulty = await getDifficultyData(TARGET_DATE);
-      console.log(`Using network difficulty: ${difficulty}`);
-      
-      // Get all curtailment records for this date
-      const records = await db.select({
-        settlementPeriod: curtailmentRecords.settlementPeriod,
-        farmId: curtailmentRecords.farmId,
-        volume: curtailmentRecords.volume
+      const existingCalcs = await db.select({
+        totalRecords: sql<number>`COUNT(*)::int`,
+        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
+        difficulty: sql<string>`DISTINCT(difficulty::numeric)::text`
       })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
-      
-      // Prepare new calculations
-      const newCalculations = [];
-      let totalBitcoin = 0;
-      
-      for (const record of records) {
-        const mwh = Math.abs(Number(record.volume));
-        
-        // Skip records with no volume
-        if (mwh <= 0 || isNaN(mwh)) continue;
-        
-        // Calculate Bitcoin
-        const bitcoinMined = calculateBitcoin(mwh, minerModel, difficulty);
-        totalBitcoin += bitcoinMined;
-        
-        newCalculations.push({
-          settlementDate: TARGET_DATE,
-          settlementPeriod: record.settlementPeriod,
-          minerModel: minerModel,
-          farmId: record.farmId,
-          bitcoinMined: bitcoinMined.toString(),
-          difficulty: difficulty.toString()
-        });
-      }
-      
-      // Insert in batches of 50
-      const batchSize = 50;
-      for (let i = 0; i < newCalculations.length; i += batchSize) {
-        const batch = newCalculations.slice(i, i + batchSize);
-        await db.insert(historicalBitcoinCalculations).values(batch);
-      }
-      
-      console.log(`Inserted ${newCalculations.length} new records for ${minerModel}`);
-      console.log(`Total Bitcoin calculated: ${totalBitcoin.toFixed(8)}`);
-      
-      // Update daily summary
-      await db.delete(bitcoinDailySummaries)
-        .where(
-          and(
-            eq(bitcoinDailySummaries.summaryDate, TARGET_DATE),
-            eq(bitcoinDailySummaries.minerModel, minerModel)
-          )
-        );
-      
-      await db.insert(bitcoinDailySummaries).values({
-        summaryDate: TARGET_DATE,
-        minerModel: minerModel,
-        bitcoinMined: totalBitcoin.toString(),
-        createdAt: new Date(),
-        updatedAt: new Date()
+      .from(historicalBitcoinCalculations)
+      .where(
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        )
+      );
+
+      console.log(`Current ${minerModel} calculations:`, {
+        records: existingCalcs[0]?.totalRecords || 0,
+        bitcoin: existingCalcs[0]?.totalBitcoin || "0",
+        difficulty: existingCalcs[0]?.difficulty || "N/A"
       });
+    }
+
+    // Step 2: Process each miner model using the Bitcoin service
+    console.log("\n=== Starting Bitcoin Recalculation ===\n");
+    
+    for (const minerModel of MINER_MODELS) {
+      console.log(`Processing ${minerModel}...`);
       
-      console.log(`Updated daily summary for ${TARGET_DATE} and ${minerModel}`);
+      // The processSingleDay function will:
+      // 1. Delete existing calculations for this date and model
+      // 2. Fetch the correct difficulty from DynamoDB
+      // 3. Calculate Bitcoin for all curtailment records
+      // 4. Update the daily summary table
+      // 5. Update monthly and yearly summaries
+      await processSingleDay(TARGET_DATE, minerModel);
+      
+      // Verify the new calculations
+      const newCalcs = await db.select({
+        totalRecords: sql<number>`COUNT(*)::int`,
+        totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)::text`,
+        difficulty: sql<string>`DISTINCT(difficulty::numeric)::text`
+      })
+      .from(historicalBitcoinCalculations)
+      .where(
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        )
+      );
+      
+      console.log(`Updated ${minerModel} calculations:`, {
+        records: newCalcs[0]?.totalRecords || 0,
+        bitcoin: newCalcs[0]?.totalBitcoin || "0",
+        difficulty: newCalcs[0]?.difficulty || "N/A"
+      });
     }
     
     console.log("\n===== BITCOIN CALCULATIONS FIX COMPLETED =====\n");
+    console.log("April 1, 2025 Bitcoin mining potential has been recalculated");
+    console.log("Summary tables (daily, monthly, yearly) have been updated");
     
+    process.exit(0);
   } catch (error) {
     console.error("Error fixing Bitcoin calculations:", error);
+    process.exit(1);
   }
 }
 
 // Execute the main function
-main().catch(console.error);
+main().catch(error => {
+  console.error("Unhandled error:", error);
+  process.exit(1);
+});
