@@ -51,10 +51,10 @@ async function updateBitcoinMonthlySummaries(): Promise<void> {
     // Update monthly summary
     await db.execute(sql`
       INSERT INTO bitcoin_monthly_summaries 
-      (summary_month, miner_model, bitcoin_mined)
+      (year_month, miner_model, bitcoin_mined)
       VALUES 
       (${TARGET_MONTH}, ${minerModel}, ${totalBitcoin.toString()})
-      ON CONFLICT (summary_month, miner_model) 
+      ON CONFLICT (year_month, miner_model) 
       DO UPDATE SET
         bitcoin_mined = ${totalBitcoin.toString()}
     `);
@@ -72,28 +72,25 @@ async function updateBitcoinYearlySummaries(): Promise<void> {
   for (const minerModel of MINER_MODELS) {
     log(`Processing ${minerModel} miner model...`);
     
-    // Calculate yearly Bitcoin from monthly summaries
-    const yearlyResult = await db
-      .select({
-        totalBitcoin: sql<string>`SUM(${bitcoinMonthlySummaries.bitcoinMined}::float)`
-      })
-      .from(bitcoinMonthlySummaries)
-      .where(and(
-        like(bitcoinMonthlySummaries.summaryMonth, `${TARGET_YEAR}%`),
-        eq(bitcoinMonthlySummaries.minerModel, minerModel)
-      ));
+    // Calculate yearly Bitcoin from monthly summaries using SQL directly
+    const yearlyResult = await db.execute(sql`
+      SELECT SUM(bitcoin_mined::float) as total_bitcoin
+      FROM bitcoin_monthly_summaries
+      WHERE year_month LIKE ${TARGET_YEAR + '%'}
+      AND miner_model = ${minerModel}
+    `);
     
-    const totalBitcoin = parseFloat(yearlyResult[0]?.totalBitcoin || '0');
+    const totalBitcoin = parseFloat(yearlyResult.rows[0]?.total_bitcoin || '0');
     
     log(`Calculated ${totalBitcoin.toFixed(8)} BTC for ${minerModel} in ${TARGET_YEAR}`);
     
     // Update yearly summary
     await db.execute(sql`
       INSERT INTO bitcoin_yearly_summaries 
-      (summary_year, miner_model, bitcoin_mined)
+      (year, miner_model, bitcoin_mined)
       VALUES 
       (${TARGET_YEAR}, ${minerModel}, ${totalBitcoin.toString()})
-      ON CONFLICT (summary_year, miner_model) 
+      ON CONFLICT (year, miner_model) 
       DO UPDATE SET
         bitcoin_mined = ${totalBitcoin.toString()}
     `);
