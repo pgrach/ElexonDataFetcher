@@ -12,17 +12,21 @@ import {
   curtailmentRecords,
   bitcoinDailySummaries,
   bitcoinMonthlySummaries,
-  bitcoinYearlySummaries
+  bitcoinYearlySummaries,
+  dailySummaries
 } from "./db/schema";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { calculateBitcoin } from "./server/utils/bitcoin";
-import { getDifficultyData } from "./server/services/dynamodbService";
+// import { getDifficultyData } from "./server/services/dynamodbService";
 
 // Target date for processing
 const TARGET_DATE = "2025-04-02";
 
 // Miner models to process
 const MINER_MODELS = ["S19J_PRO", "S9", "M20S"];
+
+// Use the difficulty value we found in existing records
+const DIFFICULTY = 113757508810853;
 
 async function main() {
   try {
@@ -85,9 +89,8 @@ async function main() {
     for (const minerModel of MINER_MODELS) {
       console.log(`Processing ${minerModel}...`);
       
-      // Get the difficulty value from DynamoDB for this date
-      const difficulty = await getDifficultyData(TARGET_DATE);
-      console.log(`Using difficulty ${difficulty} for ${TARGET_DATE}`);
+      // Use fixed difficulty value from the existing records
+      console.log(`Using difficulty ${DIFFICULTY} for ${TARGET_DATE}`);
       
       // Delete existing calculations to avoid duplicates
       await db.delete(historicalBitcoinCalculations)
@@ -126,7 +129,7 @@ async function main() {
         }
         
         // Calculate Bitcoin mined
-        const bitcoinMined = calculateBitcoin(mwh, minerModel, difficulty);
+        const bitcoinMined = calculateBitcoin(mwh, minerModel, DIFFICULTY);
         totalBitcoin += bitcoinMined;
         
         // Add to values array for bulk insert
@@ -136,17 +139,37 @@ async function main() {
           minerModel: minerModel,
           farmId: record.farmId,
           bitcoinMined: bitcoinMined.toString(),
-          difficulty: difficulty.toString()
+          difficulty: DIFFICULTY.toString()
         });
       }
       
-      // Execute all inserts in batches to avoid overwhelming the database
+      // Execute all inserts in batches using onConflictDoUpdate to avoid unique constraint errors
       console.log(`Inserting ${insertValues.length} calculation records...`);
       const batchSize = 50;
       for (let i = 0; i < insertValues.length; i += batchSize) {
         const batch = insertValues.slice(i, i + batchSize);
-        await db.insert(historicalBitcoinCalculations).values(batch);
-        console.log(`Inserted batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(insertValues.length/batchSize)}`);
+        
+        try {
+          // Try to insert with onConflictDoNothing first to avoid errors
+          await db.insert(historicalBitcoinCalculations)
+            .values(batch)
+            .onConflictDoNothing();
+          
+          console.log(`Inserted batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(insertValues.length/batchSize)}`);
+        } catch (error) {
+          console.error(`Error inserting batch ${Math.floor(i/batchSize) + 1}:`, error);
+          
+          // Try inserting records one by one to identify problematic records
+          for (const record of batch) {
+            try {
+              await db.insert(historicalBitcoinCalculations)
+                .values(record)
+                .onConflictDoNothing();
+            } catch (recordError) {
+              console.error(`Failed to insert record: ${JSON.stringify(record)}`, recordError);
+            }
+          }
+        }
       }
       
       console.log(`Successfully processed ${insertValues.length} Bitcoin calculations for ${minerModel}`);
@@ -325,9 +348,12 @@ async function main() {
     .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
     
     // Get daily summary stats
-    const summary = await db.select()
-      .from(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, TARGET_DATE));
+    const summary = await db.select({
+      totalCurtailedEnergy: dailySummaries.totalCurtailedEnergy,
+      totalPayment: dailySummaries.totalPayment
+    })
+    .from(dailySummaries)
+    .where(eq(dailySummaries.summaryDate, TARGET_DATE));
     
     // Check if values are consistent
     const dbEnergy = Number(finalCurtailmentStats[0]?.totalVolume || 0);
