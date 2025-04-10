@@ -29,8 +29,8 @@ import path from "path";
 import { fileURLToPath } from 'url';
 
 // Set target date
-// Changed from April 3 to April 1, which is more likely to have data
-const TARGET_DATE = '2025-04-01';
+// Changed to April 10, 2025 which shows active curtailment data from logs
+const TARGET_DATE = '2025-04-10';
 
 // Default difficulty for 2025 Bitcoin calculations
 const DEFAULT_DIFFICULTY = 113757508810853;
