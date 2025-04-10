@@ -28,7 +28,7 @@ async function main() {
   try {
     console.log(`\n===== FIXING BITCOIN CALCULATIONS FOR ${TARGET_DATE} =====\n`);
 
-    // Step 1: Analyze current state
+    // Step 1: Analyze current state of curtailment records
     const curtailmentStats = await db.select({
       totalRecords: sql<number>`COUNT(*)::int`,
       totalPeriods: sql<number>`COUNT(DISTINCT settlement_period)::int`,
@@ -36,7 +36,7 @@ async function main() {
       totalEnergy: sql<string>`SUM(ABS(volume::numeric))::text`
     })
     .from(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+    .where(eq(curtailmentRecords.settlement_date, TARGET_DATE));
 
     console.log(`Curtailment records for ${TARGET_DATE}:`, {
       records: curtailmentStats[0].totalRecords,
@@ -55,8 +55,8 @@ async function main() {
       .from(historicalBitcoinCalculations)
       .where(
         and(
-          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
+          eq(historicalBitcoinCalculations.settlement_date, TARGET_DATE),
+          eq(historicalBitcoinCalculations.miner_model, minerModel)
         )
       );
 
@@ -81,8 +81,8 @@ async function main() {
       await db.delete(historicalBitcoinCalculations)
         .where(
           and(
-            eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-            eq(historicalBitcoinCalculations.minerModel, minerModel)
+            eq(historicalBitcoinCalculations.settlement_date, TARGET_DATE),
+            eq(historicalBitcoinCalculations.miner_model, minerModel)
           )
         );
       
@@ -90,19 +90,19 @@ async function main() {
       
       // Get all curtailment records for this date
       const records = await db.select({
-        settlementPeriod: curtailmentRecords.settlementPeriod,
-        farmId: curtailmentRecords.farmId,
-        leadPartyName: curtailmentRecords.leadPartyName,
+        settlement_period: curtailmentRecords.settlement_period,
+        farm_id: curtailmentRecords.farm_id,
+        lead_party_name: curtailmentRecords.lead_party_name,
         volume: curtailmentRecords.volume
       })
       .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+      .where(eq(curtailmentRecords.settlement_date, TARGET_DATE));
       
       console.log(`Processing ${records.length} curtailment records`);
       
       // Calculate Bitcoin for each curtailment record
       let totalBitcoin = 0;
-      const insertPromises = [];
+      const insertValues = [];
       
       for (const record of records) {
         // Convert volume (MWh) to positive number for calculation
@@ -117,29 +117,27 @@ async function main() {
         const bitcoinMined = calculateBitcoin(mwh, minerModel, difficulty);
         totalBitcoin += bitcoinMined;
         
-        // Insert the calculation record
-        insertPromises.push(
-          db.insert(historicalBitcoinCalculations).values({
-            settlementDate: TARGET_DATE,
-            settlementPeriod: Number(record.settlementPeriod),
-            minerModel: minerModel,
-            farmId: record.farmId,
-            bitcoinMined: bitcoinMined.toString(),
-            difficulty: difficulty.toString()
-          })
-        );
+        // Add to values array for bulk insert
+        insertValues.push({
+          settlement_date: TARGET_DATE,
+          settlement_period: Number(record.settlement_period),
+          miner_model: minerModel,
+          farm_id: record.farm_id,
+          bitcoin_mined: bitcoinMined.toString(),
+          difficulty: difficulty.toString()
+        });
       }
       
       // Execute all inserts in batches to avoid overwhelming the database
-      console.log(`Inserting ${insertPromises.length} calculation records...`);
+      console.log(`Inserting ${insertValues.length} calculation records...`);
       const batchSize = 50;
-      for (let i = 0; i < insertPromises.length; i += batchSize) {
-        const batch = insertPromises.slice(i, i + batchSize);
-        await Promise.all(batch);
-        console.log(`Inserted batch ${i/batchSize + 1}/${Math.ceil(insertPromises.length/batchSize)}`);
+      for (let i = 0; i < insertValues.length; i += batchSize) {
+        const batch = insertValues.slice(i, i + batchSize);
+        await db.insert(historicalBitcoinCalculations).values(batch);
+        console.log(`Inserted batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(insertValues.length/batchSize)}`);
       }
       
-      console.log(`Successfully processed ${insertPromises.length} Bitcoin calculations for ${minerModel}`);
+      console.log(`Successfully processed ${insertValues.length} Bitcoin calculations for ${minerModel}`);
       console.log(`Total Bitcoin calculated: ${totalBitcoin.toFixed(8)}`);
     }
     
@@ -155,8 +153,8 @@ async function main() {
       .from(historicalBitcoinCalculations)
       .where(
         and(
-          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
+          eq(historicalBitcoinCalculations.settlement_date, TARGET_DATE),
+          eq(historicalBitcoinCalculations.miner_model, minerModel)
         )
       );
 
@@ -167,12 +165,12 @@ async function main() {
       });
     }
     
-    // Step 5: Update summary tables for April 2025
-    console.log("\n=== Updating Summary Tables ===\n");
+    // Step 5: Update daily summary for April 1, 2025
+    console.log("\n=== Updating Daily Summary ===\n");
     
-    // First, remove any existing daily summary records for April 1
+    // Delete existing daily summary records for April 1
     await db.delete(bitcoinDailySummaries)
-      .where(eq(bitcoinDailySummaries.summaryDate, TARGET_DATE));
+      .where(eq(bitcoinDailySummaries.summary_date, TARGET_DATE));
     
     console.log(`Deleted existing daily summaries for ${TARGET_DATE}`);
     
@@ -185,8 +183,8 @@ async function main() {
       .from(historicalBitcoinCalculations)
       .where(
         and(
-          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
+          eq(historicalBitcoinCalculations.settlement_date, TARGET_DATE),
+          eq(historicalBitcoinCalculations.miner_model, minerModel)
         )
       );
       
@@ -195,7 +193,6 @@ async function main() {
           summaryDate: TARGET_DATE,
           minerModel: minerModel,
           bitcoinMined: dailyStats[0].totalBitcoin,
-          difficulty: dailyStats[0].difficulty,
           createdAt: new Date(),
           updatedAt: new Date()
         });
@@ -204,15 +201,17 @@ async function main() {
       }
     }
     
-    // Update monthly summary for April 2025
+    // Step 6: Update monthly summary for April 2025
+    console.log("\n=== Updating Monthly Summary ===\n");
+    
     const yearMonth = TARGET_DATE.substring(0, 7); // 2025-04
     
-    // Remove existing monthly summary
+    // Delete existing monthly summary records for April 2025
     await db.delete(bitcoinMonthlySummaries)
       .where(
         and(
-          eq(bitcoinMonthlySummaries.yearMonth, yearMonth),
-          inArray(bitcoinMonthlySummaries.minerModel, MINER_MODELS)
+          eq(bitcoinMonthlySummaries.year_month, yearMonth),
+          inArray(bitcoinMonthlySummaries.miner_model, MINER_MODELS)
         )
       );
     
@@ -228,33 +227,34 @@ async function main() {
       .where(
         and(
           sql`summary_date::text LIKE ${yearMonth + '%'}`,
-          eq(bitcoinDailySummaries.minerModel, minerModel)
+          eq(bitcoinDailySummaries.miner_model, minerModel)
         )
       );
       
       if (monthlyStats[0]?.totalBitcoin) {
         await db.insert(bitcoinMonthlySummaries).values({
-          yearMonth: yearMonth,
-          minerModel: minerModel,
-          bitcoinMined: monthlyStats[0].totalBitcoin,
-          difficulty: monthlyStats[0].avgDifficulty,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          year_month: yearMonth,
+          miner_model: minerModel,
+          bitcoin_mined: monthlyStats[0].totalBitcoin,
+          created_at: new Date(),
+          updated_at: new Date()
         });
         
         console.log(`Created monthly summary for ${yearMonth} and ${minerModel}`);
       }
     }
     
-    // Update yearly summary for 2025
+    // Step 7: Update yearly summary for 2025
+    console.log("\n=== Updating Yearly Summary ===\n");
+    
     const year = TARGET_DATE.substring(0, 4); // 2025
     
-    // Remove existing yearly summary
+    // Delete existing yearly summary records for 2025
     await db.delete(bitcoinYearlySummaries)
       .where(
         and(
-          eq(bitcoinYearlySummaries.year, Number(year)),
-          inArray(bitcoinYearlySummaries.minerModel, MINER_MODELS)
+          eq(bitcoinYearlySummaries.year, year),
+          inArray(bitcoinYearlySummaries.miner_model, MINER_MODELS)
         )
       );
     
@@ -270,18 +270,17 @@ async function main() {
       .where(
         and(
           sql`year_month::text LIKE ${year + '%'}`,
-          eq(bitcoinMonthlySummaries.minerModel, minerModel)
+          eq(bitcoinMonthlySummaries.miner_model, minerModel)
         )
       );
       
       if (yearlyStats[0]?.totalBitcoin) {
         await db.insert(bitcoinYearlySummaries).values({
-          year: Number(year),
-          minerModel: minerModel,
-          bitcoinMined: yearlyStats[0].totalBitcoin,
-          difficulty: yearlyStats[0].avgDifficulty,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          year: year,
+          miner_model: minerModel,
+          bitcoin_mined: yearlyStats[0].totalBitcoin,
+          created_at: new Date(),
+          updated_at: new Date()
         });
         
         console.log(`Created yearly summary for ${year} and ${minerModel}`);
