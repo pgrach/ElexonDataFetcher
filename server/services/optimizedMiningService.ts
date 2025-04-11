@@ -415,34 +415,71 @@ export async function getTopCurtailedFarms(
       const farmIds = farms.map(f => f.farmId);
       
       // Get Bitcoin data for all farms under this lead party
-      let bitcoinDateCondition;
+      // Special handling for April 10 and April 11, 2025 - calculate on the fly
+      let bitcoinMined = 0;
       
-      if (period === 'day') {
-        bitcoinDateCondition = eq(historicalBitcoinCalculations.settlementDate, value);
-      } else if (period === 'month') {
-        const [year, month] = value.split('-').map(n => parseInt(n, 10));
-        const startDate = new Date(year, month - 1, 1);
-        const endDate = new Date(year, month, 0);
-        const formattedStartDate = format(startDate, 'yyyy-MM-dd');
-        const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+      if ((period === 'day' && (value === '2025-04-10' || value === '2025-04-11')) || 
+          (period === 'month' && value === '2025-04')) {
+        console.log(`Special top farms handling for ${value}: calculating Bitcoin on-the-fly`);
         
-        bitcoinDateCondition = sql`${historicalBitcoinCalculations.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
-      } else if (period === 'year') {
-        bitcoinDateCondition = sql`EXTRACT(YEAR FROM ${historicalBitcoinCalculations.settlementDate}) = ${parseInt(value, 10)}`;
+        // Get total curtailed energy for all farms in this lead party for special date
+        const energyTotal = party.totalCurtailedEnergy;
+        
+        // Import the Bitcoin calculation utility
+        const { calculateBitcoin } = await import('../utils/bitcoin');
+        
+        // Get current network difficulty
+        let difficulty = 121507793131898; // Default to current network difficulty
+        
+        try {
+          // Try to get difficulty from DynamoDB or other source if available
+          const { getDifficultyData } = await import('../services/dynamodbService');
+          if (period === 'day') {
+            difficulty = await getDifficultyData(value);
+          } else {
+            // For monthly, use a standard difficulty for the month
+            difficulty = 121507793131898; // Use current network difficulty
+          }
+        } catch (error) {
+          console.error(`Error fetching difficulty, using default: ${error}`);
+        }
+        
+        // Calculate Bitcoin based on energy and difficulty
+        bitcoinMined = calculateBitcoin(energyTotal, minerModel, difficulty);
+        console.log(`On-the-fly Bitcoin calculation for ${party.leadPartyName}: ${bitcoinMined} BTC`);
+      } else {
+        // For other dates, use historical calculations from the database
+        let bitcoinDateCondition;
+        
+        if (period === 'day') {
+          bitcoinDateCondition = eq(historicalBitcoinCalculations.settlementDate, value);
+        } else if (period === 'month') {
+          const [year, month] = value.split('-').map(n => parseInt(n, 10));
+          const startDate = new Date(year, month - 1, 1);
+          const endDate = new Date(year, month, 0);
+          const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+          const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+          
+          bitcoinDateCondition = sql`${historicalBitcoinCalculations.settlementDate} BETWEEN ${formattedStartDate} AND ${formattedEndDate}`;
+        } else if (period === 'year') {
+          bitcoinDateCondition = sql`EXTRACT(YEAR FROM ${historicalBitcoinCalculations.settlementDate}) = ${parseInt(value, 10)}`;
+        }
+        
+        const bitcoinData = await db
+          .select({
+            totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`
+          })
+          .from(historicalBitcoinCalculations)
+          .where(
+            and(
+              bitcoinDateCondition,
+              inArray(historicalBitcoinCalculations.farmId, farmIds),
+              eq(historicalBitcoinCalculations.minerModel, minerModel)
+            )
+          );
+          
+        bitcoinMined = Number(bitcoinData[0]?.totalBitcoinMined || 0);
       }
-      
-      const bitcoinData = await db
-        .select({
-          totalBitcoinMined: sql<number>`SUM(bitcoin_mined)`
-        })
-        .from(historicalBitcoinCalculations)
-        .where(
-          and(
-            bitcoinDateCondition,
-            inArray(historicalBitcoinCalculations.farmId, farmIds),
-            eq(historicalBitcoinCalculations.minerModel, minerModel)
-          )
-        );
       
       // Get current Bitcoin price for calculating value in GBP - use cache if available
       let currentPrice = 0;
@@ -474,7 +511,7 @@ export async function getTopCurtailedFarms(
         currentPrice = 60000; // Example GBP price
       }
       
-      const bitcoinMined = Number(bitcoinData[0]?.totalBitcoinMined || 0);
+      // bitcoinMined is already set either by on-the-fly calculation or from database
       const bitcoinValue = bitcoinMined * currentPrice;
       
       return {
