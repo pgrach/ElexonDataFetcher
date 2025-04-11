@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties, getYearlySummary, getHourlyComparison, getMonthlyComparison } from "./controllers/summary";
 import { processDailyCurtailment } from "./services/curtailment";
-import curtailmentRoutes from "./routes/strict_curtailment_routes";
+import curtailmentRoutes from "./routes/curtailmentRoutes";
 import optimizedMiningRoutes from "./routes/optimizedMiningRoutes";
 import productionRoutes from "./routes/productionRoutes";
 import farmDataTableRoutes from "./routes/farmDataTableRoutes";
