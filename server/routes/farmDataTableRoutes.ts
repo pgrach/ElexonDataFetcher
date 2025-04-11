@@ -107,10 +107,11 @@ async function getGroupedFarmData(
       .groupBy(curtailmentRecords.leadPartyName)
       .orderBy(desc(sql<number>`SUM(ABS(${curtailmentRecords.volume}))`));
     
-    // Special handling for April 10, April 11, 2025 and April 2025 month
+    // Special handling for April 11, 2025 only - calculate on the fly
+    // April 10 has data in historical_bitcoin_calculations table, so use that
     let bitcoinLookup = new Map<string, number>();
     
-    if ((timeframe === 'day' && (value === '2025-04-10' || value === '2025-04-11')) || 
+    if ((timeframe === 'day' && value === '2025-04-11') || 
         (timeframe === 'month' && value === '2025-04')) {
       console.log(`Special farm data table handling for ${timeframe}: ${value} - calculating Bitcoin on-the-fly`);
       

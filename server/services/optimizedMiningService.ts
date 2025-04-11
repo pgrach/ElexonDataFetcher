@@ -415,10 +415,11 @@ export async function getTopCurtailedFarms(
       const farmIds = farms.map(f => f.farmId);
       
       // Get Bitcoin data for all farms under this lead party
-      // Special handling for April 10 and April 11, 2025 - calculate on the fly
+      // Special handling for April 11, 2025 only - calculate on the fly
+      // April 10 has data in historical_bitcoin_calculations, so use that
       let bitcoinMined = 0;
       
-      if ((period === 'day' && (value === '2025-04-10' || value === '2025-04-11')) || 
+      if ((period === 'day' && value === '2025-04-11') || 
           (period === 'month' && value === '2025-04')) {
         console.log(`Special top farms handling for ${value}: calculating Bitcoin on-the-fly`);
         
