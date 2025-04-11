@@ -71,5 +71,14 @@ export async function handleEnergyParameter(
     };
   }
   
-  return null;
+  // If we don't have historical data, return an error response instead of falling back to calculation
+  console.error(`ERROR: No historical data available for ${formattedDate} with miner model ${minerModel}`);
+  return {
+    error: true,
+    message: `No historical data available for this date (${formattedDate})`,
+    bitcoinMined: 0,
+    valueAtCurrentPrice: 0,
+    difficulty: 0,
+    currentPrice
+  };
 }
