@@ -93,13 +93,15 @@ router.get('/mining-potential', async (req, res) => {
     const minerModel = req.query.minerModel as string || 'S19J_PRO';
     const leadParty = req.query.leadParty as string;
     const farmId = req.query.farmId as string;
+    const energyParam = req.query.energy as string;
     const formattedDate = format(requestDate, 'yyyy-MM-dd');
 
     console.log('Mining potential request:', {
       date: formattedDate,
       minerModel,
       leadParty,
-      farmId
+      farmId,
+      energy: energyParam
     });
 
     // Always try to get current price from Minerstat
@@ -112,36 +114,82 @@ router.get('/mining-potential', async (req, res) => {
       currentPrice = null;
     }
 
-    // For April 10, 2025, always calculate on-the-fly to ensure consistent results
-    if (formattedDate !== '2025-04-10') {
-      // First, try to get the historical records for this date
-      const historicalData = await db
+    // Priority order:
+    // 1. First check if we have historical bitcoin calculations in the database for this date (and farm if specified)
+    // 2. If not, check if we have historical calculations for the same date but all farms, and apply the same BTC/MWh ratio
+    // 3. Only if no historical data exists, calculate on-the-fly
+
+    // First, try to get the historical records for this specific date and farm (if specified)
+    const specificHistoricalData = await db
+      .select({
+        difficulty: sql<string>`MIN(difficulty)`, // Get the difficulty used for this date
+        bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`
+      })
+      .from(historicalBitcoinCalculations)
+      .where(
+        and(
+          eq(historicalBitcoinCalculations.settlementDate, formattedDate),
+          eq(historicalBitcoinCalculations.minerModel, minerModel),
+          leadParty || farmId ? eq(historicalBitcoinCalculations.farmId, farmId || leadParty) : undefined
+        )
+      );
+
+    if (specificHistoricalData[0]?.difficulty && Number(specificHistoricalData[0].bitcoinMined) > 0) {
+      console.log(`Using specific historical data from database for ${formattedDate} and farm ${farmId || leadParty}`);
+      const totalBitcoin = Number(specificHistoricalData[0].bitcoinMined) || 0;
+
+      return res.json({
+        bitcoinMined: totalBitcoin,
+        valueAtCurrentPrice: totalBitcoin * (currentPrice || 0),
+        difficulty: Number(specificHistoricalData[0].difficulty),
+        currentPrice
+      });
+    }
+
+    // If we have a specific energy parameter and historical data for the same date (but different farm),
+    // use the BTC/MWh ratio from the historical data
+    if (energyParam && formattedDate !== '2025-04-10') {
+      const allHistoricalData = await db
         .select({
-          difficulty: sql<string>`MIN(difficulty)`, // Get the difficulty used for this date
-          bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`
+          difficulty: sql<string>`MIN(difficulty)`,
+          bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`,
+          energy: sql<string>`SUM(energy::numeric)`
         })
         .from(historicalBitcoinCalculations)
         .where(
           and(
             eq(historicalBitcoinCalculations.settlementDate, formattedDate),
-            eq(historicalBitcoinCalculations.minerModel, minerModel),
-            leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
+            eq(historicalBitcoinCalculations.minerModel, minerModel)
           )
         );
-  
-      if (historicalData[0]?.difficulty) {
-        console.log(`Using historical difficulty from database: ${historicalData[0].difficulty}`);
-        const totalBitcoin = Number(historicalData[0].bitcoinMined) || 0;
-  
+
+      if (allHistoricalData[0]?.difficulty && Number(allHistoricalData[0].bitcoinMined) > 0 && Number(allHistoricalData[0].energy) > 0) {
+        console.log(`Using aggregate historical data ratio for ${formattedDate}`);
+        
+        const historicalEnergy = Number(allHistoricalData[0].energy);
+        const historicalBtc = Number(allHistoricalData[0].bitcoinMined);
+        const energyValue = Number(energyParam);
+        
+        // Calculate bitcoin based on the same BTC/MWh ratio from historical data
+        const btcPerMwh = historicalBtc / historicalEnergy;
+        const calculatedBitcoin = btcPerMwh * energyValue;
+        
+        console.log(`Historical BTC/MWh ratio: ${btcPerMwh}, Applied to ${energyValue} MWh = ${calculatedBitcoin} BTC`);
+        
         return res.json({
-          bitcoinMined: totalBitcoin,
-          valueAtCurrentPrice: totalBitcoin * (currentPrice || 0),
-          difficulty: Number(historicalData[0].difficulty),
+          bitcoinMined: calculatedBitcoin,
+          valueAtCurrentPrice: calculatedBitcoin * (currentPrice || 0),
+          difficulty: Number(allHistoricalData[0].difficulty),
           currentPrice
         });
       }
-    } else {
+    }
+
+    // Special case for April 10, 2025
+    if (formattedDate === '2025-04-10') {
       console.log(`Special handling for 2025-04-10: Using on-the-fly calculation for consistency`);
+    } else {
+      console.log(`No historical data found for ${formattedDate} with farm ${farmId || leadParty}, falling back to calculation`);
     }
 
     // If no historical data, get appropriate difficulty
@@ -164,20 +212,27 @@ router.get('/mining-potential', async (req, res) => {
       console.log(`Using latest known difficulty: ${difficulty}`);
     }
 
-    // Calculate total curtailed energy for the date
-    const curtailmentTotal = await db
-      .select({
-        totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
-      })
-      .from(curtailmentRecords)
-      .where(
-        and(
-          eq(curtailmentRecords.settlementDate, formattedDate),
-          leadParty ? eq(curtailmentRecords.leadPartyName, leadParty) : undefined
-        )
-      );
+    // If energy is provided as a parameter, use that instead of querying the database
+    let totalEnergy;
+    if (energyParam) {
+      totalEnergy = Number(energyParam);
+      console.log(`Using provided energy parameter: ${totalEnergy} MWh`);
+    } else {
+      // Calculate total curtailed energy for the date
+      const curtailmentTotal = await db
+        .select({
+          totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
+        })
+        .from(curtailmentRecords)
+        .where(
+          and(
+            eq(curtailmentRecords.settlementDate, formattedDate),
+            leadParty ? eq(curtailmentRecords.leadPartyName, leadParty) : undefined
+          )
+        );
 
-    const totalEnergy = Number(curtailmentTotal[0]?.totalEnergy) || 0;
+      totalEnergy = Number(curtailmentTotal[0]?.totalEnergy) || 0;
+    }
 
     if (totalEnergy === 0) {
       return res.json({
