@@ -107,24 +107,68 @@ async function getGroupedFarmData(
       .groupBy(curtailmentRecords.leadPartyName)
       .orderBy(desc(sql<number>`SUM(ABS(${curtailmentRecords.volume}))`));
     
-    // Get Bitcoin data by lead party name
-    const bitcoinDateCondition = createDateCondition(historicalBitcoinCalculations);
-    const bitcoinData = await db
-      .select({
-        farmId: historicalBitcoinCalculations.farmId,
-        totalBitcoin: sql<number>`SUM(${historicalBitcoinCalculations.bitcoinMined})`
-      })
-      .from(historicalBitcoinCalculations)
-      .where(and(
-        bitcoinDateCondition,
-        eq(historicalBitcoinCalculations.minerModel, minerModel)
-      ))
-      .groupBy(historicalBitcoinCalculations.farmId);
+    // Special handling for April 10, April 11, 2025 and April 2025 month
+    let bitcoinLookup = new Map<string, number>();
     
-    // Create a lookup map for Bitcoin data
-    const bitcoinLookup = new Map<string, number>();
-    for (const record of bitcoinData) {
-      bitcoinLookup.set(record.farmId, Number(record.totalBitcoin || 0));
+    if ((timeframe === 'day' && (value === '2025-04-10' || value === '2025-04-11')) || 
+        (timeframe === 'month' && value === '2025-04')) {
+      console.log(`Special farm data table handling for ${timeframe}: ${value} - calculating Bitcoin on-the-fly`);
+      
+      // Import the Bitcoin calculation utility
+      const { calculateBitcoin } = await import('../utils/bitcoin');
+      
+      // Get current network difficulty
+      let difficulty = 121507793131898; // Default to current network difficulty
+      
+      try {
+        // Try to get difficulty from DynamoDB or other source if available
+        const { getDifficultyData } = await import('../services/dynamodbService');
+        if (timeframe === 'day') {
+          difficulty = await getDifficultyData(value);
+        } else {
+          // For monthly, use a standard difficulty for the month
+          difficulty = 121507793131898; // Use current network difficulty
+        }
+      } catch (error) {
+        console.error(`Error fetching difficulty, using default: ${error}`);
+      }
+      
+      // Get all farms with their curtailed energy for this period
+      const farmEnergies = await db
+        .select({
+          farmId: curtailmentRecords.farmId,
+          totalCurtailedEnergy: sql<number>`SUM(ABS(${curtailmentRecords.volume}))`
+        })
+        .from(curtailmentRecords)
+        .where(curtailmentDateCondition)
+        .groupBy(curtailmentRecords.farmId);
+      
+      // Calculate Bitcoin for each farm based on its curtailed energy
+      for (const farm of farmEnergies) {
+        const energy = Number(farm.totalCurtailedEnergy || 0);
+        const bitcoinMined = calculateBitcoin(energy, minerModel, difficulty);
+        bitcoinLookup.set(farm.farmId, bitcoinMined);
+        console.log(`On-the-fly Bitcoin calculation for ${farm.farmId}: ${bitcoinMined} BTC from ${energy} MWh`);
+      }
+    } else {
+      // For other dates, use the historical Bitcoin calculations from the database
+      const bitcoinDateCondition = createDateCondition(historicalBitcoinCalculations);
+      const bitcoinData = await db
+        .select({
+          farmId: historicalBitcoinCalculations.farmId,
+          totalBitcoin: sql<number>`SUM(${historicalBitcoinCalculations.bitcoinMined})`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(and(
+          bitcoinDateCondition,
+          eq(historicalBitcoinCalculations.minerModel, minerModel)
+        ))
+        .groupBy(historicalBitcoinCalculations.farmId);
+      
+      // Create a lookup map for Bitcoin data
+      for (const record of bitcoinData) {
+        bitcoinLookup.set(record.farmId, Number(record.totalBitcoin || 0));
+      }
     }
     
     // For each lead party, get the individual farm details
