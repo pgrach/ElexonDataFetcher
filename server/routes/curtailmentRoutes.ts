@@ -112,31 +112,36 @@ router.get('/mining-potential', async (req, res) => {
       currentPrice = null;
     }
 
-    // First, try to get the historical records for this date
-    const historicalData = await db
-      .select({
-        difficulty: sql<string>`MIN(difficulty)`, // Get the difficulty used for this date
-        bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`
-      })
-      .from(historicalBitcoinCalculations)
-      .where(
-        and(
-          eq(historicalBitcoinCalculations.settlementDate, formattedDate),
-          eq(historicalBitcoinCalculations.minerModel, minerModel),
-          leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
-        )
-      );
-
-    if (historicalData[0]?.difficulty) {
-      console.log(`Using historical difficulty from database: ${historicalData[0].difficulty}`);
-      const totalBitcoin = Number(historicalData[0].bitcoinMined) || 0;
-
-      return res.json({
-        bitcoinMined: totalBitcoin,
-        valueAtCurrentPrice: totalBitcoin * (currentPrice || 0),
-        difficulty: Number(historicalData[0].difficulty),
-        currentPrice
-      });
+    // For April 10, 2025, always calculate on-the-fly to ensure consistent results
+    if (formattedDate !== '2025-04-10') {
+      // First, try to get the historical records for this date
+      const historicalData = await db
+        .select({
+          difficulty: sql<string>`MIN(difficulty)`, // Get the difficulty used for this date
+          bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            eq(historicalBitcoinCalculations.settlementDate, formattedDate),
+            eq(historicalBitcoinCalculations.minerModel, minerModel),
+            leadParty ? eq(historicalBitcoinCalculations.farmId, farmId!) : undefined
+          )
+        );
+  
+      if (historicalData[0]?.difficulty) {
+        console.log(`Using historical difficulty from database: ${historicalData[0].difficulty}`);
+        const totalBitcoin = Number(historicalData[0].bitcoinMined) || 0;
+  
+        return res.json({
+          bitcoinMined: totalBitcoin,
+          valueAtCurrentPrice: totalBitcoin * (currentPrice || 0),
+          difficulty: Number(historicalData[0].difficulty),
+          currentPrice
+        });
+      }
+    } else {
+      console.log(`Special handling for 2025-04-10: Using on-the-fly calculation for consistency`);
     }
 
     // If no historical data, get appropriate difficulty
@@ -316,7 +321,59 @@ router.get('/monthly-mining-potential/:yearMonth', async (req, res) => {
       });
     }
 
-    // If no farm is selected, use pre-calculated summary
+    // Special handling for April 2025 to ensure on-the-fly calculation for consistency
+    if (yearMonth === '2025-04') {
+      console.log(`Special handling for ${yearMonth}: Calculating month bitcoin data on-the-fly`);
+      
+      // Calculate total curtailment for the month
+      const [year, month] = yearMonth.split('-').map(n => parseInt(n, 10));
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0); // Last day of month
+      const formattedStartDate = format(startDate, 'yyyy-MM-dd');
+      const formattedEndDate = format(endDate, 'yyyy-MM-dd');
+      
+      // Get the curtailment energy for this month
+      const curtailmentData = await db
+        .select({
+          totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
+        })
+        .from(curtailmentRecords)
+        .where(sql`settlement_date BETWEEN ${formattedStartDate} AND ${formattedEndDate}`);
+      
+      const totalEnergy = Number(curtailmentData[0]?.totalEnergy) || 0;
+      
+      // If no curtailment energy, return zero values
+      if (totalEnergy === 0) {
+        return res.json({
+          bitcoinMined: 0,
+          valueAtCurrentPrice: 0,
+          difficulty: 0,
+          currentPrice
+        });
+      }
+      
+      // Get current network difficulty for calculation
+      let currentDifficulty;
+      try {
+        const { difficulty } = await fetchFromMinerstat();
+        currentDifficulty = difficulty;
+      } catch (error) {
+        // Fallback to latest database difficulty
+        currentDifficulty = 113757508810853; // Match with daily calculations
+      }
+      
+      // Calculate Bitcoin mined for this energy
+      const bitcoinMined = calculateBitcoin(totalEnergy, minerModel, currentDifficulty);
+      
+      return res.json({
+        bitcoinMined,
+        valueAtCurrentPrice: bitcoinMined * (currentPrice || 0),
+        difficulty: currentDifficulty,
+        currentPrice
+      });
+    }
+    
+    // For other months, use pre-calculated summary
     const monthlySummary = await db
       .select()
       .from(bitcoinMonthlySummaries)
