@@ -54,11 +54,11 @@ async function testApril4Fix() {
   
   // Expected Bitcoin (if calculations are consistent)
   const expectedBitcoin = totalBitcoin * farmPercentage;
-  console.log('Expected Bitcoin (proportional):', expectedBitcoin, 'BTC');
+  console.log('Expected Bitcoin (proportional):', expectedBitcoin.toFixed(8), 'BTC');
   
   // Get Bitcoin mining potential for this specific farm's energy
   const bitcoinFarmResponse = await fetch(
-    `http://localhost:5000/api/curtailment/mining-potential?date=2025-04-04&minerModel=S19J_PRO&energy=${farmEnergy}`
+    `http://localhost:5000/api/curtailment/mining-potential?date=2025-04-04&minerModel=S19J_PRO&farmId=TEST_FARM&energy=${farmEnergy}`
   );
   if (!bitcoinFarmResponse.ok) {
     console.error(`Failed to fetch Bitcoin data for energy=${farmEnergy}`, await bitcoinFarmResponse.text());

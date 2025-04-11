@@ -149,6 +149,8 @@ router.get('/mining-potential', async (req, res) => {
     // If we have a specific energy parameter and historical data for the same date (but different farm),
     // use the BTC/MWh ratio from the historical data
     if (energyParam && formattedDate !== '2025-04-10') {
+      console.log(`Energy parameter detected: ${energyParam} for date ${formattedDate}`);
+      
       const allHistoricalData = await db
         .select({
           difficulty: sql<string>`MIN(difficulty)`,
@@ -163,40 +165,30 @@ router.get('/mining-potential', async (req, res) => {
           )
         );
 
-      if (allHistoricalData[0]?.difficulty && Number(allHistoricalData[0].bitcoinMined) > 0 && Number(allHistoricalData[0].energy) > 0) {
-        console.log(`Using aggregate historical data ratio for ${formattedDate}`);
+      if (allHistoricalData[0]?.difficulty && Number(allHistoricalData[0].bitcoinMined) > 0) {
+        console.log(`Using aggregate historical data for ${formattedDate}`);
         
-        const historicalEnergy = Number(allHistoricalData[0].energy);
+        // Get the total energy from the daily summary instead
+        const curtailmentTotal = await db
+          .select({
+            totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
+          })
+          .from(curtailmentRecords)
+          .where(eq(curtailmentRecords.settlementDate, formattedDate));
+
+        const historicalEnergy = Number(curtailmentTotal[0]?.totalEnergy) || 0;
         const historicalBtc = Number(allHistoricalData[0].bitcoinMined);
         const energyValue = Number(energyParam);
         
-        // For April 4, 2025, we need to use a consistent approach 
-        // to match the aggregate view's calculations
-        if (formattedDate === '2025-04-04') {
-          console.log(`Special handling for 2025-04-04 energy calculations`);
-          
-          // For April 4, we need to calculate the proportional Bitcoin based on energy
-          // The key insight is that a farm should get the same proportion of BTC as its proportion of energy
-          const totalEnergy = historicalEnergy;
-          const totalBitcoin = historicalBtc;
-          const energyRatio = energyValue / totalEnergy;
-          const calculatedBitcoin = totalBitcoin * energyRatio;
-          
-          console.log(`April 4: Energy ratio: ${energyRatio}, Applied to ${totalBitcoin} BTC = ${calculatedBitcoin} BTC`);
-          
-          return res.json({
-            bitcoinMined: calculatedBitcoin,
-            valueAtCurrentPrice: calculatedBitcoin * (currentPrice || 0),
-            difficulty: Number(allHistoricalData[0].difficulty),
-            currentPrice
-          });
-        }
+        // For all dates, calculate the proportional Bitcoin based on energy ratio
+        // The key insight is that a farm should get the same proportion of BTC as its proportion of energy
+        const totalEnergy = historicalEnergy;
+        const totalBitcoin = historicalBtc;
+        const energyRatio = energyValue / totalEnergy;
+        const calculatedBitcoin = totalBitcoin * energyRatio;
         
-        // For other dates, calculate based on ratio
-        const btcPerMwh = historicalBtc / historicalEnergy;
-        const calculatedBitcoin = btcPerMwh * energyValue;
-        
-        console.log(`Historical BTC/MWh ratio: ${btcPerMwh}, Applied to ${energyValue} MWh = ${calculatedBitcoin} BTC`);
+        console.log(`Energy ratio calculation: ${energyValue} MWh / ${totalEnergy} MWh = ${energyRatio}`);
+        console.log(`Proportional Bitcoin: ${energyRatio} × ${totalBitcoin} BTC = ${calculatedBitcoin} BTC`);
         
         return res.json({
           bitcoinMined: calculatedBitcoin,
