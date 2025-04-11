@@ -313,9 +313,76 @@ router.get('/mining-potential', async (req, res) => {
       console.log(`Using latest known difficulty: ${difficulty}`);
     }
 
-    // If energy is provided as a parameter, use that instead of querying the database
+    // Check if this is a non-existent farm that isn't a simulated test case
+    if (farmId && !farmId.toLowerCase().includes("simulated")) {
+      // Check if the farm exists at all in the database
+      const farmCount = await db
+        .select({
+          count: sql<string>`COUNT(*)`
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.farmId, farmId));
+        
+      console.log(`Farm existence check for ${farmId}:`, farmCount);
+      
+      if (Number(farmCount[0]?.count) === 0) {
+        console.log(`Farm ${farmId} does not exist in the database, returning zero`);
+        return res.json({
+          bitcoinMined: 0,
+          valueAtCurrentPrice: 0,
+          difficulty: Number(difficulty || 0),
+          currentPrice
+        });
+      }
+    }
+    
+    // If energy is provided as a parameter, calculate proportionally based on historical data
     let totalEnergy;
     if (energyParam) {
+      // First get the total energy for this date to calculate proportion
+      const curtailmentTotal = await db
+        .select({
+          totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
+        })
+        .from(curtailmentRecords)
+        .where(eq(curtailmentRecords.settlementDate, formattedDate));
+        
+      const dateTotal = Number(curtailmentTotal[0]?.totalEnergy) || 0;
+      
+      // Now get the total Bitcoin for this date
+      const bitcoinTotal = await db
+        .select({
+          totalBitcoin: sql<string>`SUM(bitcoin_mined::numeric)`
+        })
+        .from(historicalBitcoinCalculations)
+        .where(
+          and(
+            eq(historicalBitcoinCalculations.settlementDate, formattedDate),
+            eq(historicalBitcoinCalculations.minerModel, minerModel)
+          )
+        );
+        
+      const dateBitcoin = Number(bitcoinTotal[0]?.totalBitcoin) || 0;
+      
+      // Only perform proportional calculation if we have both values
+      if (dateTotal > 0 && dateBitcoin > 0) {
+        totalEnergy = Number(energyParam);
+        const proportion = totalEnergy / dateTotal;
+        const proportionalBitcoin = dateBitcoin * proportion;
+        
+        console.log(`Using proportional calculation for energy parameter: ${totalEnergy} MWh`);
+        console.log(`Total energy for ${formattedDate}: ${dateTotal} MWh, Total Bitcoin: ${dateBitcoin} BTC`);
+        console.log(`Proportion: ${proportion}, Proportional Bitcoin: ${proportionalBitcoin} BTC`);
+        
+        return res.json({
+          bitcoinMined: proportionalBitcoin,
+          valueAtCurrentPrice: proportionalBitcoin * (currentPrice || 0),
+          difficulty: Number(difficulty),
+          currentPrice
+        });
+      }
+      
+      // Fall through to standard calculation if we don't have historical data
       totalEnergy = Number(energyParam);
       console.log(`Using provided energy parameter: ${totalEnergy} MWh`);
     } else {
@@ -328,7 +395,8 @@ router.get('/mining-potential', async (req, res) => {
         .where(
           and(
             eq(curtailmentRecords.settlementDate, formattedDate),
-            leadParty ? eq(curtailmentRecords.leadPartyName, leadParty) : undefined
+            leadParty ? eq(curtailmentRecords.leadPartyName, leadParty) : undefined,
+            farmId ? eq(curtailmentRecords.farmId, farmId) : undefined
           )
         );
 

@@ -19,7 +19,7 @@ async function testFarms() {
     'T_VKNGW-3',
     'T_VKNGW-4',
     'T_SGRWO-1',
-    'NON_EXISTENT_FARM'  // This one doesn't exist and should fallback to calculation
+    'TOTALLY_NON_EXISTENT_FARM'  // This one doesn't exist and should fallback to calculation
   ];
 
   // Get aggregate data first for reference
@@ -59,8 +59,8 @@ async function testFarms() {
     }
   }
   
-  // Also test a farm with energy parameter
-  console.log('\nTesting with energy parameter (10% of total):');
+  // Also test with just an energy parameter (no farm ID)
+  console.log('\nTesting with energy parameter only (10% of total):');
   const energyValue = 1132.58; // Approximately 10% of total
   const expectedProportionalBtc = aggregateData.bitcoinMined * 0.1;
   
@@ -75,7 +75,7 @@ async function testFarms() {
     }
     
     const energyData = await energyResponse.json();
-    console.log(`Energy: ${energyValue} MWh | Bitcoin: ${energyData.bitcoinMined} BTC | Difficulty: ${energyData.difficulty}`);
+    console.log(`Energy only: ${energyValue} MWh | Bitcoin: ${energyData.bitcoinMined} BTC | Difficulty: ${energyData.difficulty}`);
     console.log(`Expected proportional BTC: ${expectedProportionalBtc}`);
     
     // Check calculation accuracy
@@ -86,6 +86,31 @@ async function testFarms() {
       console.warn(`  ⚠️ Proportional calculation off by ${percentDifference.toFixed(6)}%`);
     } else {
       console.log(`  ✅ Proportional calculation accurate (within 0.01%)`);
+    }
+  
+    // Test energy parameter with a simulated farm
+    console.log('\nTesting with energy parameter and simulated farm:');
+    const simulatedResponse = await fetch(
+      `http://localhost:5000/api/curtailment/mining-potential?date=2025-04-04&minerModel=S19J_PRO&farmId=SIMULATED_TEST&energy=${energyValue}`
+    );
+    
+    if (!simulatedResponse.ok) {
+      console.error(`Failed to fetch data with simulated farm and energy`, await simulatedResponse.text());
+      process.exit(1);
+    }
+    
+    const simulatedData = await simulatedResponse.json();
+    console.log(`Energy + farm: ${energyValue} MWh | Bitcoin: ${simulatedData.bitcoinMined} BTC | Difficulty: ${simulatedData.difficulty}`);
+    console.log(`Expected proportional BTC: ${expectedProportionalBtc}`);
+    
+    // Check calculation accuracy
+    const diffSim = Math.abs(simulatedData.bitcoinMined - expectedProportionalBtc);
+    const percentDiffSim = (diffSim / expectedProportionalBtc) * 100;
+    
+    if (percentDiffSim > 0.01) { // More than 0.01% difference
+      console.warn(`  ⚠️ Simulated farm proportional calculation off by ${percentDiffSim.toFixed(6)}%`);
+    } else {
+      console.log(`  ✅ Simulated farm proportional calculation accurate (within 0.01%)`);
     }
   } catch (error) {
     console.error('Error testing with energy parameter:', error);
