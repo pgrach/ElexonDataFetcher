@@ -151,11 +151,11 @@ router.get('/mining-potential', async (req, res) => {
     if (energyParam && formattedDate !== '2025-04-10') {
       console.log(`Energy parameter detected: ${energyParam} for date ${formattedDate}`);
       
+      // Get the bitcoin data
       const allHistoricalData = await db
         .select({
           difficulty: sql<string>`MIN(difficulty)`,
-          bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`,
-          energy: sql<string>`SUM(energy::numeric)`
+          bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`
         })
         .from(historicalBitcoinCalculations)
         .where(
