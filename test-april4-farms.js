@@ -65,9 +65,11 @@ async function testFarms() {
   const expectedProportionalBtc = aggregateData.bitcoinMined * 0.1;
   
   try {
-    const energyResponse = await fetch(
-      `http://localhost:5000/api/curtailment/mining-potential?date=2025-04-04&minerModel=S19J_PRO&energy=${energyValue}`
-    );
+    // Create the URL
+    const energyUrl = `http://localhost:5000/api/curtailment/mining-potential?date=2025-04-04&minerModel=S19J_PRO&energy=${energyValue}`;
+    console.log(`Request URL: ${energyUrl}`);
+    
+    const energyResponse = await fetch(energyUrl);
     
     if (!energyResponse.ok) {
       console.error(`Failed to fetch data with energy parameter`, await energyResponse.text());
@@ -75,6 +77,7 @@ async function testFarms() {
     }
     
     const energyData = await energyResponse.json();
+    console.log(`Full response:`, JSON.stringify(energyData, null, 2));
     console.log(`Energy only: ${energyValue} MWh | Bitcoin: ${energyData.bitcoinMined} BTC | Difficulty: ${energyData.difficulty}`);
     console.log(`Expected proportional BTC: ${expectedProportionalBtc}`);
     
