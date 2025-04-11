@@ -198,34 +198,91 @@ router.get('/mining-potential', async (req, res) => {
         }
         
         // If no specific farm data is available, or energy parameter is provided without a farm ID,
-        // we use the historical data and apply it proportionally based on the energy parameter
-        console.log(`No specific farm data found for ${farmId || 'unknown'}, using proportional calculation`);
+        // we use a proportional calculation based on the energy parameter if provided
+        console.log(`No specific farm data found for ${farmId || 'unknown'}`);
         
-        // Get the total energy from the curtailment records
-        const curtailmentTotal = await db
-          .select({
-            totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
-          })
-          .from(curtailmentRecords)
-          .where(eq(curtailmentRecords.settlementDate, formattedDate));
-
-        const historicalEnergy = Number(curtailmentTotal[0]?.totalEnergy) || 0;
-        const historicalBtc = Number(allHistoricalData[0].bitcoinMined);
-        const energyValue = Number(energyParam);
+        if (energyParam) {
+          // Get the total energy from the curtailment records
+          const curtailmentTotal = await db
+            .select({
+              totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
+            })
+            .from(curtailmentRecords)
+            .where(eq(curtailmentRecords.settlementDate, formattedDate));
+  
+          const historicalEnergy = Number(curtailmentTotal[0]?.totalEnergy) || 0;
+          const historicalBtc = Number(allHistoricalData[0].bitcoinMined);
+          const energyValue = Number(energyParam);
+          
+          // Calculate the proportion of Bitcoin based on the energy ratio
+          const energyRatio = energyValue / historicalEnergy;
+          const calculatedBitcoin = historicalBtc * energyRatio;
+          
+          console.log(`Using proportional calculation: ${energyValue} MWh / ${historicalEnergy} MWh = ${energyRatio}`);
+          console.log(`Calculated Bitcoin: ${energyRatio} × ${historicalBtc} BTC = ${calculatedBitcoin} BTC`);
+          
+          return res.json({
+            bitcoinMined: calculatedBitcoin,
+            valueAtCurrentPrice: calculatedBitcoin * (currentPrice || 0),
+            difficulty: Number(allHistoricalData[0].difficulty),
+            currentPrice
+          });
+        }
         
-        // For all dates, get the historical bitcoin per MWh ratio and apply to the requested energy
-        const btcPerMwh = historicalBtc / historicalEnergy;
-        const calculatedBitcoin = btcPerMwh * energyValue;
-        
-        console.log(`Using historical BTC/MWh ratio: ${btcPerMwh} BTC/MWh`);
-        console.log(`Calculated Bitcoin: ${energyValue} MWh × ${btcPerMwh} BTC/MWh = ${calculatedBitcoin} BTC`);
-        
-        return res.json({
-          bitcoinMined: calculatedBitcoin,
-          valueAtCurrentPrice: calculatedBitcoin * (currentPrice || 0),
-          difficulty: Number(allHistoricalData[0].difficulty),
-          currentPrice
-        });
+        // For entire farms with no historical data, we need to calculate based on their energy usage
+        // First get the farm's energy from curtailment records
+        if (farmId) {
+          const farmEnergy = await db
+            .select({
+              totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
+            })
+            .from(curtailmentRecords)
+            .where(
+              and(
+                eq(curtailmentRecords.settlementDate, formattedDate),
+                eq(curtailmentRecords.farmId, farmId)
+              )
+            );
+            
+          if (farmEnergy[0]?.totalEnergy) {
+            const farmEnergyValue = Number(farmEnergy[0].totalEnergy);
+            const totalEnergy = await db
+              .select({
+                totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
+              })
+              .from(curtailmentRecords)
+              .where(eq(curtailmentRecords.settlementDate, formattedDate));
+                
+            const historicalEnergy = Number(totalEnergy[0]?.totalEnergy) || 0;
+            const historicalBtc = Number(allHistoricalData[0].bitcoinMined);
+            
+            // Calculate the proportion of Bitcoin based on the farm's energy ratio
+            const energyRatio = farmEnergyValue / historicalEnergy;
+            const calculatedBitcoin = historicalBtc * energyRatio;
+            
+            console.log(`Farm energy: ${farmEnergyValue} MWh, Total energy: ${historicalEnergy} MWh, Ratio: ${energyRatio}`);
+            console.log(`Calculated Bitcoin for farm: ${calculatedBitcoin} BTC`);
+            
+            return res.json({
+              bitcoinMined: calculatedBitcoin,
+              valueAtCurrentPrice: calculatedBitcoin * (currentPrice || 0),
+              difficulty: Number(allHistoricalData[0].difficulty),
+              currentPrice
+            });
+          } else {
+            // If we have a farmId with no curtailment records, we should return zero
+            if (farmId && !farmId.includes("SIMULATED")) {
+              console.log(`No curtailment records found for farm ${farmId} on ${formattedDate}, returning zero`);
+              return res.json({
+                bitcoinMined: 0,
+                valueAtCurrentPrice: 0,
+                difficulty: Number(allHistoricalData[0].difficulty),
+                currentPrice
+              });
+            }
+            // Otherwise fall through to standard calculation
+          }
+        }
       }
     }
 
