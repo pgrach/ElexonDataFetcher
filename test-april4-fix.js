@@ -44,60 +44,92 @@ async function testApril4Fix() {
   console.log('Aggregate BTC/MWh Ratio:', aggregateBtcPerMwh);
   console.log('Aggregate £/MWh at current price:', (aggregateBtcPerMwh * bitcoinAggregateData.currentPrice).toFixed(2));
   
-  // Now we'll calculate what a farm with ~10% of the energy should receive
-  // This is how the individual farm view would use the energy parameter
-  const farmPercentage = 0.1; // 10%
-  const farmEnergy = totalEnergy * farmPercentage;
+  // Test with a real farm - Viking Wind Farm (T_VKNGW-1)
+  console.log('\nTesting with real farm: T_VKNGW-1');
   
-  console.log(`\nSimulated farm with ${farmPercentage * 100}% of total energy:`);
-  console.log('Farm Energy:', farmEnergy.toFixed(2), 'MWh');
-  
-  // Expected Bitcoin (if calculations are consistent)
-  const expectedBitcoin = totalBitcoin * farmPercentage;
-  console.log('Expected Bitcoin (proportional):', expectedBitcoin.toFixed(8), 'BTC');
-  
-  // Get Bitcoin mining potential for this specific farm's energy
+  // Get Bitcoin mining potential for a specific farm
   const bitcoinFarmResponse = await fetch(
-    `http://localhost:5000/api/curtailment/mining-potential?date=2025-04-04&minerModel=S19J_PRO&farmId=TEST_FARM&energy=${farmEnergy}`
+    `http://localhost:5000/api/curtailment/mining-potential?date=2025-04-04&minerModel=S19J_PRO&farmId=T_VKNGW-1`
   );
   if (!bitcoinFarmResponse.ok) {
-    console.error(`Failed to fetch Bitcoin data for energy=${farmEnergy}`, await bitcoinFarmResponse.text());
+    console.error(`Failed to fetch Bitcoin data for farm T_VKNGW-1`, await bitcoinFarmResponse.text());
     process.exit(1);
   }
   
-  const bitcoinFarmData = await bitcoinFarmResponse.json();
-  console.log('Actual Bitcoin Calculated:', bitcoinFarmData.bitcoinMined, 'BTC');
-  console.log('Difficulty Used:', bitcoinFarmData.difficulty);
+  // Also test a fallback for a farm with energy parameter but no historical data
+  console.log('\nTesting with simulated farm (10% energy):');
+  const farmPercentage = 0.1; // 10%
+  const farmEnergy = totalEnergy * farmPercentage;
+  console.log('Farm Energy:', farmEnergy.toFixed(2), 'MWh');
   
-  // Calculate the BTC/MWh ratio for the farm calculation
-  const farmBtcPerMwh = bitcoinFarmData.bitcoinMined / farmEnergy;
-  console.log('Farm BTC/MWh Ratio:', farmBtcPerMwh);
-  console.log('Farm £/MWh at current price:', (farmBtcPerMwh * bitcoinFarmData.currentPrice).toFixed(2));
+  // Expected Bitcoin (if calculations are consistent using the BTC/MWh ratio)
+  const expectedBitcoin = totalBitcoin * farmPercentage;
+  console.log('Expected Bitcoin (proportional):', expectedBitcoin.toFixed(8), 'BTC');
+  
+  // Test the fallback calculation by using a non-existent farm ID
+  const bitcoinFallbackResponse = await fetch(
+    `http://localhost:5000/api/curtailment/mining-potential?date=2025-04-04&minerModel=S19J_PRO&farmId=SIMULATED_FARM&energy=${farmEnergy}`
+  );
+  if (!bitcoinFallbackResponse.ok) {
+    console.error(`Failed to fetch Bitcoin data for fallback calculation`, await bitcoinFallbackResponse.text());
+    process.exit(1);
+  }
+  
+  // Process actual farm data
+  const bitcoinFarmData = await bitcoinFarmResponse.json();
+  console.log('Actual Farm Bitcoin:', bitcoinFarmData.bitcoinMined, 'BTC');
+  console.log('Farm Difficulty Used:', bitcoinFarmData.difficulty);
+
+  // Process fallback calculation data
+  const bitcoinFallbackData = await bitcoinFallbackResponse.json();
+  console.log('\nFallback calculation results:');
+  console.log('Calculated Bitcoin:', bitcoinFallbackData.bitcoinMined, 'BTC');
+  console.log('Fallback Difficulty Used:', bitcoinFallbackData.difficulty);
+  
+  // Evaluate farm vs. fallback calculation
+  console.log('\nEvaluating farm vs. fallback calculation:');
+  // We don't know the exact farm energy, but we can check if the difficulty values are consistent
+  const farmVsFallbackDifficultyDifferent = bitcoinFarmData.difficulty !== bitcoinFallbackData.difficulty;
+  
+  // Evaluate fallback calculation vs. expected proportional result
+  const btcDifference = Math.abs(bitcoinFallbackData.bitcoinMined - expectedBitcoin);
+  const btcPercentDiff = (btcDifference / expectedBitcoin) * 100;
+  
+  // Calculate the BTC/MWh ratio for the fallback calculation
+  const fallbackBtcPerMwh = bitcoinFallbackData.bitcoinMined / farmEnergy;
+  console.log('Fallback BTC/MWh Ratio:', fallbackBtcPerMwh);
+  console.log('Fallback £/MWh at current price:', (fallbackBtcPerMwh * bitcoinFallbackData.currentPrice).toFixed(2));
   
   // Compare the values
   console.log('\n=== Comparison Results ===');
   
-  // Check if the farm's bitcoin is proportional to its energy (matches the aggregate ratio)
-  const btcDifference = Math.abs(bitcoinFarmData.bitcoinMined - expectedBitcoin);
-  const btcPercentDiff = (btcDifference / expectedBitcoin) * 100;
+  const ratiosDifferent = Math.abs(aggregateBtcPerMwh - fallbackBtcPerMwh) > 0.0000001;
+  const difficultiesDifferent = bitcoinAggregateData.difficulty !== bitcoinFallbackData.difficulty;
   
-  const ratiosDifferent = Math.abs(aggregateBtcPerMwh - farmBtcPerMwh) > 0.0000001;
-  const difficultiesDifferent = bitcoinAggregateData.difficulty !== bitcoinFarmData.difficulty;
-  
-  if (ratiosDifferent) {
-    console.log('❌ INCONSISTENCY DETECTED: BTC/MWh ratios differ!');
-    console.log(`Aggregate: ${aggregateBtcPerMwh} vs Farm: ${farmBtcPerMwh}`);
-    console.log(`Difference: ${Math.abs(aggregateBtcPerMwh - farmBtcPerMwh)}`);
-    console.log(`Percentage Difference: ${btcPercentDiff.toFixed(4)}%`);
+  // Check if farm and fallback use the same difficulty
+  if (farmVsFallbackDifficultyDifferent) {
+    console.log('❌ INCONSISTENCY DETECTED: Farm vs Fallback difficulty values differ!');
+    console.log(`Farm: ${bitcoinFarmData.difficulty} vs Fallback: ${bitcoinFallbackData.difficulty}`);
   } else {
-    console.log('✅ SUCCESS: BTC/MWh ratios are consistent');
+    console.log('✅ SUCCESS: Farm and fallback difficulty values are consistent');
   }
   
-  if (difficultiesDifferent) {
-    console.log('❌ INCONSISTENCY DETECTED: Difficulty values differ!');
-    console.log(`Aggregate: ${bitcoinAggregateData.difficulty} vs Farm: ${bitcoinFarmData.difficulty}`);
+  // Check if the fallback calculation gives the expected proportional value
+  if (ratiosDifferent) {
+    console.log('❌ INCONSISTENCY DETECTED: BTC/MWh ratios differ in fallback calculation!');
+    console.log(`Aggregate: ${aggregateBtcPerMwh} vs Fallback: ${fallbackBtcPerMwh}`);
+    console.log(`Difference: ${Math.abs(aggregateBtcPerMwh - fallbackBtcPerMwh)}`);
+    console.log(`Percentage Difference: ${btcPercentDiff.toFixed(4)}%`);
   } else {
-    console.log('✅ SUCCESS: Difficulty values are consistent');
+    console.log('✅ SUCCESS: BTC/MWh ratios are consistent in fallback calculation');
+  }
+  
+  // Check if the aggregate and fallback calculations use the same difficulty
+  if (difficultiesDifferent) {
+    console.log('❌ INCONSISTENCY DETECTED: Aggregate vs Fallback difficulty values differ!');
+    console.log(`Aggregate: ${bitcoinAggregateData.difficulty} vs Fallback: ${bitcoinFallbackData.difficulty}`);
+  } else {
+    console.log('✅ SUCCESS: Aggregate and fallback difficulty values are consistent');
   }
 }
 

@@ -166,9 +166,42 @@ router.get('/mining-potential', async (req, res) => {
         );
 
       if (allHistoricalData[0]?.difficulty && Number(allHistoricalData[0].bitcoinMined) > 0) {
-        console.log(`Using aggregate historical data for ${formattedDate}`);
+        // If we have a farmId, we should get the historical bitcoin data for that specific farm
+        if (farmId) {
+          console.log(`Using farm-specific historical data for ${formattedDate} and farm ${farmId}`);
+          
+          const farmHistoricalData = await db
+            .select({
+              difficulty: sql<string>`MIN(difficulty)`,
+              bitcoinMined: sql<string>`SUM(bitcoin_mined::numeric)`
+            })
+            .from(historicalBitcoinCalculations)
+            .where(
+              and(
+                eq(historicalBitcoinCalculations.settlementDate, formattedDate),
+                eq(historicalBitcoinCalculations.minerModel, minerModel),
+                eq(historicalBitcoinCalculations.farmId, farmId)
+              )
+            );
+            
+          if (farmHistoricalData[0]?.bitcoinMined) {
+            const farmBitcoin = Number(farmHistoricalData[0].bitcoinMined);
+            console.log(`Found historical Bitcoin data for farm ${farmId}: ${farmBitcoin} BTC`);
+            
+            return res.json({
+              bitcoinMined: farmBitcoin,
+              valueAtCurrentPrice: farmBitcoin * (currentPrice || 0),
+              difficulty: Number(farmHistoricalData[0].difficulty || allHistoricalData[0].difficulty),
+              currentPrice
+            });
+          }
+        }
         
-        // Get the total energy from the daily summary instead
+        // If no specific farm data is available, or energy parameter is provided without a farm ID,
+        // we use the historical data and apply it proportionally based on the energy parameter
+        console.log(`No specific farm data found for ${farmId || 'unknown'}, using proportional calculation`);
+        
+        // Get the total energy from the curtailment records
         const curtailmentTotal = await db
           .select({
             totalEnergy: sql<string>`SUM(ABS(volume::numeric))`
@@ -180,15 +213,12 @@ router.get('/mining-potential', async (req, res) => {
         const historicalBtc = Number(allHistoricalData[0].bitcoinMined);
         const energyValue = Number(energyParam);
         
-        // For all dates, calculate the proportional Bitcoin based on energy ratio
-        // The key insight is that a farm should get the same proportion of BTC as its proportion of energy
-        const totalEnergy = historicalEnergy;
-        const totalBitcoin = historicalBtc;
-        const energyRatio = energyValue / totalEnergy;
-        const calculatedBitcoin = totalBitcoin * energyRatio;
+        // For all dates, get the historical bitcoin per MWh ratio and apply to the requested energy
+        const btcPerMwh = historicalBtc / historicalEnergy;
+        const calculatedBitcoin = btcPerMwh * energyValue;
         
-        console.log(`Energy ratio calculation: ${energyValue} MWh / ${totalEnergy} MWh = ${energyRatio}`);
-        console.log(`Proportional Bitcoin: ${energyRatio} × ${totalBitcoin} BTC = ${calculatedBitcoin} BTC`);
+        console.log(`Using historical BTC/MWh ratio: ${btcPerMwh} BTC/MWh`);
+        console.log(`Calculated Bitcoin: ${energyValue} MWh × ${btcPerMwh} BTC/MWh = ${calculatedBitcoin} BTC`);
         
         return res.json({
           bitcoinMined: calculatedBitcoin,
