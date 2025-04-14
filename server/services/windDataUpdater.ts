@@ -271,3 +271,44 @@ export function getWindDataServiceStatus(): {
 export async function manualUpdate(days: number = 2, force: boolean = false): Promise<boolean> {
   return updateWindData(days, force);
 }
+
+/**
+ * Process wind generation data for a specific date
+ * This function is used for synchronizing with the curtailment data pipeline
+ * 
+ * @param date - Date in YYYY-MM-DD format
+ * @param force - Force update even if data exists (default: false)
+ * @returns Promise resolving to boolean indicating success
+ */
+export async function processWindDataForDate(date: string, force: boolean = false): Promise<boolean> {
+  if (!isRunning) {
+    try {
+      logger.info(`Processing wind generation data for specific date: ${date}`, { 
+        module: 'windDataUpdater'
+      });
+      
+      // Import required function
+      const { processSingleDate } = await import('./windGenerationService');
+      
+      // Process the specific date
+      const recordsProcessed = await processSingleDate(date);
+      
+      logger.info(`Completed wind generation data processing for ${date}. Records processed: ${recordsProcessed}`, {
+        module: 'windDataUpdater'
+      });
+      
+      return recordsProcessed > 0;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Error processing wind generation data for ${date}: ${errorMessage}`, {
+        module: 'windDataUpdater'
+      });
+      return false;
+    }
+  } else {
+    logger.warning(`Wind data update already in progress, cannot process date ${date}`, {
+      module: 'windDataUpdater'
+    });
+    return false;
+  }
+}

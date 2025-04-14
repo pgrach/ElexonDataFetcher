@@ -8,7 +8,7 @@ import { processDailyCurtailment } from "./curtailment";
 import type { ElexonBidOffer } from "../types/elexon";
 import { processSingleDay } from "./bitcoinService";
 import { reconcileDay } from "./historicalReconciliation";
-import { getWindDataServiceStatus } from "./windDataUpdater";
+import { getWindDataServiceStatus, processWindDataForDate } from "./windDataUpdater";
 
 // Temporary stub for the daily reconciliation check
 // TODO: Implement proper reconciliation check system

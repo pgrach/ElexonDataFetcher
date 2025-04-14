@@ -1,10 +1,11 @@
 import { db } from "@db";
-import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries, historicalBitcoinCalculations } from "@db/schema";
+import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries, historicalBitcoinCalculations, windGenerationData } from "@db/schema";
 import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays, subMonths, eachDayOfInterval } from "date-fns";
 import { processDailyCurtailment } from "./curtailment";
 import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
 import { calculateMonthlyBitcoinSummary, manualUpdateYearlyBitcoinSummary, processSingleDay as bitcoinProcessSingleDay } from "./bitcoinService";
+import { processWindDataForDate } from "./windDataUpdater";
 
 // Configuration constants
 const MAX_CONCURRENT_DAYS = 5;
@@ -161,10 +162,35 @@ async function updateMonthlyBitcoinSummary(date: string): Promise<void> {
   }
 }
 
+/**
+ * Check if wind generation data exists for a specific date
+ */
+async function verifyWindDataExists(date: string): Promise<boolean> {
+  try {
+    // Query the wind_generation_data table for the date
+    const records = await db.query.windGenerationData.findMany({
+      where: eq(windGenerationData.settlementDate, date),
+      limit: 1
+    });
+    
+    return records.length > 0;
+  } catch (error) {
+    console.error(`Error checking wind data for ${date}:`, error);
+    return false;
+  }
+}
+
 export async function reconcileDay(date: string): Promise<void> {
   try {
-    if (await needsReprocessing(date)) {
-      console.log(`[${date}] Data differences detected, reprocessing...`);
+    // Step 1: Check if curtailment data needs reprocessing
+    const needsCurtailmentUpdate = await needsReprocessing(date);
+    
+    // Step 2: Check if wind data exists or needs processing
+    const hasWindData = await verifyWindDataExists(date);
+    
+    // Process curtailment data if needed
+    if (needsCurtailmentUpdate) {
+      console.log(`[${date}] Curtailment data differences detected, reprocessing...`);
       await processDailyCurtailment(date);
 
       // Verify the update
@@ -172,12 +198,30 @@ export async function reconcileDay(date: string): Promise<void> {
         where: eq(dailySummaries.summaryDate, date)
       });
 
-      console.log(`[${date}] Reprocessing complete:`, {
+      console.log(`[${date}] Curtailment reprocessing complete:`, {
         energy: `${Number(summary?.totalCurtailedEnergy || 0).toFixed(2)} MWh`,
         payment: `£${Number(summary?.totalPayment || 0).toFixed(2)}`
       });
+    } else {
+      console.log(`[${date}] Curtailment data is up to date`);
+    }
+    
+    // Process wind generation data if needed
+    if (!hasWindData) {
+      console.log(`[${date}] Wind generation data missing, processing...`);
+      const windDataProcessed = await processWindDataForDate(date);
+      if (windDataProcessed) {
+        console.log(`[${date}] Wind generation data updated successfully`);
+      } else {
+        console.log(`[${date}] Wind generation data processing failed or no records found`);
+      }
+    } else {
+      console.log(`[${date}] Wind generation data exists`);
+    }
 
-      // Update Bitcoin calculations after curtailment data is updated
+    // Only update Bitcoin calculations if curtailment or wind data was updated
+    if (needsCurtailmentUpdate || !hasWindData) {
+      // Update Bitcoin calculations after curtailment & wind data is updated
       console.log(`[${date}] Updating Bitcoin calculations...`);
 
       // Process for all three miner models
@@ -194,8 +238,6 @@ export async function reconcileDay(date: string): Promise<void> {
       
       // Update monthly Bitcoin summaries after daily calculations are updated
       await updateMonthlyBitcoinSummary(date);
-    } else {
-      console.log(`[${date}] Data is up to date`);
     }
   } catch (error) {
     console.error(`Error reconciling data for ${date}:`, error);
