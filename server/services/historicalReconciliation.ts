@@ -4,7 +4,7 @@ import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays, subMonth
 import { processDailyCurtailment } from "./curtailment";
 import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
-import { calculateMonthlyBitcoinSummary, manualUpdateYearlyBitcoinSummary } from "./bitcoinService";
+import { calculateMonthlyBitcoinSummary, manualUpdateYearlyBitcoinSummary, processSingleDay as bitcoinProcessSingleDay } from "./bitcoinService";
 
 // Configuration constants
 const MAX_CONCURRENT_DAYS = 5;
@@ -16,15 +16,15 @@ const MINER_MODEL_LIST = ['S19J_PRO', 'S9', 'M20S']; // Standard miner models us
 
 /**
  * Process Bitcoin calculations for a single day and miner model
+ * This is a wrapper around the actual implementation in bitcoinService
  * @param date Settlement date in YYYY-MM-DD format
  * @param minerModel Miner model (e.g., 'S19J_PRO')
  */
 async function processSingleDay(date: string, minerModel: string): Promise<void> {
   try {
     console.log(`Processing Bitcoin calculations for ${date} with model ${minerModel}...`);
-    // Since the actual implementation is missing, we'll log this and return
-    // This is a temporary stub to make the app compile
-    console.log(`Bitcoin calculations for ${date} with model ${minerModel} are not implemented.`);
+    // Use the actual implementation from bitcoinService
+    await bitcoinProcessSingleDay(date, minerModel);
     return;
   } catch (error) {
     console.error(`Error processing Bitcoin calculations for ${date}:`, error);
