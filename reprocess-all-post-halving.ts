@@ -10,10 +10,16 @@
  * Options:
  * --dry-run: Show what would be updated without making changes
  * --limit-months=N: Process only the most recent N months (default: all)
+ * --verify: Verify all 4 tables are updated for each date (slower)
  */
 
 import { db } from "./db";
-import { historicalBitcoinCalculations } from "./db/schema";
+import { 
+  historicalBitcoinCalculations, 
+  bitcoinDailySummaries, 
+  bitcoinMonthlySummaries, 
+  bitcoinYearlySummaries 
+} from "./db/schema";
 import { processSingleDay } from "./server/services/bitcoinService";
 import { format, parseISO, addDays, subMonths } from "date-fns";
 import { gte, and, eq, sql } from "drizzle-orm";
@@ -22,6 +28,7 @@ import { gte, and, eq, sql } from "drizzle-orm";
 const HALVING_DATE = '2024-04-20'; // Bitcoin halving occurred on April 20, 2024
 const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
 const DRY_RUN = process.argv.includes('--dry-run');
+const VERIFY_UPDATES = process.argv.includes('--verify');
 
 // Optional month limiting
 const limitMonthsArg = process.argv.find(arg => arg.startsWith('--limit-months='));
@@ -46,11 +53,62 @@ function getDateRange(startDate: string, endDate: string): string[] {
   return dates;
 }
 
+/**
+ * Verify that all four Bitcoin tables were updated
+ * @param date - The settlement date
+ * @returns Object with counts of records in each table
+ */
+async function verifyTableUpdates(date: string): Promise<{
+  historical: number,
+  daily: number,
+  monthly: number,
+  yearly: number
+}> {
+  const yearMonth = date.substring(0, 7); // YYYY-MM format
+  const year = date.substring(0, 4);      // YYYY format
+  
+  // Check historicalBitcoinCalculations table
+  const historicalCount = await db.select({
+    count: sql<number>`count(*)`.as('count')
+  })
+  .from(historicalBitcoinCalculations)
+  .where(eq(historicalBitcoinCalculations.settlementDate, date));
+  
+  // Check bitcoinDailySummaries table
+  const dailyCount = await db.select({
+    count: sql<number>`count(*)`.as('count')
+  })
+  .from(bitcoinDailySummaries)
+  .where(eq(bitcoinDailySummaries.summaryDate, date));
+  
+  // Check bitcoinMonthlySummaries table
+  const monthlyCount = await db.select({
+    count: sql<number>`count(*)`.as('count')
+  })
+  .from(bitcoinMonthlySummaries)
+  .where(eq(bitcoinMonthlySummaries.yearMonth, yearMonth));
+  
+  // Check bitcoinYearlySummaries table
+  const yearlyCount = await db.select({
+    count: sql<number>`count(*)`.as('count')
+  })
+  .from(bitcoinYearlySummaries)
+  .where(eq(bitcoinYearlySummaries.year, year));
+  
+  return {
+    historical: Number(historicalCount[0]?.count || 0),
+    daily: Number(dailyCount[0]?.count || 0),
+    monthly: Number(monthlyCount[0]?.count || 0),
+    yearly: Number(yearlyCount[0]?.count || 0)
+  };
+}
+
 async function reprocessPostHalvingCalculations() {
   try {
     console.log('\n=== Post-Halving Bitcoin Recalculation ===');
     console.log(`Halving date: ${HALVING_DATE}`);
     console.log(`Dry run: ${DRY_RUN ? 'Yes (no changes will be made)' : 'No (database will be updated)'}`);
+    console.log(`Verify updates: ${VERIFY_UPDATES ? 'Yes (will verify all 4 tables)' : 'No'}`);
     
     // Step 1: Get today's date
     const todayDate = format(new Date(), 'yyyy-MM-dd');
@@ -112,6 +170,17 @@ async function reprocessPostHalvingCalculations() {
       console.log(`\nProcessing date: ${date} (${count} records)`);
       
       if (!DRY_RUN) {
+        // Optional: Verify tables before updates if --verify flag is enabled
+        let beforeCounts;
+        if (VERIFY_UPDATES) {
+          beforeCounts = await verifyTableUpdates(date);
+          console.log(`Before update table counts for ${date}:`);
+          console.log(`- Historical: ${beforeCounts.historical} records`);
+          console.log(`- Daily: ${beforeCounts.daily} records`);
+          console.log(`- Monthly: ${beforeCounts.monthly} records (for ${date.substring(0, 7)})`);
+          console.log(`- Yearly: ${beforeCounts.yearly} records (for ${date.substring(0, 4)})`);
+        }
+        
         // Delete records for this date
         const result = await db.delete(historicalBitcoinCalculations)
           .where(eq(historicalBitcoinCalculations.settlementDate, date));
@@ -127,9 +196,34 @@ async function reprocessPostHalvingCalculations() {
             console.error(`Error processing ${date} with ${minerModel}:`, error);
           }
         }
+        
+        // Verify that all tables were updated if --verify flag is enabled
+        if (VERIFY_UPDATES) {
+          // Wait a short time to ensure all DB operations complete
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          const afterCounts = await verifyTableUpdates(date);
+          console.log(`\nAfter update table counts for ${date}:`);
+          console.log(`- Historical: ${afterCounts.historical} records ${afterCounts.historical > 0 ? '✓' : '❌'}`);
+          console.log(`- Daily: ${afterCounts.daily} records ${afterCounts.daily > 0 ? '✓' : '❌'}`);
+          console.log(`- Monthly: ${afterCounts.monthly} records ${afterCounts.monthly > 0 ? '✓' : '❌'} (for ${date.substring(0, 7)})`);
+          console.log(`- Yearly: ${afterCounts.yearly} records ${afterCounts.yearly > 0 ? '✓' : '❌'} (for ${date.substring(0, 4)})`);
+          
+          // Alert if any tables didn't get updated
+          if (afterCounts.historical === 0 || afterCounts.daily === 0 || 
+              afterCounts.monthly === 0 || afterCounts.yearly === 0) {
+            console.log(`\n⚠️ WARNING: Some tables may not have updated properly for ${date}`);
+          } else {
+            console.log(`\n✅ All four tables verified as updated for ${date}`);
+          }
+        }
       } else {
         console.log(`[DRY RUN] Would delete ${count} records for ${date}`);
         console.log(`[DRY RUN] Would recalculate Bitcoin for ${date} with models: ${MINER_MODELS.join(', ')}`);
+        
+        if (VERIFY_UPDATES) {
+          console.log(`[DRY RUN] Would verify updates to all 4 tables after processing`);
+        }
       }
       
       processedDays++;
