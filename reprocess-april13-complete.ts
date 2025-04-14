@@ -19,11 +19,8 @@ import {
 import { eq, and } from "drizzle-orm";
 import { fetchBidsOffers } from "./server/services/elexon";
 import { processDailyCurtailment } from "./server/services/curtailment_enhanced";
-import { updateWindGenerationData } from "./server/services/windDataUpdater";
-import { 
-  processSingleDayBitcoinCalculations, 
-  recalculateBitcoinDailySummary 
-} from "./server/services/bitcoinService";
+import { fetchWindGenerationData } from "./server/services/windGenerationService";
+import { processHistoricalBitcoinCalculations, updateBitcoinDailySummary } from "./server/services/bitcoinService";
 import { sql } from "drizzle-orm";
 import fs from "fs";
 
@@ -131,26 +128,30 @@ async function reprocessDate(): Promise<void> {
   logStep("Clearing existing records from bitcoin_daily_summaries table...");
   await db.delete(bitcoinDailySummaries).where(eq(bitcoinDailySummaries.date, TARGET_DATE));
   
-  // Step 2: Fetch Elexon data for all 48 periods with a focus on periods with known curtailment
+  // Step 2: Fetch Elexon data for all 48 periods
   const fetchResult = await manuallyFetchAllPeriods();
   
-  // Step 3: Update wind generation data 
-  logStep("Updating wind generation data...");
-  await updateWindGenerationData(new Date(TARGET_DATE), true);
+  // Step 3: Process the daily curtailment data
+  logStep("Processing curtailment data using enhanced processor...");
+  await processDailyCurtailment(TARGET_DATE);
   
-  // Step 4: Process Bitcoin calculations for each miner model
+  // Step 4: Update wind generation data
+  logStep("Updating wind generation data...");
+  await fetchWindGenerationData(new Date(TARGET_DATE), new Date(TARGET_DATE));
+  
+  // Step 5: Process Bitcoin calculations for each miner model
   for (const minerModel of MINER_MODELS) {
     logStep(`Processing Bitcoin calculations for ${minerModel}...`);
     try {
-      await processSingleDayBitcoinCalculations(TARGET_DATE, minerModel);
+      await processHistoricalBitcoinCalculations(TARGET_DATE, minerModel);
     } catch (error) {
       logStep(`ERROR processing Bitcoin calculations for ${minerModel}: ${error}`);
     }
   }
   
-  // Step 5: Recalculate Bitcoin daily summary
+  // Step 6: Recalculate Bitcoin daily summary
   logStep("Recalculating Bitcoin daily summary...");
-  await recalculateBitcoinDailySummary(TARGET_DATE);
+  await updateBitcoinDailySummary(TARGET_DATE);
   
   // Step 6: Verify data for each period with curtailment
   logStep("Performing verification...");

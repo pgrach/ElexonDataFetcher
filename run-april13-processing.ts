@@ -5,26 +5,23 @@
  * are properly fetched and processed from Elexon API.
  */
 
-import { db } from "./db";
-import { 
-  curtailmentRecords, 
-  historicalBitcoinCalculations,
-  windGenerationData,
-  dailySummaries
-} from "./db/schema";
-import { eq, sql } from "drizzle-orm";
 import { processDailyCurtailment } from "./server/services/curtailment_enhanced";
-import { processSingleDay } from "./server/services/bitcoinService";
-import { processWindDataForDate } from "./server/services/windDataUpdater";
+import { processHistoricalCalculations } from "./server/services/bitcoinService";
+import { db } from "./db";
+import { curtailmentRecords, historicalBitcoinCalculations, bitcoinDailySummaries } from "./db/schema";
+import { eq, and, sql } from "drizzle-orm";
 
+// Target date
 const TARGET_DATE = "2025-04-13";
-const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
+// Miner models
+const MINER_MODELS = ["S19J_PRO", "M20S", "S9"];
 
 /**
  * Log a step with a timestamp
  */
 function logStep(message: string): Promise<void> {
-  console.log(`[${new Date().toISOString()}] ${message}`);
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${message}`);
   return Promise.resolve();
 }
 
@@ -32,79 +29,84 @@ function logStep(message: string): Promise<void> {
  * Run the processing for April 13, 2025
  */
 async function processData(): Promise<void> {
-  try {
-    await logStep(`Starting enhanced processing for ${TARGET_DATE}`);
-    
-    // Clear existing records
-    await logStep("Clearing existing curtailment records");
-    await db.delete(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
-    
-    await logStep("Clearing existing Bitcoin calculations");
-    await db.delete(historicalBitcoinCalculations)
-      .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE));
-    
-    await logStep("Clearing existing daily summary");
-    await db.delete(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, TARGET_DATE));
-    
-    // Process wind data (will fetch all periods)
-    await logStep("Processing wind generation data");
-    await processWindDataForDate(TARGET_DATE, true);
-    
-    // Process curtailment data (will fetch all 48 periods)
-    await logStep("Processing curtailment data (all 48 periods)");
-    await processDailyCurtailment(TARGET_DATE);
-    
-    // Process Bitcoin calculations
-    await logStep("Processing Bitcoin calculations for all miner models");
-    for (const minerModel of MINER_MODELS) {
-      await logStep(`Processing Bitcoin calculations for ${minerModel}`);
-      await processSingleDay(TARGET_DATE, minerModel);
+  await logStep(`Starting enhanced processing for ${TARGET_DATE}`);
+  
+  // Step 1: Clear existing data
+  await logStep("Clearing existing curtailment records...");
+  await db.delete(curtailmentRecords).where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+  
+  await logStep("Clearing existing Bitcoin calculations...");
+  await db.delete(historicalBitcoinCalculations).where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE));
+  
+  await logStep("Clearing existing Bitcoin daily summaries...");
+  await db.delete(bitcoinDailySummaries).where(eq(bitcoinDailySummaries.summary_date, TARGET_DATE));
+  
+  // Step 2: Process daily curtailment using the enhanced service
+  await logStep("Processing curtailment data with enhanced service...");
+  await processDailyCurtailment(TARGET_DATE);
+  
+  // Step 3: Process Bitcoin calculations for each miner model
+  for (const minerModel of MINER_MODELS) {
+    await logStep(`Processing Bitcoin calculations for ${minerModel}...`);
+    try {
+      await processHistoricalCalculations(TARGET_DATE, minerModel);
+    } catch (error) {
+      await logStep(`ERROR processing Bitcoin calculations for ${minerModel}: ${error}`);
     }
-    
-    // Verify the results
-    const curtailmentCount = await db.select({ 
-      count: sql<number>`count(*)`,
-      periods: sql<number>`count(DISTINCT ${curtailmentRecords.settlementPeriod})`,
-      volume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-      payment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
-    })
+  }
+  
+  // Step 4: Verify the results
+  const curtailmentCount = await db
+    .select({ count: sql<number>`count(*)` })
     .from(curtailmentRecords)
     .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
-    
-    const bitcoinCount = await db.select({ 
-      count: sql<number>`count(*)`,
-      models: sql<number>`count(DISTINCT ${historicalBitcoinCalculations.minerModel})`,
-      bitcoin: sql<string>`SUM(${historicalBitcoinCalculations.bitcoinMined}::numeric)`
-    })
+  
+  const btcCalcCount = await db
+    .select({ count: sql<number>`count(*)` })
     .from(historicalBitcoinCalculations)
     .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE));
-    
-    // Print verification results
-    await logStep("Processing completed. Verification results:");
-    console.log("\n=== Database Records ===");
-    console.log("Curtailment records:", curtailmentCount[0]?.count || 0);
-    console.log("Distinct periods:", curtailmentCount[0]?.periods || 0);
-    console.log("Total volume:", Number(curtailmentCount[0]?.volume || 0).toFixed(2), "MWh");
-    console.log("Total payment: £", Number(curtailmentCount[0]?.payment || 0).toFixed(2));
-    
-    console.log("\nBitcoin calculation records:", bitcoinCount[0]?.count || 0);
-    console.log("Distinct miner models:", bitcoinCount[0]?.models || 0);
-    console.log("Total Bitcoin mined:", Number(bitcoinCount[0]?.bitcoin || 0).toFixed(8), "BTC");
-    
-    await logStep("Processing completed successfully");
-  } catch (error) {
-    console.error("Error during processing:", error);
-    process.exit(1);
-  }
+  
+  // Get periods with curtailment
+  const periods = await db
+    .select({ period: curtailmentRecords.settlementPeriod })
+    .from(curtailmentRecords)
+    .where(eq(curtailmentRecords.settlementDate, TARGET_DATE))
+    .groupBy(curtailmentRecords.settlementPeriod)
+    .orderBy(curtailmentRecords.settlementPeriod);
+  
+  const periodsWithCurtailment = periods.map(p => p.period);
+  
+  // Get Bitcoin totals
+  const bitcoinTotals = await db
+    .select({
+      minerModel: historicalBitcoinCalculations.minerModel,
+      bitcoinMined: sql<string>`SUM(${historicalBitcoinCalculations.bitcoinMined})`
+    })
+    .from(historicalBitcoinCalculations)
+    .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE))
+    .groupBy(historicalBitcoinCalculations.minerModel);
+  
+  // Print summary
+  await logStep("==== Processing Summary ====");
+  await logStep(`Total curtailment records: ${curtailmentCount[0].count}`);
+  await logStep(`Periods with curtailment: ${periodsWithCurtailment.join(", ")}`);
+  await logStep(`Total Bitcoin calculation records: ${btcCalcCount[0].count}`);
+  
+  bitcoinTotals.forEach(total => {
+    const btc = parseFloat(total.bitcoinMined);
+    logStep(`Total Bitcoin mined with ${total.minerModel}: ${btc.toFixed(8)} BTC`);
+  });
+  
+  await logStep("Processing completed");
 }
 
-// Execute the processing
-processData().then(() => {
-  console.log("Process completed, exiting");
-  process.exit(0);
-}).catch(err => {
-  console.error("Unhandled error:", err);
-  process.exit(1);
-});
+// Run the processing
+processData()
+  .then(() => {
+    console.log("Script execution completed successfully");
+    process.exit(0);
+  })
+  .catch(error => {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
