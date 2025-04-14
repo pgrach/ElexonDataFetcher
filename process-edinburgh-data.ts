@@ -8,7 +8,7 @@
 import { db } from "./db";
 import { curtailmentRecords } from "./db/schema";
 import { eq, sql, and } from "drizzle-orm";
-import { processCurtailmentDataForPeriods } from "./server/services/curtailmentService";
+import { processDailyCurtailment } from "./server/services/curtailment_enhanced";
 import fs from "fs";
 
 // Target date for reprocessing
@@ -71,10 +71,10 @@ async function processEdinburghData(): Promise<void> {
     logStep("No existing Edinburgh wind farm records found.");
   }
   
-  // Step 2: Process the specific periods using the curtailment service
-  logStep(`Processing curtailment data for periods ${TARGET_PERIODS.join(", ")}...`);
+  // Step 2: Process the entire date (which will include our target periods)
+  logStep(`Processing curtailment data for ${TARGET_DATE}...`);
   try {
-    await processCurtailmentDataForPeriods(TARGET_DATE, TARGET_PERIODS);
+    await processDailyCurtailment(TARGET_DATE);
     
     // Step 3: Verify the records were added
     const newRecords = await db
