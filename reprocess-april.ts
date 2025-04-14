@@ -11,7 +11,7 @@ import { db } from "./db";
 import { historicalBitcoinCalculations } from "./db/schema";
 import { processSingleDay } from "./server/services/bitcoinService";
 import { format, parseISO, addDays } from "date-fns";
-import { gte, and, eq } from "drizzle-orm";
+import { gte, and, eq, sql } from "drizzle-orm";
 
 // Constants
 const START_DATE = '2025-04-01';
