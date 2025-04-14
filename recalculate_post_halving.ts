@@ -24,8 +24,9 @@ const HALVING_DATE_STR = '2024-04-20';
 const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE_ALL = process.argv.includes('--force-all');
 const MAX_RECORDS = 5000; // Maximum records to process in a batch
-const LIMIT_TO_RECENT = true; // Only process the most recent 3 months
-const RECENT_DATE_CUTOFF = '2025-01-01'; // Only process dates after this
+const LIMIT_TO_RECENT = true; // Only process specific months
+const SPECIFIC_MONTH = process.argv.includes('--april-2025') || process.argv.includes('--current-month');
+const RECENT_DATE_CUTOFF = SPECIFIC_MONTH ? '2025-04-01' : '2025-01-01';
 
 async function recalculatePostHalvingRecords() {
   try {
@@ -99,22 +100,41 @@ async function recalculatePostHalvingRecords() {
           // Recalculate bitcoin mining based on the correct date (post-halving)
           const date = parseISO(record.settlementDate);
           
+          // Convert strings to numbers and validate inputs before calculation
+          const energy = Number(record.curtailedEnergy);
+          const difficulty = Number(record.difficulty);
+          const minerModel = record.minerModel;
+          
           // Only log the first few records for debugging
           if (dateUpdated < 2) {
             console.log(`Debug inputs:`, {
-              energy: Number(record.curtailedEnergy),
-              minerModel: record.minerModel,
-              difficulty: Number(record.difficulty),
-              date: date.toISOString()
+              energy: energy,
+              minerModel: minerModel,
+              difficulty: difficulty,
+              date: date.toISOString(),
+              isEnergyValid: !isNaN(energy) && energy > 0,
+              isDifficultyValid: !isNaN(difficulty) && difficulty > 0
             });
           }
           
-          const recalculatedBitcoin = calculateBitcoin(
-            Number(record.curtailedEnergy), 
-            record.minerModel, 
-            Number(record.difficulty),
-            date
-          );
+          // Skip invalid records
+          if (isNaN(energy) || energy <= 0 || isNaN(difficulty) || difficulty <= 0) {
+            console.log(`Skipping record ${record.id} due to invalid inputs: energy=${energy}, difficulty=${difficulty}`);
+            continue;
+          }
+          
+          let recalculatedBitcoin;
+          try {
+            recalculatedBitcoin = calculateBitcoin(
+              energy, 
+              minerModel, 
+              difficulty,
+              date
+            );
+          } catch (error) {
+            console.error(`Error calculating Bitcoin for record ${record.id}:`, error);
+            continue;
+          }
           
           const currentBitcoin = Number(record.bitcoinMined);
           const difference = recalculatedBitcoin - currentBitcoin;
