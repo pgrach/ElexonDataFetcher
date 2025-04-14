@@ -14,7 +14,17 @@ const SECONDS_PER_DAY = 86400;
 const JOULES_IN_KWH = 3600000;
 const TERAHASHES_TO_HASHES = 1e12;
 const SATOSHIS_PER_BITCOIN = 1e8;
-const SUPPLY_PER_BLOCK = 6.25; // Bitcoin reward per block
+const HALVING_DATE = new Date('2024-04-20'); // Bitcoin halving occurred on April 20, 2024
+const PRE_HALVING_REWARD = 6.25; // Block reward before April 20, 2024
+const POST_HALVING_REWARD = 3.125; // Block reward after April 20, 2024
+
+/**
+ * Get the appropriate block reward based on the date
+ * After the April 20, 2024 halving, the reward is 3.125 BTC per block
+ */
+function getBlockReward(date: Date = new Date()): number {
+  return date >= HALVING_DATE ? POST_HALVING_REWARD : PRE_HALVING_REWARD;
+}
 
 /**
  * Calculate the amount of Bitcoin that could be mined with the given parameters
@@ -22,12 +32,14 @@ const SUPPLY_PER_BLOCK = 6.25; // Bitcoin reward per block
  * @param mwh - Energy in MWh
  * @param minerModel - The miner model name (e.g., 'S19J_PRO')
  * @param difficulty - Network difficulty (default to latest value if not provided)
+ * @param date - Date for the calculation (affects block reward due to halving)
  * @returns The amount of Bitcoin that could be mined
  */
 export function calculateBitcoin(
   mwh: number,
   minerModel: string,
-  difficulty: number = DEFAULT_DIFFICULTY
+  difficulty: number = DEFAULT_DIFFICULTY,
+  date: Date = new Date()
 ): number {
   try {
     // Validate inputs
@@ -52,8 +64,8 @@ export function calculateBitcoin(
     // Calculate maximum hashes achievable with this energy
     const totalHashes = calculateTotalHashes(kWh, minerStats);
     
-    // Calculate expected bitcoins
-    const bitcoinMined = calculateExpectedBitcoin(totalHashes, difficulty);
+    // Calculate expected bitcoins with the specified date (for correct block reward)
+    const bitcoinMined = calculateExpectedBitcoin(totalHashes, difficulty, date);
     
     return bitcoinMined;
   } catch (error) {
@@ -64,12 +76,12 @@ export function calculateBitcoin(
     // Log and wrap unexpected errors
     logger.error('Bitcoin calculation error', {
       module: 'bitcoin',
-      context: { mwh, minerModel, difficulty },
+      context: { mwh, minerModel, difficulty, date: date.toISOString() },
       error: error as Error
     });
     
     throw new CalculationError(`Bitcoin calculation failed: ${(error as Error).message}`, {
-      context: { mwh, minerModel, difficulty },
+      context: { mwh, minerModel, difficulty, date: date.toISOString() },
       originalError: error as Error
     });
   }
@@ -91,16 +103,26 @@ function calculateTotalHashes(kWh: number, minerStats: MinerStats): number {
 
 /**
  * Calculate the expected Bitcoin rewards based on hashing power
+ * @param totalHashes - Total hashes calculated
+ * @param difficulty - Network difficulty 
+ * @param date - Date for calculating reward (to account for halving)
  */
-function calculateExpectedBitcoin(totalHashes: number, difficulty: number): number {
+function calculateExpectedBitcoin(
+  totalHashes: number, 
+  difficulty: number, 
+  date: Date = new Date()
+): number {
   // Expected number of hashes per block
   const hashesPerBlock = difficulty * Math.pow(2, 32);
   
   // Expected number of blocks
   const expectedBlocks = totalHashes / hashesPerBlock;
   
+  // Get correct block reward based on date
+  const blockReward = getBlockReward(date);
+  
   // Expected Bitcoin (blocks * reward per block)
-  return expectedBlocks * SUPPLY_PER_BLOCK;
+  return expectedBlocks * blockReward;
 }
 
 /**
@@ -108,10 +130,11 @@ function calculateExpectedBitcoin(totalHashes: number, difficulty: number): numb
  */
 export function calculateMiningEfficiency(
   minerModel: string,
-  difficulty: number = DEFAULT_DIFFICULTY
+  difficulty: number = DEFAULT_DIFFICULTY,
+  date: Date = new Date()
 ): number {
   // Just calculate for 1 MWh to get BTC/MWh rate
-  return calculateBitcoin(1, minerModel, difficulty);
+  return calculateBitcoin(1, minerModel, difficulty, date);
 }
 
 /**
@@ -149,9 +172,10 @@ export function calculateExpectedRevenue(
   mwh: number,
   minerModel: string,
   bitcoinPrice: number,
-  difficulty: number = DEFAULT_DIFFICULTY
+  difficulty: number = DEFAULT_DIFFICULTY,
+  date: Date = new Date()
 ): { bitcoin: number; fiatValue: number } {
-  const bitcoin = calculateBitcoin(mwh, minerModel, difficulty);
+  const bitcoin = calculateBitcoin(mwh, minerModel, difficulty, date);
   const fiatValue = calculateMiningRevenue(bitcoin, bitcoinPrice);
   
   return { bitcoin, fiatValue };
