@@ -16,7 +16,6 @@ import {
   bitcoinYearlySummaries 
 } from "./db/schema";
 import { processSingleDay } from "./server/services/bitcoinService";
-import { getMonthlyTotalForYearMonth } from "./server/services/bitcoinSummaryService";
 import { format, parseISO } from "date-fns";
 import { gte, and, lte, eq, sql } from "drizzle-orm";
 
@@ -113,8 +112,19 @@ async function updateAprilSummary(): Promise<void> {
           )
         );
       
-      // Calculate new monthly total based on daily data
-      const monthlyTotal = await getMonthlyTotalForYearMonth('2024-04', minerModel);
+      // Calculate new monthly total based on daily summaries
+      const dailySummaries = await db.select({
+        sum: sql<number>`sum(bitcoin_mined)`.as('sum')
+      })
+      .from(bitcoinDailySummaries)
+      .where(
+        and(
+          sql`summary_date LIKE '2024-04-%'`,
+          eq(bitcoinDailySummaries.minerModel, minerModel)
+        )
+      );
+      
+      const monthlyTotal = Number(dailySummaries[0]?.sum || 0);
       
       // Insert new monthly summary
       await db.insert(bitcoinMonthlySummaries).values({
