@@ -39,7 +39,7 @@ async function processData(): Promise<void> {
   await db.delete(historicalBitcoinCalculations).where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE));
   
   await logStep("Clearing existing Bitcoin daily summaries...");
-  await db.delete(bitcoinDailySummaries).where(eq(bitcoinDailySummaries.summary_date, TARGET_DATE));
+  await db.delete(bitcoinDailySummaries).where(eq(bitcoinDailySummaries.summaryDate, TARGET_DATE));
   
   // Step 2: Process daily curtailment using the enhanced service
   await logStep("Processing curtailment data with enhanced service...");
@@ -49,7 +49,7 @@ async function processData(): Promise<void> {
   for (const minerModel of MINER_MODELS) {
     await logStep(`Processing Bitcoin calculations for ${minerModel}...`);
     try {
-      await processHistoricalCalculations(TARGET_DATE, minerModel);
+      await processHistoricalCalculations(TARGET_DATE, TARGET_DATE, minerModel);
     } catch (error) {
       await logStep(`ERROR processing Bitcoin calculations for ${minerModel}: ${error}`);
     }
