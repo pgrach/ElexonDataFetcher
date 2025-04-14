@@ -157,96 +157,99 @@ async function updateLatestData(retryAttempt = 0) {
   }
 }
 
-export function startDataUpdateService() {
-  serviceStartTime = new Date();
-  console.log(`\n=== Starting Data Update Service ===`);
-  console.log(`Start Time: ${serviceStartTime.toISOString()}`);
+export function startDataUpdateService(): Promise<NodeJS.Timeout> {
+  return new Promise((resolve) => {
+    serviceStartTime = new Date();
+    console.log(`\n=== Starting Data Update Service ===`);
+    console.log(`Start Time: ${serviceStartTime.toISOString()}`);
 
-  // Add startup delay to ensure server is ready
-  setTimeout(() => {
-    // Run initial update
-    updateLatestData().catch(error => {
-      console.error("Error during initial data update:", error);
-    });
+    // Add startup delay to ensure server is ready
+    setTimeout(() => {
+      // Run initial update - this will happen immediately
+      updateLatestData().catch(error => {
+        console.error("Error during initial data update:", error);
+      });
 
-    // Set up regular interval
-    const intervalId = setInterval(async () => {
-      try {
-        await updateLatestData();
-      } catch (error) {
-        console.error("Error during scheduled update:", error);
-      }
-    }, UPDATE_INTERVAL);
-
-    // Enhanced heartbeat logging
-    setInterval(() => {
-      const now = new Date();
-      const status = getUpdateServiceStatus();
-
-      // Also get wind data service status
-      const windStatus = getWindDataServiceStatus();
-      
-      console.log(`\n=== Service Heartbeat ===`);
-      console.log(`Running Since: ${status.serviceStartTime?.toISOString()}`);
-      console.log(`Current Time: ${now.toISOString()}`);
-      console.log(`Last Update Attempt: ${status.lastUpdateTime?.toISOString() || 'Never'}`);
-      console.log(`Last Successful Update: ${status.lastSuccessfulUpdate?.toISOString() || 'Never'}`);
-      console.log(`Update In Progress: ${status.isCurrentlyUpdating}`);
-      
-      // Add wind data service status
-      console.log(`\n--- Wind Data Service Status ---`);
-      console.log(`Next Scheduled Wind Update: ${windStatus.nextScheduledRun || 'Not scheduled'}`);
-      console.log(`Last Wind Update Run: ${windStatus.lastRunTime || 'Never'}`);
-      console.log(`Wind Update Status: ${windStatus.lastUpdateStatus || 'Unknown'}`);
-      console.log(`Wind Update In Progress: ${windStatus.isRunning}`);
-
-      // Alert if no successful updates in last 15 minutes
-      if (status.lastSuccessfulUpdate) {
-        const timeSinceUpdate = now.getTime() - status.lastSuccessfulUpdate.getTime();
-        if (timeSinceUpdate > 15 * 60 * 1000) {
-          console.error(`WARNING: No successful updates in the last ${Math.floor(timeSinceUpdate / 60000)} minutes`);
+      // Set up regular interval
+      const intervalId = setInterval(async () => {
+        try {
+          await updateLatestData();
+        } catch (error) {
+          console.error("Error during scheduled update:", error);
         }
-      }
-    }, 60 * 60 * 1000); // Every hour
-    
-    // Schedule daily reconciliation check at midnight
-    const setupDailyReconciliationCheck = () => {
-      const now = new Date();
-      const currentHour = now.getHours();
-      
-      // Calculate milliseconds until next midnight
-      const midnight = new Date(now);
-      midnight.setHours(24, 0, 0, 0);
-      const msUntilMidnight = midnight.getTime() - now.getTime();
-      
-      console.log(`Scheduling daily reconciliation check to run at midnight (in ${Math.round(msUntilMidnight / 3600000)} hours)`);
-      
-      // Schedule the first run
-      setTimeout(() => {
-        console.log("\n=== Running scheduled daily reconciliation check ===");
-        runDailyCheck()
-          .then(result => {
-            console.log("Daily reconciliation check completed:", {
-              datesChecked: result.dates.length,
-              missingDates: result.missingDates.length,
-              fixedDates: result.fixedDates.length,
-              status: result.status
-            });
-            
-            // Setup the next day's check
-            setupDailyReconciliationCheck();
-          })
-          .catch(error => {
-            console.error("Error during daily reconciliation check:", error);
-            // Still setup next check even if there was an error
-            setupDailyReconciliationCheck();
-          });
-      }, msUntilMidnight);
-    };
-    
-    // Start the daily reconciliation check scheduling
-    setupDailyReconciliationCheck();
+      }, UPDATE_INTERVAL);
 
-    return intervalId;
-  }, STARTUP_DELAY);
+      // Enhanced heartbeat logging
+      setInterval(() => {
+        const now = new Date();
+        const status = getUpdateServiceStatus();
+
+        // Also get wind data service status
+        const windStatus = getWindDataServiceStatus();
+        
+        console.log(`\n=== Service Heartbeat ===`);
+        console.log(`Running Since: ${status.serviceStartTime?.toISOString()}`);
+        console.log(`Current Time: ${now.toISOString()}`);
+        console.log(`Last Update Attempt: ${status.lastUpdateTime?.toISOString() || 'Never'}`);
+        console.log(`Last Successful Update: ${status.lastSuccessfulUpdate?.toISOString() || 'Never'}`);
+        console.log(`Update In Progress: ${status.isCurrentlyUpdating}`);
+        
+        // Add wind data service status
+        console.log(`\n--- Wind Data Service Status ---`);
+        console.log(`Next Scheduled Wind Update: ${windStatus.nextScheduledRun || 'Not scheduled'}`);
+        console.log(`Last Wind Update Run: ${windStatus.lastRunTime || 'Never'}`);
+        console.log(`Wind Update Status: ${windStatus.lastUpdateStatus || 'Unknown'}`);
+        console.log(`Wind Update In Progress: ${windStatus.isRunning}`);
+
+        // Alert if no successful updates in last 15 minutes
+        if (status.lastSuccessfulUpdate) {
+          const timeSinceUpdate = now.getTime() - status.lastSuccessfulUpdate.getTime();
+          if (timeSinceUpdate > 15 * 60 * 1000) {
+            console.error(`WARNING: No successful updates in the last ${Math.floor(timeSinceUpdate / 60000)} minutes`);
+          }
+        }
+      }, 60 * 60 * 1000); // Every hour
+      
+      // Schedule daily reconciliation check at midnight
+      const setupDailyReconciliationCheck = () => {
+        const now = new Date();
+        const currentHour = now.getHours();
+        
+        // Calculate milliseconds until next midnight
+        const midnight = new Date(now);
+        midnight.setHours(24, 0, 0, 0);
+        const msUntilMidnight = midnight.getTime() - now.getTime();
+        
+        console.log(`Scheduling daily reconciliation check to run at midnight (in ${Math.round(msUntilMidnight / 3600000)} hours)`);
+        
+        // Schedule the first run
+        setTimeout(() => {
+          console.log("\n=== Running scheduled daily reconciliation check ===");
+          runDailyCheck()
+            .then(result => {
+              console.log("Daily reconciliation check completed:", {
+                datesChecked: result.dates.length,
+                missingDates: result.missingDates.length,
+                fixedDates: result.fixedDates.length,
+                status: result.status
+              });
+              
+              // Setup the next day's check
+              setupDailyReconciliationCheck();
+            })
+            .catch(error => {
+              console.error("Error during daily reconciliation check:", error);
+              // Still setup next check even if there was an error
+              setupDailyReconciliationCheck();
+            });
+        }, msUntilMidnight);
+      };
+      
+      // Start the daily reconciliation check scheduling
+      setupDailyReconciliationCheck();
+
+      // Resolve the promise with the interval ID so caller knows service started
+      resolve(intervalId);
+    }, STARTUP_DELAY);
+  });
 }

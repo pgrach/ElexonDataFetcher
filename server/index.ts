@@ -97,20 +97,18 @@ const startServer = async () => {
     if (!dataUpdateServiceStarted) {
       try {
         console.log("Initializing data update service...");
+        
+        // Now properly await the Promise returned by startDataUpdateService
         const updateServiceInterval = await startDataUpdateService();
 
-        // Handle cleanup on server shutdown if we have an interval
-        if (updateServiceInterval !== undefined && updateServiceInterval !== null) {
-          process.on('SIGTERM', () => {
-            console.log('Shutting down data update service...');
-            clearInterval(updateServiceInterval);
-          });
+        // Handle cleanup on server shutdown 
+        process.on('SIGTERM', () => {
+          console.log('Shutting down data update service...');
+          clearInterval(updateServiceInterval);
+        });
 
-          dataUpdateServiceStarted = true;
-          console.log("Data update service started successfully");
-        } else {
-          console.warn("Data update service returned no interval");
-        }
+        dataUpdateServiceStarted = true;
+        console.log("Data update service started successfully with interval ID:", updateServiceInterval);
       } catch (error) {
         console.error("Failed to start data update service:", error);
       }
