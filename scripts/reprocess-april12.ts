@@ -51,7 +51,7 @@ async function reprocessDate() {
     await db.delete(historicalBitcoinCalculations)
       .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE));
     
-    console.log(`Deleted ${deletedBitcoinRecords[0]?.count || 0} existing Bitcoin calculations`);
+    console.log(`Deleted ${bitcoinCount[0]?.count || 0} existing Bitcoin calculations`);
     
     // Step 2: Reingest curtailment data from Elexon
     console.log(`\nIngesting curtailment data for ${TARGET_DATE} from Elexon...`);
@@ -95,26 +95,31 @@ async function reprocessDate() {
     console.log(`\nCalculating Bitcoin mining potential for ${MINER_MODELS.length} miner models...`);
     
     for (const minerModel of MINER_MODELS) {
-      console.log(`\nProcessing ${minerModel}...`);
-      await processSingleDay(TARGET_DATE, minerModel);
-      
-      // Verify Bitcoin calculations for this model
-      const bitcoinStats = await db
-        .select({
-          recordCount: sql<number>`COUNT(*)`,
-          periodCount: sql<number>`COUNT(DISTINCT ${historicalBitcoinCalculations.settlementPeriod})`,
-          farmCount: sql<number>`COUNT(DISTINCT ${historicalBitcoinCalculations.farmId})`,
-          totalBitcoin: sql<string>`SUM(${historicalBitcoinCalculations.bitcoinMined}::numeric)`
-        })
-        .from(historicalBitcoinCalculations)
-        .where(
-          sql`${historicalBitcoinCalculations.settlementDate} = ${TARGET_DATE} AND 
-              ${historicalBitcoinCalculations.minerModel} = ${minerModel}`
-        );
-      
-      console.log(`${minerModel} Bitcoin Calculations:`);
-      console.log(`Records: ${bitcoinStats[0]?.recordCount || 0}`);
-      console.log(`Total Bitcoin: ${Number(bitcoinStats[0]?.totalBitcoin || 0).toFixed(8)} BTC`);
+      try {
+        console.log(`\nProcessing ${minerModel}...`);
+        await processSingleDay(TARGET_DATE, minerModel);
+        
+        // Verify Bitcoin calculations for this model
+        const bitcoinStats = await db
+          .select({
+            recordCount: sql<number>`COUNT(*)`,
+            periodCount: sql<number>`COUNT(DISTINCT ${historicalBitcoinCalculations.settlementPeriod})`,
+            farmCount: sql<number>`COUNT(DISTINCT ${historicalBitcoinCalculations.farmId})`,
+            totalBitcoin: sql<string>`SUM(${historicalBitcoinCalculations.bitcoinMined}::numeric)`
+          })
+          .from(historicalBitcoinCalculations)
+          .where(
+            sql`${historicalBitcoinCalculations.settlementDate} = ${TARGET_DATE} AND 
+                ${historicalBitcoinCalculations.minerModel} = ${minerModel}`
+          );
+        
+        console.log(`${minerModel} Bitcoin Calculations:`);
+        console.log(`Records: ${bitcoinStats[0]?.recordCount || 0}`);
+        console.log(`Total Bitcoin: ${Number(bitcoinStats[0]?.totalBitcoin || 0).toFixed(8)} BTC`);
+      } catch (error) {
+        console.error(`Error processing ${minerModel} for ${TARGET_DATE}:`, error);
+        console.log(`Continuing with next miner model...`);
+      }
     }
     
     console.log(`\n=== Reprocessing Complete for ${TARGET_DATE} ===`);
