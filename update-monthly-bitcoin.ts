@@ -1,69 +1,49 @@
 /**
  * Update Monthly Bitcoin Summaries for April 2025
  * 
- * This script recalculates monthly Bitcoin summaries for April 2025 
- * to include the updated data for April 13, 2025.
+ * This script recalculates the monthly Bitcoin summaries for April 2025
+ * based on the actual sum of daily values.
  */
 
 import { db } from "./db";
-import { bitcoin_daily_summaries, bitcoin_monthly_summaries } from "./db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 async function updateMonthlyBitcoinSummaries() {
   console.log("Updating monthly Bitcoin summaries for April 2025...");
-  
-  // Get all miner models we need to process
-  const minerModels = await db.select({
-      model: bitcoin_daily_summaries.miner_model
-    })
-    .from(bitcoin_daily_summaries)
-    .where(
-      sql`to_char(${bitcoin_daily_summaries.summary_date}, 'YYYY-MM') = '2025-04'`
-    )
-    .groupBy(bitcoin_daily_summaries.miner_model);
-  
-  console.log(`Found ${minerModels.length} miner models to process`);
-  
-  // Process each miner model
-  for (const { model } of minerModels) {
-    console.log(`Processing monthly summary for ${model}...`);
+
+  // Calculate the updated sum of daily bitcoin totals for April 2025
+  const result = await db.execute(sql`
+    SELECT 
+        miner_model,
+        SUM(bitcoin_mined::numeric) as total_bitcoin
+    FROM 
+        bitcoin_daily_summaries
+    WHERE 
+        TO_CHAR(summary_date, 'YYYY-MM') = '2025-04'
+    GROUP BY 
+        miner_model;
+  `);
+
+  console.log("Calculated updated Bitcoin totals:", result.rows);
+
+  // Update each miner model
+  for (const row of result.rows) {
+    const { miner_model, total_bitcoin } = row;
     
-    // Calculate total Bitcoin mined for April 2025 for this model
-    const result = await db.select({
-        total: sql`sum(${bitcoin_daily_summaries.bitcoin_mined})`
-      })
-      .from(bitcoin_daily_summaries)
-      .where(
-        and(
-          sql`to_char(${bitcoin_daily_summaries.summary_date}, 'YYYY-MM') = '2025-04'`,
-          eq(bitcoin_daily_summaries.miner_model, model)
-        )
-      );
+    console.log(`Updating ${miner_model} with total: ${total_bitcoin}`);
     
-    const totalBitcoin = result[0].total;
-    console.log(`Total Bitcoin for ${model} in April 2025: ${totalBitcoin}`);
+    // Update the monthly summary
+    await db.execute(sql`
+      UPDATE bitcoin_monthly_summaries
+      SET 
+        bitcoin_mined = ${total_bitcoin},
+        updated_at = NOW()
+      WHERE 
+        year_month = '2025-04' AND
+        miner_model = ${miner_model}
+    `);
     
-    // Update or insert monthly summary
-    await db.insert(bitcoin_monthly_summaries)
-      .values({
-        year_month: '2025-04',
-        miner_model: model,
-        bitcoin_mined: totalBitcoin,
-        created_at: new Date(),
-        updated_at: new Date()
-      })
-      .onConflictDoUpdate({
-        target: [
-          bitcoin_monthly_summaries.year_month,
-          bitcoin_monthly_summaries.miner_model
-        ],
-        set: {
-          bitcoin_mined: totalBitcoin,
-          updated_at: new Date()
-        }
-      });
-    
-    console.log(`Updated monthly summary for ${model}`);
+    console.log(`Updated monthly summary for ${miner_model}`);
   }
   
   console.log("Monthly Bitcoin summaries updated successfully!");
