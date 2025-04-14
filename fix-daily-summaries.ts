@@ -88,14 +88,13 @@ async function recalculateDailySummary(date: string, minerModel: string): Promis
           )
         );
       
-      // Create a new summary
-      await db.insert(bitcoinDailySummaries).values({
-        summaryDate: date,
-        minerModel: minerModel,
-        bitcoinMined: totalBitcoin,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
+      // Create a new summary with only the columns that exist in the table
+      // Use raw SQL to ensure the field names match exactly what's in the DB
+      await db.execute(
+        `INSERT INTO bitcoin_daily_summaries (summary_date, miner_model, bitcoin_mined, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [date, minerModel, totalBitcoin, new Date(), new Date()]
+      );
       
       console.log(`Created daily summary for ${date} and ${minerModel}: ${totalBitcoin.toFixed(8)} BTC`);
     } else {
