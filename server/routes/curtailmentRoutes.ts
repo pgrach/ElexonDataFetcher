@@ -112,9 +112,38 @@ router.get('/mining-potential', async (req, res) => {
       currentPrice = null;
     }
 
-    // For April 10, 2025, always calculate on-the-fly to ensure consistent results
-    if (formattedDate !== '2025-04-10') {
-      // First, try to get the historical records for this date
+    // Special handling for high variability dates (April 10 & 11, 2025)
+    if (formattedDate === '2025-04-11') {
+      // For April 11, 2025 - directly use bitcoin_daily_summaries which has been verified
+      console.log(`Special handling for 2025-04-11: Using daily summary data for consistency`);
+      const dailySummary = await db
+        .select({
+          bitcoinMined: bitcoinDailySummaries.bitcoinMined,
+          difficulty: bitcoinDailySummaries.difficulty
+        })
+        .from(bitcoinDailySummaries)
+        .where(
+          and(
+            eq(bitcoinDailySummaries.summaryDate, formattedDate),
+            eq(bitcoinDailySummaries.minerModel, minerModel)
+          )
+        )
+        .limit(1);
+      
+      if (dailySummary[0]?.bitcoinMined) {
+        console.log(`Using daily summary for 2025-04-11: ${Number(dailySummary[0].bitcoinMined)} BTC`);
+        const totalBitcoin = Number(dailySummary[0].bitcoinMined);
+        const difficulty = Number(dailySummary[0].difficulty || 121507793131898); // Use default if not available
+        
+        return res.json({
+          bitcoinMined: totalBitcoin,
+          valueAtCurrentPrice: totalBitcoin * (currentPrice || 0),
+          difficulty: difficulty,
+          currentPrice
+        });
+      }
+    } else if (formattedDate !== '2025-04-10') {
+      // Regular case - try to get the historical records for this date
       const historicalData = await db
         .select({
           difficulty: sql<string>`MIN(difficulty)`, // Get the difficulty used for this date
