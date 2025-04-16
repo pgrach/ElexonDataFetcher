@@ -91,7 +91,9 @@ async function updateLeadPartyNames() {
     
     // Step 5: Count how many 'Unknown' lead party names remain
     const remainingUnknown = await db
-      .select({ count: sql\`COUNT(*)\` })
+      .select({ 
+        count: sql`COUNT(*)` 
+      })
       .from(curtailmentRecords)
       .where(and(
         eq(curtailmentRecords.settlementDate, TARGET_DATE),
