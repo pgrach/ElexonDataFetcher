@@ -8,184 +8,153 @@
  */
 
 import { db } from './db';
-import { 
-  curtailmentRecords, 
-  dailySummaries, 
-  historicalBitcoinCalculations, 
-  bitcoinDailySummaries,
-  monthlySummaries
-} from './db/schema';
-import { eq, sql, and } from 'drizzle-orm';
-import { format } from 'date-fns';
-import { processSingleDay } from './server/services/bitcoinService';
+import { historicalBitcoinCalculations, bitcoinDailySummaries, curtailmentRecords } from './db/schema';
+import { eq, and, sql } from 'drizzle-orm';
+import fs from 'fs';
+import path from 'path';
 
+// Constants
 const TARGET_DATE = '2025-04-14';
-const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S']; // Standard miner models
+const LOG_DIR = './logs';
+const LOG_FILE = path.join(LOG_DIR, `verify_bitcoin_april14_${new Date().toISOString().replace(/:/g, '-').replace(/\./g, '-')}.log`);
+const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S'];
+
+// Set up logging
+if (!fs.existsSync(LOG_DIR)) {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+fs.writeFileSync(LOG_FILE, `=== Bitcoin Calculation Verification for ${TARGET_DATE} ===\n`);
+
+const log = (message: string) => {
+  const timestamp = new Date().toISOString();
+  const formattedMessage = `[${timestamp}] ${message}`;
+  console.log(formattedMessage);
+  fs.appendFileSync(LOG_FILE, formattedMessage + '\n');
+};
+
+// Miner model configurations
+const MINER_CONFIG = {
+  'S19J_PRO': { hashrate: 104, power: 3068 },
+  'S9': { hashrate: 13.5, power: 1323 },
+  'M20S': { hashrate: 68, power: 3360 }
+};
+
+// Network difficulty value from AWS DynamoDB (already fetched)
+const NETWORK_DIFFICULTY = 121507793131898;
 
 async function verifyAndUpdateBitcoin() {
-  console.log(`\n=== Verifying and Updating Bitcoin Calculations for ${TARGET_DATE} ===`);
+  log(`Starting Bitcoin verification for ${TARGET_DATE}`);
   
   try {
-    // First check if we have curtailment records
-    const curtailmentCheck = await db
-      .select({
-        recordCount: sql<string>`COUNT(*)`,
-        periodCount: sql<string>`COUNT(DISTINCT ${curtailmentRecords.settlementPeriod})`,
-        totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-        totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
-      })
-      .from(curtailmentRecords)
-      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+    // Step 1: Clear existing Bitcoin calculations for the target date
+    log(`Removing existing Bitcoin calculations for ${TARGET_DATE}...`);
+    await db.delete(historicalBitcoinCalculations)
+      .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE));
     
-    const recordCount = Number(curtailmentCheck[0]?.recordCount || 0);
-    const periodCount = Number(curtailmentCheck[0]?.periodCount || 0);
-    const totalVolume = Number(curtailmentCheck[0]?.totalVolume || 0);
-    const totalPayment = Number(curtailmentCheck[0]?.totalPayment || 0);
+    await db.delete(bitcoinDailySummaries)
+      .where(eq(bitcoinDailySummaries.summaryDate, TARGET_DATE));
     
-    console.log(`Curtailment Records in Database:`);
-    console.log(`- Total Records: ${recordCount}`);
-    console.log(`- Settlement Periods: ${periodCount}`);
-    console.log(`- Total Volume: ${totalVolume.toFixed(2)} MWh`);
-    console.log(`- Total Payment: £${totalPayment.toFixed(2)}`);
+    // Step 2: Get all curtailment records for processing
+    const records = await db.select({
+      settlementPeriod: curtailmentRecords.settlementPeriod,
+      farmId: curtailmentRecords.farmId,
+      volume: curtailmentRecords.volume,
+    })
+    .from(curtailmentRecords)
+    .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
     
-    if (recordCount === 0) {
-      console.log('No curtailment records found. Cannot update Bitcoin calculations.');
-      return;
-    }
+    log(`Found ${records.length} curtailment records to process`);
     
-    // Check if daily summary exists, if not create it
-    console.log(`\nChecking daily summary for ${TARGET_DATE}...`);
-    const existingSummary = await db
-      .select()
-      .from(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, TARGET_DATE));
-    
-    if (existingSummary.length === 0) {
-      console.log(`Creating daily summary for ${TARGET_DATE}...`);
-      await db.insert(dailySummaries).values({
-        summaryDate: TARGET_DATE,
-        totalCurtailedEnergy: totalVolume.toString(),
-        totalPayment: totalPayment.toString(),
-        lastUpdated: new Date()
-      });
-    } else {
-      console.log(`Updating daily summary for ${TARGET_DATE}...`);
-      await db.update(dailySummaries)
-        .set({
-          totalCurtailedEnergy: totalVolume.toString(),
-          totalPayment: totalPayment.toString(),
-          lastUpdated: new Date()
-        })
-        .where(eq(dailySummaries.summaryDate, TARGET_DATE));
-    }
-    
-    // Update monthly summary
-    const yearMonth = TARGET_DATE.substring(0, 7);
-    console.log(`\nUpdating monthly summary for ${yearMonth}...`);
-    
-    // Calculate total from all daily summaries in this month
-    const monthlyTotals = await db
-      .select({
-        totalCurtailedEnergy: sql<string>`SUM(${dailySummaries.totalCurtailedEnergy}::numeric)`,
-        totalPayment: sql<string>`SUM(${dailySummaries.totalPayment}::numeric)`
-      })
-      .from(dailySummaries)
-      .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${TARGET_DATE}::date)`);
-
-    if (monthlyTotals[0].totalCurtailedEnergy && monthlyTotals[0].totalPayment) {
-      await db.insert(monthlySummaries).values({
-        yearMonth,
-        totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
-        totalPayment: monthlyTotals[0].totalPayment,
-        updatedAt: new Date()
-      }).onConflictDoUpdate({
-        target: [monthlySummaries.yearMonth],
-        set: {
-          totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
-          totalPayment: monthlyTotals[0].totalPayment,
-          updatedAt: new Date()
-        }
-      });
-    }
-    
-    // Check if Bitcoin calculations exist, if not create them
-    console.log(`\nChecking Bitcoin calculations for ${TARGET_DATE}...`);
-    
+    // Step 3: Process Bitcoin calculations for each miner model
     for (const minerModel of MINER_MODELS) {
-      const bitcoinCheck = await db
-        .select({ count: sql<string>`COUNT(*)` })
-        .from(historicalBitcoinCalculations)
-        .where(and(
-          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
-        ));
-        
-      const bitcoinCount = Number(bitcoinCheck[0]?.count || 0);
+      log(`Processing Bitcoin calculations for ${TARGET_DATE} with miner model ${minerModel}`);
       
-      if (bitcoinCount === 0) {
-        console.log(`Creating Bitcoin calculations for ${minerModel}...`);
-        try {
-          // Process Bitcoin calculations for this date and model
-          await processSingleDay(TARGET_DATE, minerModel);
-          console.log(`Successfully processed ${minerModel}`);
-        } catch (error) {
-          console.error(`Error processing Bitcoin calculations for ${minerModel}:`, error);
-        }
-      } else {
-        console.log(`Bitcoin calculations already exist for ${minerModel}: ${bitcoinCount} records`);
+      const minerConfig = MINER_CONFIG[minerModel as keyof typeof MINER_CONFIG];
+      let totalBitcoin = 0;
+      let totalEnergy = 0;
+      
+      // Process in batches to avoid overwhelming the database
+      const BATCH_SIZE = 50;
+      const allCalculations = [];
+      
+      for (const record of records) {
+        const absVolume = Math.abs(parseFloat(record.volume));
+        const energyInKWh = absVolume * 1000; // MWh to kWh
+        
+        // Calculate Bitcoin that could be mined
+        // Formula: (hashrate * time * energy) / (difficulty * 2^32 * power)
+        const bitcoinMined = (minerConfig.hashrate * 1e12 * 3600 * energyInKWh) / 
+                             (NETWORK_DIFFICULTY * Math.pow(2, 32) * minerConfig.power);
+        
+        totalBitcoin += bitcoinMined;
+        totalEnergy += absVolume;
+        
+        allCalculations.push({
+          settlementDate: TARGET_DATE,
+          settlementPeriod: record.settlementPeriod,
+          farmId: record.farmId,
+          minerModel: minerModel,
+          bitcoinMined: bitcoinMined.toString(),
+          difficulty: NETWORK_DIFFICULTY.toString(),
+          calculatedAt: new Date()
+        });
       }
-    }
-    
-    // Final verification
-    console.log(`\nPerforming final verification...`);
-    
-    // Verify daily summary
-    const updatedSummary = await db
-      .select()
-      .from(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, TARGET_DATE));
-    
-    console.log(`Daily Summary verification:`);
-    if (updatedSummary.length > 0) {
-      console.log(`- Date: ${updatedSummary[0].summaryDate}`);
-      console.log(`- Total Curtailed Energy: ${updatedSummary[0].totalCurtailedEnergy} MWh`);
-      console.log(`- Total Payment: £${updatedSummary[0].totalPayment}`);
-    } else {
-      console.log(`Error: No daily summary found for ${TARGET_DATE} after updating.`);
-    }
-    
-    // Verify Bitcoin calculations
-    const bitcoinStats = await db
-      .select({
-        minerModel: historicalBitcoinCalculations.minerModel,
-        count: sql<number>`COUNT(*)`,
-        totalBitcoin: sql<string>`SUM(${historicalBitcoinCalculations.bitcoinMined}::numeric)`,
-        totalEnergy: sql<string>`SUM(${historicalBitcoinCalculations.energyConsumption}::numeric)`
-      })
-      .from(historicalBitcoinCalculations)
-      .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE))
-      .groupBy(historicalBitcoinCalculations.minerModel);
-    
-    console.log(`\nBitcoin Calculations summary:`);
-    if (bitcoinStats.length > 0) {
-      for (const stat of bitcoinStats) {
-        console.log(`- ${stat.minerModel}: ${stat.count} records, ${Number(stat.totalBitcoin).toFixed(8)} BTC, ${Number(stat.totalEnergy).toFixed(2)} MWh`);
+      
+      // Insert calculations in batches
+      for (let i = 0; i < allCalculations.length; i += BATCH_SIZE) {
+        const batch = allCalculations.slice(i, i + BATCH_SIZE);
+        await db.insert(historicalBitcoinCalculations).values(batch);
+        log(`Inserted batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(allCalculations.length / BATCH_SIZE)} for ${minerModel}`);
       }
-    } else {
-      console.log(`Error: No Bitcoin calculations found for ${TARGET_DATE} after processing.`);
+      
+      log(`Inserted ${allCalculations.length} Bitcoin calculations for ${minerModel}`);
+      log(`Total Bitcoin that could be mined with ${minerModel}: ${totalBitcoin.toFixed(8)} BTC`);
+      
+      // Create daily summary for this miner model
+      await db.insert(bitcoinDailySummaries).values({
+        summaryDate: TARGET_DATE,
+        minerModel: minerModel,
+        bitcoinMined: totalBitcoin.toString(),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
+      log(`Created daily Bitcoin summary for ${minerModel}`);
     }
     
-    console.log(`\n=== Verification and Update Complete ===`);
-    console.log(`Completed at: ${format(new Date(), "yyyy-MM-dd HH:mm:ss")}`);
+    // Step 4: Verify results
+    const verificationResults = await db.select({
+      minerModel: bitcoinDailySummaries.minerModel,
+      bitcoinMined: bitcoinDailySummaries.bitcoinMined
+    })
+    .from(bitcoinDailySummaries)
+    .where(eq(bitcoinDailySummaries.summaryDate, TARGET_DATE));
     
-  } catch (error) {
-    console.error("Error during verification and update:", error);
+    log('\nBitcoin Calculation Results:');
+    verificationResults.forEach(result => {
+      log(`${result.minerModel}: ${parseFloat(result.bitcoinMined).toFixed(8)} BTC`);
+    });
+    
+    // Step 5: Update monthly bitcoin summary if needed
+    const yearMonth = TARGET_DATE.substring(0, 7);
+    log(`\nUpdating monthly Bitcoin summaries for ${yearMonth}...`);
+    
+    // Let the system's automatic update handle it
+    // The system's daily reconciliation will update monthly summaries automatically
+    log(`Monthly summaries will be automatically updated by the system.`);
+    
+    log('\nBitcoin calculation verification completed successfully');
+    
+  } catch (error: any) {
+    log(`Error during verification: ${error.message}\n${error.stack}`);
     process.exit(1);
   }
 }
 
-// Run the verification and update script
-verifyAndUpdateBitcoin().catch(error => {
-  console.error("Script execution error:", error);
+// Run the verification script
+verifyAndUpdateBitcoin().then(() => {
+  log('Script execution completed');
+}).catch(error => {
+  log(`Script execution error: ${error}`);
   process.exit(1);
 });
