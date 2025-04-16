@@ -8,277 +8,302 @@
  * Run with: npx tsx thorough-reprocess-april14.ts
  */
 
+import axios from 'axios';
 import { db } from './db';
-import { 
-  curtailmentRecords, 
-  dailySummaries, 
-  historicalBitcoinCalculations, 
-  bitcoinDailySummaries,
-  monthlySummaries
-} from './db/schema';
-import { eq, sql, and, inArray } from 'drizzle-orm';
-import { format } from 'date-fns';
-import { fetchBidsOffers } from './server/services/elexon';
-import { processSingleDay } from './server/services/bitcoinService';
-import { processSingleDate } from './server/services/windGenerationService';
-import * as fs from 'fs';
-import * as path from 'path';
+import { curtailmentRecords, dailySummaries, monthlySummaries } from './db/schema';
+import { eq, sql } from 'drizzle-orm';
+import fs from 'fs';
+import path from 'path';
+import { XMLParser } from 'fast-xml-parser';
 
+// Constants
 const TARGET_DATE = '2025-04-14';
-const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S']; // Standard miner models
-const LOG_DIRECTORY = './logs';
-const LOG_FILE = path.join(LOG_DIRECTORY, `thorough_reprocess_${TARGET_DATE.replace(/-/g, '')}_${new Date().toISOString().replace(/:/g, '-')}.log`);
+const API_KEY = process.env.ELEXON_API_KEY || '';
+const LOG_DIR = './logs';
+const LOG_FILE = path.join(LOG_DIR, `thorough_reprocess_${TARGET_DATE.replace(/-/g, '')}_${new Date().toISOString().replace(/:/g, '-').replace(/\./g, '-')}.log`);
 
-// Create a logger that writes to both console and file
-const logger = {
-  log: (message: string) => {
-    const timestamp = new Date().toISOString();
-    const formattedMessage = `[${timestamp}] [INFO] ${message}`;
-    console.log(formattedMessage);
-    fs.appendFileSync(LOG_FILE, formattedMessage + '\\n');
-  },
-  error: (message: string, error?: any) => {
-    const timestamp = new Date().toISOString();
-    let formattedMessage = `[${timestamp}] [ERROR] ${message}`;
-    if (error) {
-      formattedMessage += `\\n${error.stack || JSON.stringify(error)}`;
-    }
-    console.error(formattedMessage);
-    fs.appendFileSync(LOG_FILE, formattedMessage + '\\n');
-  }
+// Set up logging
+if (!fs.existsSync(LOG_DIR)) {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+fs.writeFileSync(LOG_FILE, `=== Thorough Reprocessing Log for ${TARGET_DATE} ===\n`);
+
+const log = (message: string) => {
+  const timestamp = new Date().toISOString();
+  const formattedMessage = `[${timestamp}] ${message}`;
+  console.log(formattedMessage);
+  fs.appendFileSync(LOG_FILE, formattedMessage + '\n');
 };
 
-// Make sure the log directory exists
-if (!fs.existsSync(LOG_DIRECTORY)) {
-  fs.mkdirSync(LOG_DIRECTORY, { recursive: true });
-}
-
-// Initialize the log file
-fs.writeFileSync(LOG_FILE, `=== Thorough Reprocessing Log for ${TARGET_DATE} ===\\n`);
-
-// Helper function to wait between API calls to avoid rate limiting
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Query Elexon for curtailment data records with retries
+// Fetch data from Elexon API with robust error handling and retries
 async function fetchElexonData(date: string, period: number, retries = 3, delay = 2000): Promise<any[]> {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      logger.log(`[${date} P${period}] Attempt ${attempt}/${retries}: Fetching data from Elexon...`);
-      const records = await fetchBidsOffers(date, period);
-      
-      // Calculate total curtailment data (negative volume)
-      const curtailmentRecords = records.filter(r => r.volume < 0 && (r.soFlag || r.cadlFlag));
-      const totalVolume = curtailmentRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-      const totalPayment = curtailmentRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice), 0);
-      
-      logger.log(`[${date} P${period}] Retrieved ${records.length} records, ${curtailmentRecords.length} curtailment records (${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)})`);
-      
-      // Verify we have data if this period should have curtailment
-      if (totalVolume === 0 && isExpectedCurtailmentPeriod(period)) {
-        if (attempt < retries) {
-          logger.log(`[${date} P${period}] Expected curtailment data not found, retrying after delay...`);
-          await sleep(delay);
-          continue;
-        } else {
-          logger.error(`[${date} P${period}] Failed to find expected curtailment data after ${retries} attempts`);
-        }
+  try {
+    log(`Fetching data for ${date} period ${period} from Elexon...`);
+    const url = `https://api.bmreports.com/BMRS/B1610/v2?APIKey=${API_KEY}&SettlementDate=${date}&Period=${period}&ServiceType=xml`;
+    
+    const response = await axios.get(url, { 
+      timeout: 10000,
+      headers: {
+        'Accept': 'application/xml',
+        'User-Agent': 'Curtailment-Processor/1.0'
       }
-      
-      return records;
-    } catch (error) {
-      if (attempt < retries) {
-        logger.error(`[${date} P${period}] Error on attempt ${attempt}/${retries}, retrying after delay...`, error);
-        await sleep(delay * attempt); // Exponential backoff
-      } else {
-        logger.error(`[${date} P${period}] Failed after ${retries} attempts`, error);
-        throw error;
-      }
+    });
+    
+    if (response.status !== 200) {
+      throw new Error(`API returned status code ${response.status}`);
     }
+    
+    const xmlData = response.data;
+    
+    // Use a proper XML parser for more reliable parsing
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: "_",
+    });
+    const parsed = parser.parse(xmlData);
+    
+    // Extract the items from the parsed XML
+    let items = [];
+    if (parsed && parsed.response && parsed.response.responseBody && 
+        parsed.response.responseBody.responseList && 
+        parsed.response.responseBody.responseList.item) {
+      items = Array.isArray(parsed.response.responseBody.responseList.item) 
+        ? parsed.response.responseBody.responseList.item 
+        : [parsed.response.responseBody.responseList.item];
+    }
+    
+    // Process the items to extract the relevant data
+    const records = items.map(item => {
+      const volume = parseFloat(item.volume || '0');
+      const soFlag = (item.so_flag === 'Y');
+      const cadlFlag = (item.cadl_flag === 'Y');
+      const leadParty = item.lead_party || 'Unknown';
+      
+      // Only return curtailment records (negative volume with flags)
+      if (volume < 0 && (soFlag || cadlFlag)) {
+        return {
+          farmId: item.bm_unit_id,
+          volume,
+          originalPrice: parseFloat(item.price || '0'),
+          finalPrice: parseFloat(item.price || '0'),
+          soFlag,
+          cadlFlag,
+          leadPartyName: leadParty
+        };
+      }
+      return null;
+    }).filter(Boolean);
+    
+    log(`Retrieved ${records.length} curtailment records for period ${period}`);
+    return records;
+  } catch (error: any) {
+    if (retries > 0) {
+      log(`Error fetching data for period ${period} (${retries} retries left): ${error.message}`);
+      await new Promise(resolve => setTimeout(resolve, delay)); 
+      return fetchElexonData(date, period, retries - 1, delay);
+    }
+    log(`Failed to fetch data for period ${period} after retries: ${error.message}`);
+    return [];
   }
-  
-  return []; // Return empty array if all retries fail
 }
 
-// Helper function to determine if a period is likely to have curtailment data
-// Based on observed patterns from April 14, 2025
+// Helper function to determine if a period is expected to have curtailment
+// Based on historical patterns for 2025-04-14
 function isExpectedCurtailmentPeriod(period: number): boolean {
-  // These periods had significant curtailment in previous runs
-  return period >= 4 && period <= 32;
+  // Periods with higher probability of curtailment based on historical data
+  // These will be processed first to optimize for time
+  return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].includes(period);
 }
 
 async function thoroughReprocessData() {
-  logger.log(`=== Starting Thorough Reprocessing for ${TARGET_DATE} ===`);
-  const startTime = Date.now();
+  log(`Starting thorough reprocessing for ${TARGET_DATE}`);
   
   try {
-    // Step 1: Delete existing data for the target date to ensure a clean slate
-    logger.log(`Removing existing curtailment records for ${TARGET_DATE}...`);
+    // Step 1: Clear existing data for the target date
+    log(`Removing existing curtailment records for ${TARGET_DATE}...`);
     await db.delete(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
-      
-    // Step 2: Remove all Bitcoin-related data for this date
-    logger.log(`Removing existing Bitcoin calculations for ${TARGET_DATE}...`);
-    for (const minerModel of MINER_MODELS) {
-      await db.delete(historicalBitcoinCalculations)
-        .where(and(
-          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
-        ));
-    }
     
-    // Also remove bitcoin daily summaries if they exist
-    await db.delete(bitcoinDailySummaries)
-      .where(eq(bitcoinDailySummaries.summaryDate, TARGET_DATE));
+    // Step 2: Process ALL settlement periods with a focus on thoroughness
+    // First process periods most likely to have data (for time efficiency)
+    const allPeriods = Array.from({ length: 48 }, (_, i) => i + 1);
+    const priorityPeriods = allPeriods.filter(isExpectedCurtailmentPeriod);
+    const remainingPeriods = allPeriods.filter(p => !isExpectedCurtailmentPeriod(p));
     
-    // Step 3: Remove daily summary to force recalculation
-    logger.log(`Removing existing daily summary for ${TARGET_DATE}...`);
-    await db.delete(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, TARGET_DATE));
+    // Process in order of priority
+    const processingOrder = [...priorityPeriods, ...remainingPeriods];
     
-    // Step 4: Reprocess wind generation data (this is non-destructive)
-    logger.log(`Processing wind generation data for ${TARGET_DATE}...`);
-    try {
-      const windRecords = await processSingleDate(TARGET_DATE);
-      logger.log(`Successfully processed ${windRecords} wind generation records for ${TARGET_DATE}`);
-    } catch (error) {
-      logger.error(`Error processing wind generation data:`, error);
-    }
-    
-    // Step 5: Process all settlement periods (1-48)
-    logger.log(`Processing all 48 settlement periods for ${TARGET_DATE} with extra verification...`);
-    
+    // Process in small batches to avoid overwhelming the API
+    const BATCH_SIZE = 3;
     let totalRecords = 0;
     let totalVolume = 0;
     let totalPayment = 0;
     let periodsWithData = 0;
     
-    // Process each period one by one with retries
-    // We'll use all 48 periods to ensure we don't miss any data
-    for (let period = 1; period <= 48; period++) {
-      try {
-        // Add a small delay between periods to avoid rate limiting
-        if (period > 1) {
-          await sleep(1500);
-        }
+    // Track which periods have been processed
+    const processedPeriods = new Set<number>();
+    
+    log(`Processing ${processingOrder.length} settlement periods in batches of ${BATCH_SIZE}...`);
+    
+    // Process periods in batches
+    for (let i = 0; i < processingOrder.length; i += BATCH_SIZE) {
+      const batch = processingOrder.slice(i, i + BATCH_SIZE);
+      log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(processingOrder.length / BATCH_SIZE)}: Periods ${batch.join(', ')}`);
+      
+      const batchPromises = batch.map(period => fetchElexonData(TARGET_DATE, period));
+      const batchResults = await Promise.all(batchPromises);
+      
+      for (let j = 0; j < batch.length; j++) {
+        const period = batch[j];
+        const records = batchResults[j] || [];
         
-        // Fetch and process raw data for each period with retries
-        const elexonRecords = await fetchElexonData(TARGET_DATE, period);
-        
-        // Filter for valid curtailment records (negative volume with flags)
-        const curtailmentRecordsToInsert = elexonRecords
-          .filter(record => record.volume < 0 && (record.soFlag || record.cadlFlag))
-          .map(record => {
+        if (records.length > 0) {
+          periodsWithData++;
+          processedPeriods.add(period);
+          
+          log(`Processing ${records.length} curtailment records for period ${period}`);
+          let periodVolume = 0;
+          let periodPayment = 0;
+          
+          // Insert records for this period
+          for (const record of records) {
             const absVolume = Math.abs(record.volume);
             const payment = absVolume * record.originalPrice;
             
-            return {
+            periodVolume += absVolume;
+            periodPayment += payment;
+            
+            await db.insert(curtailmentRecords).values({
               settlementDate: TARGET_DATE,
               settlementPeriod: period,
-              farmId: record.id,
-              leadPartyName: record.leadPartyName || 'Unknown',
-              volume: record.volume.toString(), // Keep negative value
+              farmId: record.farmId,
+              leadPartyName: record.leadPartyName,
+              volume: record.volume.toString(),
               payment: payment.toString(),
               originalPrice: record.originalPrice.toString(),
               finalPrice: record.finalPrice.toString(),
               soFlag: record.soFlag,
               cadlFlag: record.cadlFlag
-            };
-          });
-        
-        // Insert all valid records for this period
-        if (curtailmentRecordsToInsert.length > 0) {
-          await db.insert(curtailmentRecords).values(curtailmentRecordsToInsert);
+            });
+            
+            totalRecords++;
+          }
           
-          // Calculate period totals for logging
-          const periodVolume = curtailmentRecordsToInsert.reduce(
-            (sum, r) => sum + Math.abs(parseFloat(r.volume)), 0
-          );
-          const periodPayment = curtailmentRecordsToInsert.reduce(
-            (sum, r) => sum + parseFloat(r.payment), 0
-          );
-          
-          logger.log(`[${TARGET_DATE} P${period}] Inserted ${curtailmentRecordsToInsert.length} curtailment records (${periodVolume.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
-          
-          totalRecords += curtailmentRecordsToInsert.length;
           totalVolume += periodVolume;
           totalPayment += periodPayment;
-          periodsWithData++;
+          
+          log(`Period ${period}: Added ${records.length} records (${periodVolume.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
         } else {
-          if (isExpectedCurtailmentPeriod(period)) {
-            logger.log(`[${TARGET_DATE} P${period}] WARNING: No curtailment records found despite being an expected curtailment period`);
-          } else {
-            logger.log(`[${TARGET_DATE} P${period}] No curtailment records to insert`);
-          }
+          log(`Period ${period}: No curtailment records found`);
         }
-        
-        // After each period, verify inserted records match what we expected
-        const verificationCount = await db
-          .select({ count: sql<string>`COUNT(*)` })
-          .from(curtailmentRecords)
-          .where(and(
-            eq(curtailmentRecords.settlementDate, TARGET_DATE),
-            eq(curtailmentRecords.settlementPeriod, period)
-          ));
-        
-        const actualCount = parseInt(verificationCount[0]?.count || '0');
-        if (actualCount !== curtailmentRecordsToInsert.length) {
-          logger.error(`[${TARGET_DATE} P${period}] Verification failed: Expected ${curtailmentRecordsToInsert.length} records, found ${actualCount}`);
-        }
-      } catch (error) {
-        logger.error(`Error processing period ${period}:`, error);
+      }
+      
+      // Add a small delay between batches to avoid overwhelming the Elexon API
+      if (i + BATCH_SIZE < processingOrder.length) {
+        log(`Waiting before processing next batch...`);
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
     }
     
-    logger.log(`\nProcessed ${totalRecords} total curtailment records across ${periodsWithData} periods`);
-    logger.log(`Total volume: ${totalVolume.toFixed(2)} MWh`);
-    logger.log(`Total payment: £${totalPayment.toFixed(2)}`);
+    // Check if any expected periods are missing
+    const missingPriority = priorityPeriods.filter(p => !processedPeriods.has(p));
+    if (missingPriority.length > 0) {
+      log(`WARNING: The following expected periods have no curtailment data: ${missingPriority.join(', ')}`);
+      
+      // Try to reprocess missing priority periods one more time
+      for (const period of missingPriority) {
+        log(`Re-attempting to fetch data for priority period ${period}...`);
+        const records = await fetchElexonData(TARGET_DATE, period, 2, 3000);
+        
+        if (records.length > 0) {
+          processedPeriods.add(period);
+          log(`Successfully retrieved ${records.length} records for period ${period} on second attempt!`);
+          
+          // Process the records
+          let periodVolume = 0;
+          let periodPayment = 0;
+          
+          for (const record of records) {
+            const absVolume = Math.abs(record.volume);
+            const payment = absVolume * record.originalPrice;
+            
+            periodVolume += absVolume;
+            periodPayment += payment;
+            
+            await db.insert(curtailmentRecords).values({
+              settlementDate: TARGET_DATE,
+              settlementPeriod: period,
+              farmId: record.farmId,
+              leadPartyName: record.leadPartyName,
+              volume: record.volume.toString(),
+              payment: payment.toString(),
+              originalPrice: record.originalPrice.toString(),
+              finalPrice: record.finalPrice.toString(),
+              soFlag: record.soFlag,
+              cadlFlag: record.cadlFlag
+            });
+            
+            totalRecords++;
+          }
+          
+          totalVolume += periodVolume;
+          totalPayment += periodPayment;
+          periodsWithData++;
+          
+          log(`Period ${period} (retry): Added ${records.length} records (${periodVolume.toFixed(2)} MWh, £${periodPayment.toFixed(2)})`);
+        }
+      }
+    }
     
-    // Step 6: Post-processing verification
-    logger.log(`\nPerforming database verification...`);
-    const dbVerification = await db.select({
-      recordCount: sql<string>`COUNT(*)`,
-      periodCount: sql<string>`COUNT(DISTINCT ${curtailmentRecords.settlementPeriod})`,
-      totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-      totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
-    })
-    .from(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
+    log(`\nProcessed ${totalRecords} total curtailment records across ${periodsWithData} periods`);
+    log(`Total volume: ${totalVolume.toFixed(2)} MWh`);
+    log(`Total payment: £${totalPayment.toFixed(2)}`);
     
-    logger.log(`Database verification results:`);
-    logger.log(`- Record count: ${dbVerification[0]?.recordCount || '0'}`);
-    logger.log(`- Settlement periods: ${dbVerification[0]?.periodCount || '0'}`);
-    logger.log(`- Total volume: ${Number(dbVerification[0]?.totalVolume || 0).toFixed(2)} MWh`);
-    logger.log(`- Total payment: £${Number(dbVerification[0]?.totalPayment || 0).toFixed(2)}`);
-    
-    if (totalRecords === 0 || Number(dbVerification[0]?.recordCount || 0) === 0) {
-      logger.error(`No curtailment records found for ${TARGET_DATE}, cannot continue.`);
+    if (totalRecords === 0) {
+      log('No curtailment records found, skipping summary updates.');
       return;
     }
     
-    // Step 7: Update daily summary
-    logger.log(`\nUpdating daily summary for ${TARGET_DATE}...`);
+    // Step 3: Verify database totals (double-check from database itself)
+    const dbTotals = await db
+      .select({
+        recordCount: sql<string>`COUNT(*)`,
+        periodCount: sql<string>`COUNT(DISTINCT ${curtailmentRecords.settlementPeriod})`,
+        totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+        totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+      })
+      .from(curtailmentRecords)
+      .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
     
-    // Use the verified totals from the database for maximum accuracy
-    const dbEnergy = Number(dbVerification[0]?.totalVolume || 0);
-    const dbPayment = Number(dbVerification[0]?.totalPayment || 0);
+    log(`\nVerified database totals:`);
+    log(`Total Records: ${dbTotals[0]?.recordCount || '0'}`);
+    log(`Settlement Periods: ${dbTotals[0]?.periodCount || '0'}`);
+    log(`Total Volume: ${Number(dbTotals[0]?.totalVolume || 0).toFixed(2)} MWh`);
+    log(`Total Payment: £${Number(dbTotals[0]?.totalPayment || 0).toFixed(2)}`);
+    
+    // Step 4: Update daily summary with accurate totals from database
+    log(`\nUpdating daily summary for ${TARGET_DATE}...`);
+    
+    const dbEnergy = Number(dbTotals[0]?.totalVolume || 0);
+    const dbPayment = Number(dbTotals[0]?.totalPayment || 0);
     
     await db.insert(dailySummaries).values({
       summaryDate: TARGET_DATE,
       totalCurtailedEnergy: dbEnergy.toString(),
-      totalPayment: dbPayment.toString(),
+      totalPayment: (-dbPayment).toString(), // Payment is stored as negative in daily summaries
       lastUpdated: new Date()
     }).onConflictDoUpdate({
       target: [dailySummaries.summaryDate],
       set: {
         totalCurtailedEnergy: dbEnergy.toString(),
-        totalPayment: dbPayment.toString(),
+        totalPayment: (-dbPayment).toString(),
         lastUpdated: new Date()
       }
     });
     
-    // Step 8: Update monthly summary
+    // Step 5: Update monthly summary
     const yearMonth = TARGET_DATE.substring(0, 7);
-    logger.log(`\nUpdating monthly summary for ${yearMonth}...`);
+    log(`\nUpdating monthly summary for ${yearMonth}...`);
     
     // Calculate total from all daily summaries in this month
     const monthlyTotals = await db
@@ -288,8 +313,8 @@ async function thoroughReprocessData() {
       })
       .from(dailySummaries)
       .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${TARGET_DATE}::date)`);
-
-    if (monthlyTotals[0].totalCurtailedEnergy && monthlyTotals[0].totalPayment) {
+    
+    if (monthlyTotals[0].totalCurtailedEnergy) {
       await db.insert(monthlySummaries).values({
         yearMonth,
         totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
@@ -305,74 +330,47 @@ async function thoroughReprocessData() {
       });
     }
     
-    // Step 9: Process Bitcoin calculations for each miner model
-    logger.log(`\nProcessing Bitcoin calculations for ${TARGET_DATE}...`);
+    // Step 6: Special verification step - Compare with expected periods
+    // This helps confirm that we didn't miss any important data
+    const processedPeriodsArray = Array.from(processedPeriods).sort((a, b) => a - b);
+    log(`\nProcessed periods (${processedPeriodsArray.length}): ${processedPeriodsArray.join(', ')}`);
     
-    for (const minerModel of MINER_MODELS) {
-      try {
-        logger.log(`Processing ${minerModel}...`);
-        await processSingleDay(TARGET_DATE, minerModel);
-        logger.log(`Successfully processed ${minerModel}`);
-      } catch (error) {
-        logger.error(`Error processing Bitcoin calculations for ${minerModel}:`, error);
-      }
+    // Document any discrepancies between expected and actual data
+    const expectedPeriodsWithoutData = priorityPeriods.filter(p => !processedPeriods.has(p));
+    if (expectedPeriodsWithoutData.length > 0) {
+      log(`\nWARNING: Expected data for periods ${expectedPeriodsWithoutData.join(', ')} but none was found after retries.`);
+      log(`Please check if the Elexon API data might be incomplete for these periods.`);
     }
     
-    // Step 10: Final verification
-    logger.log(`\nPerforming final verification...`);
+    // Final verification from database for absolute confirmation
+    const periods = await db.select({
+      period: curtailmentRecords.settlementPeriod,
+      count: sql<number>`COUNT(*)`,
+      volume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+      payment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
+    })
+    .from(curtailmentRecords)
+    .where(eq(curtailmentRecords.settlementDate, TARGET_DATE))
+    .groupBy(curtailmentRecords.settlementPeriod)
+    .orderBy(curtailmentRecords.settlementPeriod);
     
-    // Verify daily summary was created
-    const summary = await db
-      .select()
-      .from(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, TARGET_DATE));
+    log('\nDetailed period breakdown:');
+    periods.forEach(p => {
+      log(`Period ${p.period}: ${p.count} records, ${Number(p.volume).toFixed(2)} MWh, £${Number(p.payment).toFixed(2)}`);
+    });
     
-    logger.log(`Daily Summary verification:`);
-    if (summary.length > 0) {
-      logger.log(`- Date: ${summary[0].summaryDate}`);
-      logger.log(`- Total Curtailed Energy: ${summary[0].totalCurtailedEnergy} MWh`);
-      logger.log(`- Total Payment: £${summary[0].totalPayment}`);
-      if (summary[0].totalWindGeneration) {
-        logger.log(`- Total Wind Generation: ${summary[0].totalWindGeneration} MWh`);
-      }
-    } else {
-      logger.error(`No daily summary found for ${TARGET_DATE} after reprocessing.`);
-    }
+    log('\nThorough reprocessing completed successfully');
     
-    // Verify Bitcoin calculations were created
-    const bitcoinCalcs = await db
-      .select({
-        minerModel: historicalBitcoinCalculations.minerModel,
-        count: sql<number>`COUNT(*)`
-      })
-      .from(historicalBitcoinCalculations)
-      .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE))
-      .groupBy(historicalBitcoinCalculations.minerModel);
-    
-    logger.log(`Bitcoin Calculations verification:`);
-    if (bitcoinCalcs.length > 0) {
-      for (const calc of bitcoinCalcs) {
-        logger.log(`- ${calc.minerModel}: ${calc.count} records`);
-      }
-    } else {
-      logger.error(`No Bitcoin calculations found for ${TARGET_DATE} after reprocessing.`);
-    }
-    
-    const endTime = Date.now();
-    const duration = (endTime - startTime) / 1000;
-    
-    logger.log(`\n=== Thorough Reprocessing Complete ===`);
-    logger.log(`Completed at: ${format(new Date(), "yyyy-MM-dd HH:mm:ss")}`);
-    logger.log(`Total duration: ${duration.toFixed(2)} seconds`);
-    
-  } catch (error) {
-    logger.error("Fatal error during reprocessing:", error);
+  } catch (error: any) {
+    log(`Fatal error during reprocessing: ${error.message}\n${error.stack}`);
     process.exit(1);
   }
 }
 
-// Run the reprocessing script
-thoroughReprocessData().catch(error => {
-  logger.error("Script execution error:", error);
+// Run the thorough reprocessing script
+thoroughReprocessData().then(() => {
+  log('Script execution completed');
+}).catch(error => {
+  log(`Script execution error: ${error}`);
   process.exit(1);
 });
