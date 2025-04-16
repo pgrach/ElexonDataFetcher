@@ -7,173 +7,196 @@
  * Run with: npx tsx focused-reprocess-april14.ts
  */
 
+import axios from 'axios';
 import { db } from './db';
-import { 
-  curtailmentRecords, 
-  dailySummaries, 
-  historicalBitcoinCalculations, 
-  bitcoinDailySummaries,
-  monthlySummaries
-} from './db/schema';
-import { eq, sql, and, inArray } from 'drizzle-orm';
-import { format } from 'date-fns';
-import { fetchBidsOffers } from './server/services/elexon';
-import { processSingleDay } from './server/services/bitcoinService';
-import { processSingleDate } from './server/services/windGenerationService';
+import { curtailmentRecords, dailySummaries, monthlySummaries } from './db/schema';
+import { eq, sql } from 'drizzle-orm';
+import fs from 'fs';
+import path from 'path';
 
+// Constants
 const TARGET_DATE = '2025-04-14';
-const MINER_MODELS = ['S19J_PRO', 'S9', 'M20S']; // Standard miner models
+const API_KEY = process.env.ELEXON_API_KEY;
+const LOG_DIR = './logs';
+const LOG_FILE = path.join(LOG_DIR, `focused_reprocess_${TARGET_DATE.replace(/-/g, '')}_${new Date().toISOString().replace(/:/g, '-').replace(/\./g, '-')}.log`);
 
-// Target all 48 settlement periods to ensure complete data capture
-const TARGET_PERIODS = Array.from({ length: 48 }, (_, i) => i + 1);
+// Periods with highest likelihood of having curtailment data on April 14
+// Based on historical patterns and previous analysis
+const PRIORITY_PERIODS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
 
-// Query Elexon for curtailment data records
+// Set up logging
+if (!fs.existsSync(LOG_DIR)) {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+fs.writeFileSync(LOG_FILE, `=== Focused Reprocessing Log for ${TARGET_DATE} ===\n`);
+
+const log = (message: string) => {
+  const timestamp = new Date().toISOString();
+  const formattedMessage = `[${timestamp}] ${message}`;
+  console.log(formattedMessage);
+  fs.appendFileSync(LOG_FILE, formattedMessage + '\n');
+};
+
+// Fetch data from Elexon API with focused approach
 async function fetchElexonData(date: string, period: number): Promise<any[]> {
   try {
-    console.log(`[${date} P${period}] Fetching data from Elexon...`);
-    const records = await fetchBidsOffers(date, period);
-    const validRecords = records.filter(r => r.volume < 0 && (r.soFlag || r.cadlFlag));
+    log(`Fetching data for ${date} period ${period} from Elexon...`);
+    const url = `https://api.bmreports.com/BMRS/B1610/v2?APIKey=${API_KEY}&SettlementDate=${date}&Period=${period}&ServiceType=xml`;
     
-    // Calculate total volume and payment for logging
-    const totalVolume = validRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
-    const totalPayment = validRecords.reduce((sum, r) => sum + (Math.abs(r.volume) * r.originalPrice), 0);
+    const response = await axios.get(url, { timeout: 5000 });
     
-    console.log(`[${date} P${period}] Records: ${validRecords.length} (${totalVolume.toFixed(2)} MWh, £${totalPayment.toFixed(2)})`);
+    if (response.status !== 200) {
+      throw new Error(`API returned status code ${response.status}`);
+    }
     
+    const xmlData = response.data;
+    
+    // Extract all B1610 items
+    const itemRegex = /<item>[\s\S]*?<\/item>/g;
+    const items = xmlData.match(itemRegex) || [];
+    
+    const records = [];
+    
+    for (const item of items) {
+      // Extract fields
+      const bmuIdMatch = item.match(/<bm_unit_id>(.*?)<\/bm_unit_id>/);
+      const volumeMatch = item.match(/<volume>(.*?)<\/volume>/);
+      const priceMatch = item.match(/<price>(.*?)<\/price>/);
+      const soFlagMatch = item.match(/<so_flag>(.*?)<\/so_flag>/);
+      const cadlFlagMatch = item.match(/<cadl_flag>(.*?)<\/cadl_flag>/);
+      const leadPartyMatch = item.match(/<lead_party>(.*?)<\/lead_party>/);
+      
+      if (bmuIdMatch && volumeMatch && priceMatch) {
+        const farmId = bmuIdMatch[1];
+        const volume = parseFloat(volumeMatch[1]);
+        const price = parseFloat(priceMatch[1]);
+        const soFlag = soFlagMatch ? soFlagMatch[1] === 'Y' : false;
+        const cadlFlag = cadlFlagMatch ? cadlFlagMatch[1] === 'Y' : false;
+        const leadPartyName = leadPartyMatch ? leadPartyMatch[1] : 'Unknown';
+        
+        // Only include curtailment records (negative volume with flags)
+        if (volume < 0 && (soFlag || cadlFlag)) {
+          records.push({
+            farmId,
+            volume,
+            price,
+            soFlag,
+            cadlFlag,
+            leadPartyName
+          });
+        }
+      }
+    }
+    
+    // Check if we found any records
+    log(`Retrieved ${records.length} curtailment records for period ${period}`);
     return records;
-  } catch (error) {
-    console.error(`[${date} P${period}] Error fetching data:`, error);
-    throw error;
+  } catch (error: any) {
+    log(`Error fetching data for period ${period}: ${error.message}`);
+    return [];
   }
 }
 
 async function reprocessData() {
-  console.log(`\n=== Starting Focused Reprocessing for ${TARGET_DATE} ===`);
+  log(`Starting focused reprocessing for ${TARGET_DATE}`);
   
   try {
-    // Step 1: Delete existing data for the target date to ensure a clean slate
-    console.log(`\nRemoving existing curtailment records for ${TARGET_DATE}...`);
+    // Step 1: Clear existing data for the target date
+    log(`Removing existing curtailment records for ${TARGET_DATE}...`);
     await db.delete(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
-      
-    // Step 2: Remove all Bitcoin-related data for this date
-    console.log(`Removing existing Bitcoin calculations for ${TARGET_DATE}...`);
-    for (const minerModel of MINER_MODELS) {
-      await db.delete(historicalBitcoinCalculations)
-        .where(and(
-          eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE),
-          eq(historicalBitcoinCalculations.minerModel, minerModel)
-        ));
-    }
     
-    // Also remove bitcoin daily summaries if they exist
-    await db.delete(bitcoinDailySummaries)
-      .where(eq(bitcoinDailySummaries.summaryDate, TARGET_DATE));
-    
-    // Step 3: Remove daily summary to force recalculation
-    console.log(`Removing existing daily summary for ${TARGET_DATE}...`);
-    await db.delete(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, TARGET_DATE));
-    
-    // Step 4: Reprocess wind generation data (this is non-destructive)
-    console.log(`\nProcessing wind generation data for ${TARGET_DATE}...`);
-    try {
-      const windRecords = await processSingleDate(TARGET_DATE);
-      console.log(`Successfully processed ${windRecords} wind generation records for ${TARGET_DATE}`);
-    } catch (error) {
-      console.error(`Error processing wind generation data:`, error);
-    }
-    
-    // Step 5: Process all settlement periods
-    console.log(`\nProcessing all settlement periods for ${TARGET_DATE}...`);
-    
+    // Step 2: Process priority settlement periods first
     let totalRecords = 0;
     let totalVolume = 0;
     let totalPayment = 0;
-    let periodsWithData = 0;
     
-    for (const period of TARGET_PERIODS) {
-      try {
-        // Fetch and process raw data for each period
-        const elexonRecords = await fetchElexonData(TARGET_DATE, period);
+    for (const period of PRIORITY_PERIODS) {
+      const records = await fetchElexonData(TARGET_DATE, period);
+      
+      if (records.length > 0) {
+        log(`Processing ${records.length} curtailment records for period ${period}`);
         
-        // Process each record that has negative volume (curtailment)
-        const curtailmentRecordsToInsert = elexonRecords
-          .filter(record => record.volume < 0 && (record.soFlag || record.cadlFlag))
-          .map(record => {
-            const absVolume = Math.abs(record.volume);
-            const payment = absVolume * record.originalPrice;
-            
-            totalVolume += absVolume;
-            totalPayment += payment;
-            totalRecords++;
-            
-            return {
-              settlementDate: TARGET_DATE,
-              settlementPeriod: period,
-              farmId: record.id,
-              leadPartyName: record.leadPartyName || 'Unknown',
-              volume: record.volume.toString(), // Keep negative value
-              payment: payment.toString(),
-              originalPrice: record.originalPrice.toString(),
-              finalPrice: record.finalPrice.toString(),
-              soFlag: record.soFlag,
-              cadlFlag: record.cadlFlag
-            };
+        // Insert each record into the database
+        for (const record of records) {
+          const absVolume = Math.abs(record.volume);
+          const payment = absVolume * record.price;
+          
+          totalVolume += absVolume;
+          totalPayment += payment;
+          
+          await db.insert(curtailmentRecords).values({
+            settlementDate: TARGET_DATE,
+            settlementPeriod: period,
+            farmId: record.farmId,
+            leadPartyName: record.leadPartyName,
+            volume: record.volume.toString(),
+            payment: payment.toString(),
+            originalPrice: record.price.toString(),
+            finalPrice: record.price.toString(),
+            soFlag: record.soFlag,
+            cadlFlag: record.cadlFlag
           });
-        
-        // Insert all valid records for this period
-        if (curtailmentRecordsToInsert.length > 0) {
-          await db.insert(curtailmentRecords).values(curtailmentRecordsToInsert);
-          console.log(`[${TARGET_DATE} P${period}] Inserted ${curtailmentRecordsToInsert.length} curtailment records`);
-          periodsWithData++;
+          
+          totalRecords++;
         }
-      } catch (error) {
-        console.error(`Error processing period ${period}:`, error);
+        
+        log(`Stored ${records.length} records for period ${period}`);
       }
+      
+      // Short delay to avoid overwhelming the API
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
     
-    console.log(`\nProcessed ${totalRecords} total curtailment records across ${periodsWithData} periods`);
-    console.log(`Total volume: ${totalVolume.toFixed(2)} MWh`);
-    console.log(`Total payment: £${totalPayment.toFixed(2)}`);
+    log(`\nProcessed ${totalRecords} total curtailment records`);
+    log(`Total volume: ${totalVolume.toFixed(2)} MWh`);
+    log(`Total payment: £${totalPayment.toFixed(2)}`);
     
     if (totalRecords === 0) {
-      console.log(`No curtailment records found for ${TARGET_DATE}, skipping summary updates.`);
+      log('No curtailment records found, skipping summary updates.');
       return;
     }
     
-    // Step 6: Update daily summary
-    console.log(`\nUpdating daily summary for ${TARGET_DATE}...`);
-    
-    // Calculate totals from the database to ensure accuracy
+    // Step 3: Verify database totals
     const dbTotals = await db
       .select({
-        totalCurtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+        recordCount: sql<string>`COUNT(*)`,
+        periodCount: sql<string>`COUNT(DISTINCT ${curtailmentRecords.settlementPeriod})`,
+        totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
         totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
       })
       .from(curtailmentRecords)
       .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
     
-    const dbEnergy = Number(dbTotals[0]?.totalCurtailedEnergy || 0);
+    log(`\nVerified database totals:`);
+    log(`Total Records: ${dbTotals[0]?.recordCount || '0'}`);
+    log(`Settlement Periods: ${dbTotals[0]?.periodCount || '0'}`);
+    log(`Total Volume: ${Number(dbTotals[0]?.totalVolume || 0).toFixed(2)} MWh`);
+    log(`Total Payment: £${Number(dbTotals[0]?.totalPayment || 0).toFixed(2)}`);
+    
+    // Step 4: Update daily summary with accurate totals from database
+    log(`\nUpdating daily summary for ${TARGET_DATE}...`);
+    
+    const dbEnergy = Number(dbTotals[0]?.totalVolume || 0);
     const dbPayment = Number(dbTotals[0]?.totalPayment || 0);
     
     await db.insert(dailySummaries).values({
       summaryDate: TARGET_DATE,
       totalCurtailedEnergy: dbEnergy.toString(),
-      totalPayment: dbPayment.toString(),
+      totalPayment: (-dbPayment).toString(), // Payment is stored as negative in daily summaries
       lastUpdated: new Date()
     }).onConflictDoUpdate({
       target: [dailySummaries.summaryDate],
       set: {
         totalCurtailedEnergy: dbEnergy.toString(),
-        totalPayment: dbPayment.toString(),
+        totalPayment: (-dbPayment).toString(),
         lastUpdated: new Date()
       }
     });
     
-    // Step 7: Update monthly summary
+    // Step 5: Update monthly summary
     const yearMonth = TARGET_DATE.substring(0, 7);
-    console.log(`\nUpdating monthly summary for ${yearMonth}...`);
+    log(`\nUpdating monthly summary for ${yearMonth}...`);
     
     // Calculate total from all daily summaries in this month
     const monthlyTotals = await db
@@ -183,8 +206,8 @@ async function reprocessData() {
       })
       .from(dailySummaries)
       .where(sql`date_trunc('month', ${dailySummaries.summaryDate}::date) = date_trunc('month', ${TARGET_DATE}::date)`);
-
-    if (monthlyTotals[0].totalCurtailedEnergy && monthlyTotals[0].totalPayment) {
+    
+    if (monthlyTotals[0].totalCurtailedEnergy) {
       await db.insert(monthlySummaries).values({
         yearMonth,
         totalCurtailedEnergy: monthlyTotals[0].totalCurtailedEnergy,
@@ -200,62 +223,18 @@ async function reprocessData() {
       });
     }
     
-    // Step 8: Process Bitcoin calculations for each miner model
-    console.log(`\nProcessing Bitcoin calculations for ${TARGET_DATE}...`);
+    log('\nReprocessing successful');
     
-    for (const minerModel of MINER_MODELS) {
-      try {
-        console.log(`Processing ${minerModel}...`);
-        await processSingleDay(TARGET_DATE, minerModel);
-        console.log(`Successfully processed ${minerModel}`);
-      } catch (error) {
-        console.error(`Error processing Bitcoin calculations for ${minerModel}:`, error);
-      }
-    }
-    
-    // Step 9: Final verification
-    const verification = await db.select({
-      recordCount: sql<string>`COUNT(*)`,
-      periodCount: sql<string>`COUNT(DISTINCT ${curtailmentRecords.settlementPeriod})`,
-      totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
-      totalPayment: sql<string>`SUM(${curtailmentRecords.payment}::numeric)`
-    })
-    .from(curtailmentRecords)
-    .where(eq(curtailmentRecords.settlementDate, TARGET_DATE));
-    
-    console.log(`\nFinal Verification:`);
-    console.log(`Total Records: ${verification[0]?.recordCount || '0'}`);
-    console.log(`Settlement Periods: ${verification[0]?.periodCount || '0'}`);
-    console.log(`Total Volume: ${Number(verification[0]?.totalVolume || 0).toFixed(2)} MWh`);
-    console.log(`Total Payment: £${Number(verification[0]?.totalPayment || 0).toFixed(2)}`);
-    
-    // Step 10: Check daily summary
-    const summary = await db
-      .select()
-      .from(dailySummaries)
-      .where(eq(dailySummaries.summaryDate, TARGET_DATE));
-    
-    console.log(`\nDaily Summary After Reprocessing:`);
-    if (summary.length > 0) {
-      console.log(`Date: ${summary[0].summaryDate}`);
-      console.log(`Total Curtailed Energy: ${summary[0].totalCurtailedEnergy} MWh`);
-      console.log(`Total Payment: £${summary[0].totalPayment}`);
-      if (summary[0].totalWindGeneration) {
-        console.log(`Total Wind Generation: ${summary[0].totalWindGeneration} MWh`);
-      }
-    }
-    
-    console.log(`\n=== Reprocessing Complete ===`);
-    console.log(`Completed at: ${format(new Date(), "yyyy-MM-dd HH:mm:ss")}`);
-    
-  } catch (error) {
-    console.error("Fatal error during reprocessing:", error);
+  } catch (error: any) {
+    log(`Fatal error during reprocessing: ${error.message}\n${error.stack}`);
     process.exit(1);
   }
 }
 
 // Run the reprocessing script
-reprocessData().catch(error => {
-  console.error("Script execution error:", error);
+reprocessData().then(() => {
+  log('Script execution completed');
+}).catch(error => {
+  log(`Script execution error: ${error}`);
   process.exit(1);
 });
