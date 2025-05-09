@@ -4,11 +4,11 @@ import { eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { fetchBidsOffers } from "./elexon";
 import { curtailmentRecords } from "@db/schema";
-import { processDailyCurtailment } from "./curtailment";
+import { processDailyCurtailment } from "./curtailmentService";
 import type { ElexonBidOffer } from "../types/elexon";
 import { processSingleDay } from "./bitcoinService";
 import { reconcileDay } from "./historicalReconciliation";
-import { getWindDataServiceStatus, processWindDataForDate } from "./windDataUpdater";
+import { getWindDataServiceStatus, processWindDataForDate } from "./windDataUpdateService";
 
 // Temporary stub for the daily reconciliation check
 // TODO: Implement proper reconciliation check system

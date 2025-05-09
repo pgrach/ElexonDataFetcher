@@ -11,6 +11,7 @@ The scripts are organized into the following categories:
 The `maintenance` directory contains scripts that need to be run periodically to keep the system up-to-date:
 
 - **updateBmuMapping.ts**: Updates the BMU (Balancing Mechanism Unit) mapping from the Elexon API. This script fetches the latest wind farm data and updates the `bmuMapping.json` file used by the application.
+- **logs/logRotation.ts**: Manages log files by archiving older logs and organizing them by date and type to prevent excessive accumulation of log files.
 
 ### Data Processing Scripts
 
@@ -27,6 +28,9 @@ These scripts can be executed directly using the TypeScript execution engine:
 ```bash
 # To run a maintenance script
 npx tsx server/scripts/maintenance/updateBmuMapping.ts
+
+# To run the log rotation script
+npx tsx server/scripts/maintenance/logs/logRotation.ts
 
 # To run a data processing script
 npx tsx server/scripts/data/ingestMonthlyData.ts
