@@ -9,7 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
-const BMU_MAPPING_PATH = path.join(__dirname, "../data/bmuMapping.json");
+// Use absolute path for consistent reference across all services
+const BMU_MAPPING_PATH = path.join(process.cwd(), "server", "data", "bmuMapping.json");
 const MAX_REQUESTS_PER_MINUTE = 4500; // Keep buffer below 5000 limit
 const REQUEST_WINDOW_MS = 60000; // 1 minute in milliseconds
 const PARALLEL_REQUESTS = 10; // Allow 10 parallel requests

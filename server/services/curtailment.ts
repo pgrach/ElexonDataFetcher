@@ -9,7 +9,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const BMU_MAPPING_PATH = path.join(__dirname, "../data/bmuMapping.json");
+// Use absolute path for consistent reference across all services
+const BMU_MAPPING_PATH = path.join(process.cwd(), "server", "data", "bmuMapping.json");
 
 let windFarmBmuIds: Set<string> | null = null;
 let bmuLeadPartyMap: Map<string, string> | null = null;

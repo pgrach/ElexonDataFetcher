@@ -34,6 +34,7 @@ export interface BMUMapping {
 }
 
 // Path to the BMU mapping file
+// Use absolute path for consistent reference across all services
 const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 
 // Cache for BMU mappings

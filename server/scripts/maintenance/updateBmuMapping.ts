@@ -4,6 +4,7 @@ import path from 'path';
 import { z } from 'zod';
 
 const ELEXON_API_URL = 'https://data.elexon.co.uk/bmrs/api/v1/reference/bmunits/all';
+// This is the central BMU mapping file used by all services
 const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 
 const MAX_RETRIES = 3;
