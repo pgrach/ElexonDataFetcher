@@ -209,3 +209,25 @@ export async function getMonthlyComparison(req: Request, res: Response) {
     });
   }
 }
+
+/**
+ * Get the most recent date with curtailment data
+ */
+export async function getLatestDate(req: Request, res: Response) {
+  try {
+    const latestDate = await summaryService.getMostRecentDateWithData();
+    
+    if (!latestDate) {
+      return res.status(404).json({
+        error: "No curtailment data available"
+      });
+    }
+    
+    res.json({ date: latestDate });
+  } catch (error) {
+    console.error('Error fetching latest date:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching the latest date"
+    });
+  }
+}

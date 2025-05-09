@@ -14,6 +14,9 @@ export function registerRoutes(app: Express): Server {
 
   // Get curtailed lead parties for a specific date
   app.get("/api/lead-parties/:date", summaryController.getCurtailedLeadParties);
+  
+  // Get the most recent date with curtailment data
+  app.get("/api/latest-date", summaryController.getLatestDate);
 
   // Daily summary endpoint - uses route parameters for date
   app.get("/api/summary/daily/:date", summaryController.getDailySummary);

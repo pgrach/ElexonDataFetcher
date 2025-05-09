@@ -21,11 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function DashboardOverview() {
   // State
-  const [date, setDate] = useState<Date>(() => {
-    const today = new Date();
-    const startDate = new Date("2022-01-01");
-    return today < startDate ? startDate : today;
-  });
+  const [date, setDate] = useState<Date | null>(null);
   const [selectedLeadParty, setSelectedLeadParty] = useState<string | null>(null);
   const [selectedMinerModel, setSelectedMinerModel] = useState("S19J_PRO");
   const [selectedFarm, setSelectedFarm] = useState("all"); // 'all' represents all farms
@@ -35,8 +31,37 @@ export default function DashboardOverview() {
   
   // Removed Lead Party selector for Curtailment Analysis
 
-  // Derived values
-  const formattedDate = format(date, "yyyy-MM-dd");
+  // Fetch the latest date with curtailment data
+  const { data: latestDateData, isLoading: isLatestDateLoading } = useQuery({
+    queryKey: ['/api/latest-date'],
+    queryFn: async () => {
+      const response = await fetch('/api/latest-date');
+      if (!response.ok) {
+        // If we can't get the latest date, default to today
+        return { date: new Date().toISOString().split('T')[0] };
+      }
+      return response.json();
+    },
+    // Default to today if the query fails
+    placeholderData: { date: new Date().toISOString().split('T')[0] }
+  });
+
+  // Set the initial date once we have the latest date
+  useEffect(() => {
+    if (latestDateData?.date && !date) {
+      const newDate = new Date(latestDateData.date);
+      // Ensure it's a valid date
+      if (isValid(newDate)) {
+        setDate(newDate);
+      } else {
+        // Fallback to today if invalid
+        setDate(new Date());
+      }
+    }
+  }, [latestDateData, date]);
+
+  // Derived values - use fallback to today if date is null
+  const formattedDate = date ? format(date, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
   
   // Check if there's data available - will be used to conditionally show/hide charts for daily view
   const dailyDataCheck = useQuery({

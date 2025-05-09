@@ -22,7 +22,7 @@ import {
 
 interface SummaryCardsProps {
   timeframe: string;
-  date: Date;
+  date: Date | null;
   minerModel: string;
   farmId: string;
 }
@@ -33,10 +33,13 @@ export default function SummaryCards({
   minerModel,
   farmId,
 }: SummaryCardsProps) {
+  // If date is null, use current date as fallback
+  const dateToUse = date || new Date();
+  
   // Format dates based on timeframe
-  const formattedDate = format(date, "yyyy-MM-dd");
-  const yearMonth = format(date, "yyyy-MM");
-  const year = format(date, "yyyy");
+  const formattedDate = format(dateToUse, "yyyy-MM-dd");
+  const yearMonth = format(dateToUse, "yyyy-MM");
+  const year = format(dateToUse, "yyyy");
 
   // Determine which summary to fetch based on timeframe
   const summaryEndpoint =
@@ -122,10 +125,10 @@ export default function SummaryCards({
   // Helper for displaying timeframe-specific text
   const timeframeLabel =
     timeframe === "yearly"
-      ? format(date, "yyyy")
+      ? format(dateToUse, "yyyy")
       : timeframe === "monthly"
-        ? format(date, "MMMM yyyy")
-        : format(date, "PP");
+        ? format(dateToUse, "MMMM yyyy")
+        : format(dateToUse, "PP");
 
   // Check if there's no data for the selected date
   // Add some debug logging to see what's coming from the API

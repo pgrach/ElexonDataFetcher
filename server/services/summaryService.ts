@@ -7,7 +7,7 @@
 
 import { db } from "@db";
 import { dailySummaries, monthlySummaries, yearlySummaries, curtailmentRecords } from "@db/schema";
-import { eq, sql, and, desc } from "drizzle-orm";
+import { eq, sql, and, desc, count } from "drizzle-orm";
 
 /**
  * Get all lead parties in the system
@@ -264,4 +264,21 @@ export async function getMonthlyComparison(yearMonth: string): Promise<any[]> {
       isSelected: currentYearMonth === yearMonth
     };
   });
+}
+
+/**
+ * Get the most recent date with curtailment data 
+ * 
+ * @returns Promise resolving to the most recent date with curtailment data or null if no data exists
+ */
+export async function getMostRecentDateWithData(): Promise<string | null> {
+  const result = await db
+    .select({
+      mostRecentDate: curtailmentRecords.settlementDate
+    })
+    .from(curtailmentRecords)
+    .orderBy(desc(curtailmentRecords.settlementDate))
+    .limit(1);
+
+  return result.length > 0 ? result[0].mostRecentDate : null;
 }
