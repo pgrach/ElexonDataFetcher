@@ -166,3 +166,102 @@ export async function getYearlySummary(year: string): Promise<{
     totalPayment: Number(summary[0].totalPayment)
   };
 }
+
+/**
+ * Get hourly curtailment data for a specific date
+ * 
+ * @param date Date in YYYY-MM-DD format
+ * @returns Promise resolving to hourly curtailment data
+ */
+export async function getHourlyCurtailment(date: string): Promise<any[]> {
+  // Hourly curtailment query that groups records by settlement period
+  const hourlyCurtailment = await db
+    .select({
+      hour: sql<number>`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`,
+      totalVolume: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`,
+      totalPayment: sql<string>`SUM(ABS(${curtailmentRecords.payment}::numeric))`
+    })
+    .from(curtailmentRecords)
+    .where(eq(curtailmentRecords.settlementDate, date))
+    .groupBy(sql`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`)
+    .orderBy(sql`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`);
+
+  // Transform and format the results
+  return hourlyCurtailment.map(record => ({
+    hour: record.hour,
+    label: `${record.hour}:00 - ${record.hour + 1}:00`,
+    curtailedEnergy: Number(record.totalVolume),
+    payment: Number(record.totalPayment)
+  }));
+}
+
+/**
+ * Get hourly comparison data for a specific date
+ * Compares curtailment with wind generation data
+ * 
+ * @param date Date in YYYY-MM-DD format
+ * @returns Promise resolving to hourly comparison data
+ */
+export async function getHourlyComparison(date: string): Promise<any[]> {
+  // Hourly curtailment data grouped by period/hour
+  const curtailmentByHour = await db
+    .select({
+      hour: sql<number>`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`,
+      curtailedEnergy: sql<string>`SUM(ABS(${curtailmentRecords.volume}::numeric))`
+    })
+    .from(curtailmentRecords)
+    .where(eq(curtailmentRecords.settlementDate, date))
+    .groupBy(sql`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`)
+    .orderBy(sql`FLOOR((${curtailmentRecords.settlementPeriod} - 1) / 2)`);
+
+  // Transform the data for the chart
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  
+  return hours.map(hour => {
+    const curtailmentData = curtailmentByHour.find(c => c.hour === hour);
+    
+    return {
+      hour,
+      label: `${hour}:00`,
+      curtailedEnergy: curtailmentData ? Number(curtailmentData.curtailedEnergy) : 0
+    };
+  });
+}
+
+/**
+ * Get monthly comparison data for a specific year-month
+ * 
+ * @param yearMonth Year-month in YYYY-MM format
+ * @returns Promise resolving to monthly comparison data
+ */
+export async function getMonthlyComparison(yearMonth: string): Promise<any[]> {
+  // Extract year from yearMonth
+  const year = yearMonth.substring(0, 4);
+  
+  // Get all monthly summaries for the year
+  const monthlySummaryData = await db
+    .select({
+      yearMonth: monthlySummaries.yearMonth,
+      totalCurtailedEnergy: monthlySummaries.totalCurtailedEnergy,
+      totalPayment: monthlySummaries.totalPayment
+    })
+    .from(monthlySummaries)
+    .where(sql`${monthlySummaries.yearMonth} LIKE ${year + '-%'}`)
+    .orderBy(monthlySummaries.yearMonth);
+
+  // Transform data for chart display
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+  
+  return months.map((month, index) => {
+    const monthNum = String(index + 1).padStart(2, '0');
+    const currentYearMonth = `${year}-${monthNum}`;
+    const monthData = monthlySummaryData.find(m => m.yearMonth === currentYearMonth);
+    
+    return {
+      month,
+      curtailedEnergy: monthData ? Number(monthData.totalCurtailedEnergy) : 0,
+      payment: monthData ? Number(monthData.totalPayment) : 0,
+      isSelected: currentYearMonth === yearMonth
+    };
+  });
+}

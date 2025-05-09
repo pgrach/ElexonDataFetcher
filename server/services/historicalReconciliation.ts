@@ -1,11 +1,11 @@
 import { db } from "@db";
 import { curtailmentRecords, dailySummaries, monthlySummaries, yearlySummaries, historicalBitcoinCalculations, windGenerationData } from "@db/schema";
 import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays, subMonths, eachDayOfInterval } from "date-fns";
-import { processDailyCurtailment } from "./curtailment";
+import { processDailyCurtailment } from "./curtailmentService";
 import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
 import { calculateMonthlyBitcoinSummary, manualUpdateYearlyBitcoinSummary, processSingleDay } from "./bitcoinService";
-import { processWindDataForDate } from "./windDataUpdater";
+import { processWindDataForDate } from "./windDataUpdateService";
 
 // Configuration constants
 const MAX_CONCURRENT_DAYS = 5;
