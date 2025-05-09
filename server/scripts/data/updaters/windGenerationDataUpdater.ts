@@ -4,9 +4,9 @@
  * This script provides a simple way to update wind generation data from Elexon's API.
  */
 
-import { processRecentDays } from './server/services/windGenerationService';
-import { getRecentDates } from './server/utils/dates';
-import { logger } from './server/utils/logger';
+import { processRecentDays } from '../../../services/windGenerationService';
+import { getRecentDates } from '../../../utils/dates';
+import { logger } from '../../../utils/logger';
 
 /**
  * Simple interface for update result

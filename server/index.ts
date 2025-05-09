@@ -7,7 +7,7 @@ import { requestLogger } from "./middleware/requestLogger";
 import { errorHandler } from "./middleware/errorHandler";
 import { performanceMonitor } from "./middleware/performanceMonitor";
 import { logger } from "./utils/logger";
-import { runMigration } from "../run_wind_data_migration";
+import { runMigration } from "./scripts/data/migrations/windGenerationDataMigration";
 
 // Initialize Express app
 const app = express();

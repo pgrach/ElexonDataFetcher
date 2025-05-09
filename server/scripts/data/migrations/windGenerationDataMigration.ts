@@ -4,9 +4,9 @@
  * This script ensures the wind_generation_data table is properly set up
  */
 
-import { db } from './db';
+import { db } from '../../../../db';
 import { sql } from 'drizzle-orm';
-import { logger } from './server/utils/logger';
+import { logger } from '../../../utils/logger';
 
 /**
  * Run the migration to ensure the wind_generation_data table exists

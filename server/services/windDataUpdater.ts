@@ -16,7 +16,7 @@ import { processRecentDays, processSingleDate, processDateRange, getLatestDataDa
 import { logger } from '../utils/logger';
 import { formatDate } from '../utils/dates';
 import { subDays, format } from 'date-fns';
-import { runWindDataUpdate } from '../../update_wind_generation_data';
+import { runWindDataUpdate } from '../scripts/data/updaters/windGenerationDataUpdater';
 
 // Scheduling constants
 const DEFAULT_UPDATE_HOUR = 1;  // 1 AM daily
