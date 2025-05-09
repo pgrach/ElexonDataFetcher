@@ -385,7 +385,7 @@ export async function calculateFarmCurtailmentPercentage(farmId: string, date: s
     } catch (error) {
       logger.error(`Failed to fetch wind generation data for ${date}`, {
         module: 'pnDataService',
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error : new Error(String(error))
       });
     }
     
@@ -565,9 +565,8 @@ export async function calculateFarmCurtailmentPercentage(farmId: string, date: s
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('Error calculating farm curtailment percentage', {
       module: 'pnDataService',
-      farmId,
-      date,
-      error: errorMessage
+      context: { farmId, date },
+      error: new Error(errorMessage)
     });
     throw new Error(`Failed to calculate curtailment for farm ${farmId}: ${errorMessage}`);
   }
@@ -633,7 +632,8 @@ export async function calculateLeadPartyCurtailmentPercentage(leadPartyName: str
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.warning(`Error calculating curtailment for farm ${farmId}, skipping in lead party summary`, {
           module: 'pnDataService',
-          error: errorMessage
+          context: { farmId },
+          error: new Error(errorMessage)
         });
         // Continue with other farms
       }
@@ -656,9 +656,8 @@ export async function calculateLeadPartyCurtailmentPercentage(leadPartyName: str
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('Error calculating lead party curtailment percentage', {
       module: 'pnDataService',
-      leadPartyName,
-      date,
-      error: errorMessage
+      context: { leadPartyName, date },
+      error: new Error(errorMessage)
     });
     throw new Error(`Failed to calculate curtailment for lead party ${leadPartyName}: ${errorMessage}`);
   }
@@ -686,10 +685,8 @@ export async function getPNDataForPeriod(date: string, period: number, farmId?: 
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('Error getting PN data for period', {
       module: 'pnDataService',
-      date,
-      period,
-      farmId,
-      error: errorMessage
+      context: { date, period, farmId },
+      error: new Error(errorMessage)
     });
     throw new Error(`Failed to get PN data for period ${period} on ${date}: ${errorMessage}`);
   }
