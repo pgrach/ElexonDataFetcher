@@ -9,7 +9,7 @@ import { PoundSterling } from "lucide-react";
 
 interface FarmComparisonChartProps {
   timeframe: string;
-  date: Date;
+  date: Date | null;
   minerModel: string;
 }
 
@@ -23,9 +23,12 @@ interface TopFarmData {
 }
 
 export default function FarmComparisonChart({ timeframe, date, minerModel }: FarmComparisonChartProps) {
-  const formattedDate = format(date, "yyyy-MM-dd");
-  const yearMonth = format(date, "yyyy-MM");
-  const year = format(date, "yyyy");
+  // Use current date as fallback if date is null
+  const dateToUse = date || new Date();
+  
+  const formattedDate = format(dateToUse, "yyyy-MM-dd");
+  const yearMonth = format(dateToUse, "yyyy-MM");
+  const year = format(dateToUse, "yyyy");
   
   // Determine period and value based on timeframe
   const period = 
@@ -66,8 +69,8 @@ export default function FarmComparisonChart({ timeframe, date, minerModel }: Far
   // Get chart title based on timeframe
   const chartTitle = 
     timeframe === "yearly" ? `Top 5 Curtailed Farms by Volume (${year})` :
-    timeframe === "monthly" ? `Top 5 Curtailed Farms by Volume (${format(date, "MMMM yyyy")})` :
-    `Top 5 Curtailed Farms by Volume (${format(date, "PP")})`;
+    timeframe === "monthly" ? `Top 5 Curtailed Farms by Volume (${format(dateToUse, "MMMM yyyy")})` :
+    `Top 5 Curtailed Farms by Volume (${format(dateToUse, "PP")})`;
   
   // Colors for the bars
   const curtailmentColor = "#000000"; // Black for curtailment
