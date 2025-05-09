@@ -6,6 +6,8 @@
 
 import { Request, Response } from "express";
 import * as summaryService from "../services/summaryService";
+import { isValidDateString } from "../utils/dates";
+import { ValidationError } from "../utils/errors";
 
 /**
  * Get all lead parties
@@ -131,6 +133,79 @@ export async function getYearlySummary(req: Request, res: Response) {
     console.error('Error fetching yearly summary:', error);
     res.status(500).json({
       error: "Internal server error while fetching yearly summary"
+    });
+  }
+}
+
+/**
+ * Get hourly curtailment for a specific date
+ */
+export async function getHourlyCurtailment(req: Request, res: Response) {
+  try {
+    const { date } = req.params;
+    
+    if (!isValidDateString(date)) {
+      return res.status(400).json({
+        error: "Invalid date format. Use YYYY-MM-DD format."
+      });
+    }
+    
+    const hourlyCurtailment = await summaryService.getHourlyCurtailment(date);
+    
+    res.json(hourlyCurtailment);
+  } catch (error) {
+    console.error('Error fetching hourly curtailment:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching hourly curtailment"
+    });
+  }
+}
+
+/**
+ * Get hourly comparison data for the farm opportunity chart
+ */
+export async function getHourlyComparison(req: Request, res: Response) {
+  try {
+    const { date } = req.params;
+    
+    if (!isValidDateString(date)) {
+      return res.status(400).json({
+        error: "Invalid date format. Use YYYY-MM-DD format."
+      });
+    }
+    
+    const comparison = await summaryService.getHourlyComparison(date);
+    
+    res.json(comparison);
+  } catch (error) {
+    console.error('Error fetching hourly comparison:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching hourly comparison"
+    });
+  }
+}
+
+/**
+ * Get monthly comparison data for the farm opportunity chart
+ */
+export async function getMonthlyComparison(req: Request, res: Response) {
+  try {
+    const { yearMonth } = req.params;
+    
+    // Validate yearMonth format (YYYY-MM)
+    if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
+      return res.status(400).json({
+        error: "Invalid month format. Use YYYY-MM format."
+      });
+    }
+    
+    const comparison = await summaryService.getMonthlyComparison(yearMonth);
+    
+    res.json(comparison);
+  } catch (error) {
+    console.error('Error fetching monthly comparison:', error);
+    res.status(500).json({
+      error: "Internal server error while fetching monthly comparison"
     });
   }
 }
