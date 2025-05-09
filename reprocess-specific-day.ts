@@ -32,7 +32,7 @@ const __dirname = path.dirname(__filename);
 const MINER_MODELS = ["S19J_PRO", "S9", "M20S"];
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const SERVER_BMU_MAPPING_PATH = path.join(__dirname, "server/data/bmuMapping.json");
-const DATA_BMU_MAPPING_PATH = path.join(__dirname, "data/bmu_mapping.json");
+const DATA_BMU_MAPPING_PATH = path.join(__dirname, "server/data/bmuMapping.json");
 
 // Get the date to process
 const args = process.argv.slice(2);

@@ -32,7 +32,7 @@ const TARGET_DATE = '2025-05-08';
 const MINER_MODELS = ["S19J_PRO", "S9", "M20S"];
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const SERVER_BMU_MAPPING_PATH = path.join(__dirname, "../server/data/bmuMapping.json");
-const DATA_BMU_MAPPING_PATH = path.join(__dirname, "../data/bmu_mapping.json");
+const DATA_BMU_MAPPING_PATH = path.join(__dirname, "../server/data/bmuMapping.json");
 
 // Based on our debug findings, we'll focus on these periods
 const TARGETED_PERIODS = [27, 28, 29, 30];  // Add a few adjacent periods to be safe

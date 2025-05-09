@@ -192,9 +192,12 @@
     "leadPartyName": "Orsted Burbo (UK) Limited"
   },
   {
+    "nationalGridBmUnit": "CLDRW-1",
     "elexonBmUnit": "E_CLDRW-1",
-    "leadPartyName": "Clyde Windfarm (Scotland) Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "CLDRW-1",
+    "generationCapacity": "37.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Vattenfall Energy Trading"
   },
   {
     "nationalGridBmUnit": "CLFLW-1",
@@ -227,16 +230,6 @@
     "generationCapacity": "30.000",
     "fuelType": "WIND",
     "leadPartyName": "Mobius Renewables Gen. (GB)"
-  },
-  {
-    "elexonBmUnit": "E_EAONE-1",
-    "leadPartyName": "East Anglia One Limited",
-    "fuelType": "WIND"
-  },
-  {
-    "elexonBmUnit": "E_FALRW-1",
-    "leadPartyName": "Fallago Rig Wind Farm Limited",
-    "fuelType": "WIND"
   },
   {
     "nationalGridBmUnit": "GDSTW-1",
@@ -327,11 +320,6 @@
     "leadPartyName": "Mobius Renewables Gen. (GB)"
   },
   {
-    "elexonBmUnit": "E_MOBR2-1",
-    "leadPartyName": "Mobius Renewables 2020 Limited",
-    "fuelType": "WIND"
-  },
-  {
     "nationalGridBmUnit": "MOYEW-1",
     "elexonBmUnit": "E_MOYEW-1",
     "bmUnitName": "Moy Windfarm",
@@ -346,11 +334,6 @@
     "generationCapacity": "50.000",
     "fuelType": "WIND",
     "leadPartyName": "Npower Commercial Gas Limited"
-  },
-  {
-    "elexonBmUnit": "E_SPENR-1",
-    "leadPartyName": "SP Energy Retail Limited",
-    "fuelType": "WIND"
   },
   {
     "nationalGridBmUnit": "SWBKW-1",
@@ -449,24 +432,36 @@
     "leadPartyName": "RWE Generation UK plc"
   },
   {
+    "nationalGridBmUnit": "BEATO-1",
     "elexonBmUnit": "T_BEATO-1",
-    "leadPartyName": "Beatrice Offshore Windfarm Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Beatrice Offshore WF 1",
+    "generationCapacity": "138.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Beatrice Offshore Windfarm Ltd"
   },
   {
+    "nationalGridBmUnit": "BEATO-2",
     "elexonBmUnit": "T_BEATO-2",
-    "leadPartyName": "Beatrice Offshore Windfarm Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Beatrice Offshore WF 2",
+    "generationCapacity": "184.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Beatrice Offshore Windfarm Ltd"
   },
   {
+    "nationalGridBmUnit": "BEATO-3",
     "elexonBmUnit": "T_BEATO-3",
-    "leadPartyName": "Beatrice Offshore Windfarm Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Beatrice Offshore WF 3",
+    "generationCapacity": "184.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Beatrice Offshore Windfarm Ltd"
   },
   {
+    "nationalGridBmUnit": "BEATO-4",
     "elexonBmUnit": "T_BEATO-4",
-    "leadPartyName": "Beatrice Offshore Windfarm Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Beatrice Offshore WF 4",
+    "generationCapacity": "166.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Beatrice Offshore Windfarm Ltd"
   },
   {
     "nationalGridBmUnit": "BEINW-1",
@@ -589,9 +584,12 @@
     "leadPartyName": "Crossdykes WF Limited"
   },
   {
+    "nationalGridBmUnit": "CREAW-1",
     "elexonBmUnit": "T_CREAW-1",
-    "leadPartyName": "Creag Riabhach Wind Farm Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Creag Riabhach Wind Farm",
+    "generationCapacity": "93.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Creag Riabhach Wind Farm Ltd"
   },
   {
     "nationalGridBmUnit": "CRGHW-1",
@@ -722,14 +720,20 @@
     "leadPartyName": "SP Renewables (UK) Limited"
   },
   {
+    "nationalGridBmUnit": "DOREW-1",
     "elexonBmUnit": "T_DOREW-1",
-    "leadPartyName": "Dorenell Windfarm Limited",
-    "fuelType": "WIND"
+    "bmUnitName": "Dorenell Wind Farm One",
+    "generationCapacity": "156.920",
+    "fuelType": "WIND",
+    "leadPartyName": "Dorenell Windfarm Limited"
   },
   {
+    "nationalGridBmUnit": "DOREW-2",
     "elexonBmUnit": "T_DOREW-2",
-    "leadPartyName": "Dorenell Windfarm Limited",
-    "fuelType": "WIND"
+    "bmUnitName": "Dorenell Wind Farm Two",
+    "generationCapacity": "156.920",
+    "fuelType": "WIND",
+    "leadPartyName": "Dorenell Windfarm Limited"
   },
   {
     "nationalGridBmUnit": "DOUGW-1",
@@ -892,14 +896,20 @@
     "leadPartyName": "Gunfleet Sands II Limited"
   },
   {
+    "nationalGridBmUnit": "GORDW-1",
     "elexonBmUnit": "T_GORDW-1",
-    "leadPartyName": "Vattenfall Wind Power Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Gordon Bush",
+    "generationCapacity": "74.206",
+    "fuelType": "WIND",
+    "leadPartyName": "SSE Generation Ltd"
   },
   {
+    "nationalGridBmUnit": "GORDW-2",
     "elexonBmUnit": "T_GORDW-2",
-    "leadPartyName": "Vattenfall Wind Power Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Gordonbush WF Extension",
+    "generationCapacity": "50.000",
+    "fuelType": "WIND",
+    "leadPartyName": "SSE Generation Ltd"
   },
   {
     "nationalGridBmUnit": "GRGBW-1",
@@ -982,9 +992,12 @@
     "leadPartyName": "SSE Renewables Wind Farms"
   },
   {
+    "nationalGridBmUnit": "HALSW-1",
     "elexonBmUnit": "T_HALSW-1",
-    "leadPartyName": "SSE Generation Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Halsary Windfarm",
+    "generationCapacity": "30.000",
+    "fuelType": "WIND",
+    "leadPartyName": "SP Renewables (UK) Limited"
   },
   {
     "nationalGridBmUnit": "HMGTO-1",
@@ -1195,39 +1208,60 @@
     "leadPartyName": "SP Renewables (UK) Limited"
   },
   {
+    "nationalGridBmUnit": "MOWEO-1",
     "elexonBmUnit": "T_MOWEO-1",
-    "leadPartyName": "Moray Offshore Wind East Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Moray East OWF1",
+    "generationCapacity": "300.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Moray Offshore Wind East Ltd"
   },
   {
+    "nationalGridBmUnit": "MOWEO-2",
     "elexonBmUnit": "T_MOWEO-2",
-    "leadPartyName": "Moray Offshore Wind East Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Moray East OWF2",
+    "generationCapacity": "300.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Moray Offshore Wind East Ltd"
   },
   {
+    "nationalGridBmUnit": "MOWEO-3",
     "elexonBmUnit": "T_MOWEO-3",
-    "leadPartyName": "Moray Offshore Wind East Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Moray East OWF3",
+    "generationCapacity": "300.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Moray Offshore Wind East Ltd"
   },
   {
+    "nationalGridBmUnit": "MOWWO-1",
     "elexonBmUnit": "T_MOWWO-1",
-    "leadPartyName": "Moray Offshore Wind West Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Moray West OWF1",
+    "generationCapacity": "215.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Moray Offshore Wind West Ltd"
   },
   {
+    "nationalGridBmUnit": "MOWWO-2",
     "elexonBmUnit": "T_MOWWO-2",
-    "leadPartyName": "Moray Offshore Wind West Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Moray West OWF2",
+    "generationCapacity": "215.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Moray Offshore Wind West Ltd"
   },
   {
+    "nationalGridBmUnit": "MOWWO-3",
     "elexonBmUnit": "T_MOWWO-3",
-    "leadPartyName": "Moray Offshore Wind West Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Moray West OWF3",
+    "generationCapacity": "143.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Moray Offshore Wind West Ltd"
   },
   {
+    "nationalGridBmUnit": "MOWWO-4",
     "elexonBmUnit": "T_MOWWO-4",
-    "leadPartyName": "Moray Offshore Wind West Ltd",
-    "fuelType": "WIND"
+    "bmUnitName": "Moray West OWF4",
+    "generationCapacity": "287.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Moray Offshore Wind West Ltd"
   },
   {
     "nationalGridBmUnit": "MYGPW-1",
@@ -1342,34 +1376,52 @@
     "leadPartyName": "SANQUHAR CWCL"
   },
   {
+    "nationalGridBmUnit": "SGRWO-1",
     "elexonBmUnit": "T_SGRWO-1",
-    "leadPartyName": "Seagreen Wind Energy Limited",
-    "fuelType": "WIND"
+    "bmUnitName": "Seagreen1 Offshore WF 1",
+    "generationCapacity": "358.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Seagreen Wind Energy Limited"
   },
   {
+    "nationalGridBmUnit": "SGRWO-2",
     "elexonBmUnit": "T_SGRWO-2",
-    "leadPartyName": "Seagreen Wind Energy Limited",
-    "fuelType": "WIND"
+    "bmUnitName": "Seagreen1 Offshore WF 2",
+    "generationCapacity": "220.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Seagreen Wind Energy Limited"
   },
   {
+    "nationalGridBmUnit": "SGRWO-3",
     "elexonBmUnit": "T_SGRWO-3",
-    "leadPartyName": "Seagreen Wind Energy Limited",
-    "fuelType": "WIND"
+    "bmUnitName": "Seagreen1 Offshore WF 3",
+    "generationCapacity": "374.618",
+    "fuelType": "WIND",
+    "leadPartyName": "Seagreen Wind Energy Limited"
   },
   {
+    "nationalGridBmUnit": "SGRWO-4",
     "elexonBmUnit": "T_SGRWO-4",
-    "leadPartyName": "Seagreen Wind Energy Limited",
-    "fuelType": "WIND"
+    "bmUnitName": "Seagreen1 Offshore WF 4",
+    "generationCapacity": "140.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Seagreen Wind Energy Limited"
   },
   {
+    "nationalGridBmUnit": "SGRWO-5",
     "elexonBmUnit": "T_SGRWO-5",
-    "leadPartyName": "Seagreen Wind Energy Limited",
-    "fuelType": "WIND"
+    "bmUnitName": "Seagreen1 Offshore WF 5",
+    "generationCapacity": "300.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Seagreen Wind Energy Limited"
   },
   {
+    "nationalGridBmUnit": "SGRWO-6",
     "elexonBmUnit": "T_SGRWO-6",
-    "leadPartyName": "Seagreen Wind Energy Limited",
-    "fuelType": "WIND"
+    "bmUnitName": "Seagreen1 Offshore WF 6",
+    "generationCapacity": "380.000",
+    "fuelType": "WIND",
+    "leadPartyName": "Seagreen Wind Energy Limited"
   },
   {
     "nationalGridBmUnit": "SHRSO-1",
@@ -1484,24 +1536,36 @@
     "leadPartyName": "Twentyshilling Limited"
   },
   {
+    "nationalGridBmUnit": "VKNGW-1",
     "elexonBmUnit": "T_VKNGW-1",
-    "leadPartyName": "Viking Energy Wind Farm LLP",
-    "fuelType": "WIND"
+    "bmUnitName": "Viking Energy Windfarm BMU-1",
+    "generationCapacity": "121.800",
+    "fuelType": "WIND",
+    "leadPartyName": "Viking Energy Wind Farm LLP"
   },
   {
+    "nationalGridBmUnit": "VKNGW-2",
     "elexonBmUnit": "T_VKNGW-2",
-    "leadPartyName": "Viking Energy Wind Farm LLP",
-    "fuelType": "WIND"
+    "bmUnitName": "Viking Energy Windfarm BMU-2",
+    "generationCapacity": "121.800",
+    "fuelType": "WIND",
+    "leadPartyName": "Viking Energy Wind Farm LLP"
   },
   {
+    "nationalGridBmUnit": "VKNGW-3",
     "elexonBmUnit": "T_VKNGW-3",
-    "leadPartyName": "Viking Energy Wind Farm LLP",
-    "fuelType": "WIND"
+    "bmUnitName": "Viking Energy Windfarm BMU-3",
+    "generationCapacity": "121.800",
+    "fuelType": "WIND",
+    "leadPartyName": "Viking Energy Wind Farm LLP"
   },
   {
+    "nationalGridBmUnit": "VKNGW-4",
     "elexonBmUnit": "T_VKNGW-4",
-    "leadPartyName": "Viking Energy Wind Farm LLP",
-    "fuelType": "WIND"
+    "bmUnitName": "Viking Energy Windfarm BMU-4",
+    "generationCapacity": "121.800",
+    "fuelType": "WIND",
+    "leadPartyName": "Viking Energy Wind Farm LLP"
   },
   {
     "nationalGridBmUnit": "WDNSO-1",
