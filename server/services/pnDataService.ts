@@ -55,7 +55,7 @@ async function loadBMUMappings(): Promise<BMUMapping[]> {
   } catch (error) {
     logger.error('Failed to load BMU mappings', { 
       module: 'pnDataService', 
-      error: error instanceof Error ? error.message : String(error) 
+      error: error instanceof Error ? error : new Error(String(error)) 
     });
     throw new Error(error instanceof Error ? error.message : String(error));
   }
@@ -268,11 +268,10 @@ export async function fetchPNData(date: string, period?: number): Promise<Physic
     */
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error('Error processing PN data', { 
+    logger.error(`Error processing PN data for ${date}${period ? ` period ${period}` : ''}`, { 
       module: 'pnDataService', 
-      date, 
-      period,
-      error: errorMessage
+      context: { date, period },
+      error: new Error(errorMessage)
     });
     throw new Error(`Failed to process PN data for ${date}: ${errorMessage}`);
   }
