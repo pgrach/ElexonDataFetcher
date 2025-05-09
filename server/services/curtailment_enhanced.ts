@@ -17,7 +17,7 @@ import { logger } from '../utils/logger';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const BMU_MAPPING_PATH = path.join(__dirname, "../../data/bmu_mapping.json");
+const BMU_MAPPING_PATH = path.join(__dirname, "../data/bmuMapping.json");
 
 let windFarmBmuIds: Set<string> | null = null;
 let bmuLeadPartyMap: Map<string, string> | null = null;

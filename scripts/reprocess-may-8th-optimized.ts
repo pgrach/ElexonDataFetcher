@@ -1,11 +1,13 @@
 /**
- * Fixed Reprocessing Script for 2025-05-08
+ * Optimized Reprocessing Script for 2025-05-08
  * 
- * This improved version addresses issues with the BMU mapping and filtering
- * criteria, ensuring that all curtailment records from Elexon are properly captured.
+ * This script focuses on efficiently processing May 8th data, with targeted
+ * period checks to reduce processing time.
+ * 
+ * Based on our analysis, periods 27-29 contain curtailment records.
  * 
  * Usage:
- *   npx tsx scripts/reprocess-may-8th-fixed.ts
+ *   npx tsx scripts/reprocess-may-8th-optimized.ts
  */
 
 import { db } from "../db";
@@ -14,7 +16,6 @@ import {
   historicalBitcoinCalculations,
   dailySummaries
 } from "../db/schema";
-import { processDailyCurtailment } from "../server/services/curtailment_enhanced";
 import { processWindDataForDate } from "../server/services/windDataUpdater";
 import { processSingleDay } from "../server/services/bitcoinService";
 import { eq, and, sql } from "drizzle-orm";
@@ -32,6 +33,9 @@ const MINER_MODELS = ["S19J_PRO", "S9", "M20S"];
 const ELEXON_BASE_URL = "https://data.elexon.co.uk/bmrs/api/v1";
 const SERVER_BMU_MAPPING_PATH = path.join(__dirname, "../server/data/bmuMapping.json");
 const DATA_BMU_MAPPING_PATH = path.join(__dirname, "../data/bmu_mapping.json");
+
+// Based on our debug findings, we'll focus on these periods
+const TARGETED_PERIODS = [27, 28, 29, 30];  // Add a few adjacent periods to be safe
 
 // Create a unified set of wind farm BMU IDs from both mapping files
 async function getUnifiedWindFarmIds(): Promise<Set<string>> {
@@ -76,6 +80,44 @@ async function getUnifiedWindFarmIds(): Promise<Set<string>> {
   }
 }
 
+// Also create a mapping of BMU IDs to lead party names
+async function getLeadPartyMapping(): Promise<Map<string, string>> {
+  try {
+    const leadPartyMap = new Map<string, string>();
+    
+    // Load from server BMU mapping
+    const serverMappingContent = await fs.readFile(SERVER_BMU_MAPPING_PATH, 'utf8');
+    const serverBmuMapping = JSON.parse(serverMappingContent);
+    
+    serverBmuMapping
+      .filter((bmu: any) => bmu.fuelType === "WIND" && bmu.leadPartyName)
+      .forEach((bmu: any) => {
+        leadPartyMap.set(bmu.elexonBmUnit, bmu.leadPartyName);
+      });
+    
+    // Try to supplement with data BMU mapping if it exists
+    try {
+      const dataMappingContent = await fs.readFile(DATA_BMU_MAPPING_PATH, 'utf8');
+      const dataBmuMapping = JSON.parse(dataMappingContent);
+      
+      dataBmuMapping
+        .filter((bmu: any) => bmu.fuelType === "WIND" && bmu.leadPartyName)
+        .forEach((bmu: any) => {
+          if (!leadPartyMap.has(bmu.elexonBmUnit)) {
+            leadPartyMap.set(bmu.elexonBmUnit, bmu.leadPartyName);
+          }
+        });
+    } catch (error) {
+      // Just continue with server mapping
+    }
+    
+    return leadPartyMap;
+  } catch (error) {
+    console.error(`Error creating lead party mapping:`, error);
+    return new Map(); // Return empty map as fallback
+  }
+}
+
 /**
  * Make API request with retries and rate limiting
  */
@@ -113,6 +155,7 @@ async function makeRequest(url: string, date: string, period: number): Promise<a
 async function customFetchBidsOffers(date: string, period: number): Promise<any[]> {
   try {
     const validWindFarmIds = await getUnifiedWindFarmIds();
+    const leadPartyMap = await getLeadPartyMapping();
     
     // Make parallel requests for bids and offers
     const [bidsResponse, offersResponse] = await Promise.all([
@@ -136,7 +179,7 @@ async function customFetchBidsOffers(date: string, period: number): Promise<any[
       return [];
     }
     
-    // FIXED: Changed filter to match the logic in curtailment_enhanced.ts
+    // Filter with correct logic
     const validBids = bidsResponse.data.data.filter((record: any) => 
       record.volume < 0 && 
       (record.soFlag || record.cadlFlag) && 
@@ -149,7 +192,13 @@ async function customFetchBidsOffers(date: string, period: number): Promise<any[
       validWindFarmIds.has(record.id)
     );
     
-    const allRecords = [...validBids, ...validOffers];
+    // Add lead party names to records if missing
+    const allRecords = [...validBids, ...validOffers].map(record => {
+      if (!record.leadPartyName && leadPartyMap.has(record.id)) {
+        record.leadPartyName = leadPartyMap.get(record.id);
+      }
+      return record;
+    });
     
     if (allRecords.length > 0) {
       const periodTotal = allRecords.reduce((sum, r) => sum + Math.abs(r.volume), 0);
@@ -167,10 +216,10 @@ async function customFetchBidsOffers(date: string, period: number): Promise<any[
 }
 
 /**
- * Manually process curtailment for a specific date with improved filtering
+ * Optimized process curtailment focusing only on targeted periods
  */
-async function manualProcessCurtailment(date: string): Promise<void> {
-  console.log(`Manually processing curtailment data for ${date}`);
+async function optimizedProcessCurtailment(date: string): Promise<void> {
+  console.log(`Optimized processing of curtailment data for ${date}`);
   
   // Clear existing records for the date
   await db.delete(curtailmentRecords)
@@ -180,8 +229,8 @@ async function manualProcessCurtailment(date: string): Promise<void> {
   let totalPayment = 0;
   let recordsProcessed = 0;
   
-  // Process all 48 periods
-  for (let period = 1; period <= 48; period++) {
+  // Process only targeted periods
+  for (const period of TARGETED_PERIODS) {
     try {
       const records = await customFetchBidsOffers(date, period);
       
@@ -256,7 +305,7 @@ async function manualProcessCurtailment(date: string): Promise<void> {
  * Main function to reprocess data for 2025-05-08
  */
 async function reprocessMay8th() {
-  console.log(`\n=== Starting Fixed Reprocessing for ${TARGET_DATE} ===\n`);
+  console.log(`\n=== Starting Optimized Reprocessing for ${TARGET_DATE} ===\n`);
   
   try {
     // Step 1: Clear existing data for the target date
@@ -268,10 +317,10 @@ async function reprocessMay8th() {
     await db.delete(historicalBitcoinCalculations)
       .where(eq(historicalBitcoinCalculations.settlementDate, TARGET_DATE));
     
-    // Step 2: Reprocess curtailment data using our improved method
+    // Step 2: Reprocess curtailment data using our optimized method
     console.log(`\nReprocessing curtailment data for ${TARGET_DATE}...`);
     try {
-      await manualProcessCurtailment(TARGET_DATE);
+      await optimizedProcessCurtailment(TARGET_DATE);
       
       // Verify curtailment data was processed
       const curtailmentStats = await db
