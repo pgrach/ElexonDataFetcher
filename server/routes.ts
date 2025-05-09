@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import * as summaryController from "./controllers/summaryController";
-import { processDailyCurtailment } from "./services/curtailmentService";
+import { getDailySummary, getMonthlySummary, getHourlyCurtailment, getLeadParties, getCurtailedLeadParties, getYearlySummary, getHourlyComparison, getMonthlyComparison } from "./controllers/summary";
+import { processDailyCurtailment } from "./services/curtailment";
 import curtailmentRoutes from "./routes/curtailmentRoutes";
 import optimizedMiningRoutes from "./routes/optimizedMiningRoutes";
 import productionRoutes from "./routes/productionRoutes";
@@ -10,31 +10,28 @@ import windGenerationRoutes from "./routes/windGenerationRoutes";
 
 export function registerRoutes(app: Express): Server {
   // Get lead parties endpoint
-  app.get("/api/lead-parties", summaryController.getLeadParties);
+  app.get("/api/lead-parties", getLeadParties);
 
   // Get curtailed lead parties for a specific date
-  app.get("/api/lead-parties/:date", summaryController.getCurtailedLeadParties);
-  
-  // Get the most recent date with curtailment data
-  app.get("/api/latest-date", summaryController.getLatestDate);
+  app.get("/api/lead-parties/:date", getCurtailedLeadParties);
 
   // Daily summary endpoint - uses route parameters for date
-  app.get("/api/summary/daily/:date", summaryController.getDailySummary);
+  app.get("/api/summary/daily/:date", getDailySummary);
 
   // Monthly summary endpoint
-  app.get("/api/summary/monthly/:yearMonth", summaryController.getMonthlySummary);
+  app.get("/api/summary/monthly/:yearMonth", getMonthlySummary);
 
   // Yearly summary endpoint
-  app.get("/api/summary/yearly/:year", summaryController.getYearlySummary);
+  app.get("/api/summary/yearly/:year", getYearlySummary);
 
   // Hourly curtailment data endpoint
-  app.get("/api/curtailment/hourly/:date", summaryController.getHourlyCurtailment);
+  app.get("/api/curtailment/hourly/:date", getHourlyCurtailment);
   
   // Hourly comparison data endpoint for the farm opportunity chart
-  app.get("/api/curtailment/hourly-comparison/:date", summaryController.getHourlyComparison);
+  app.get("/api/curtailment/hourly-comparison/:date", getHourlyComparison);
   
   // Monthly comparison data endpoint for the farm opportunity chart
-  app.get("/api/curtailment/monthly-comparison/:yearMonth", summaryController.getMonthlyComparison);
+  app.get("/api/curtailment/monthly-comparison/:yearMonth", getMonthlyComparison);
 
   // Register Bitcoin mining calculation routes
   app.use('/api/curtailment', curtailmentRoutes);

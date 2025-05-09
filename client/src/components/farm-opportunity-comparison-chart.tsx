@@ -9,7 +9,7 @@ import { formatEnergy, formatGBP, formatBitcoin } from "@/lib/utils";
 
 interface FarmOpportunityComparisonChartProps {
   timeframe: string;
-  date: Date | null;
+  date: Date;
   minerModel: string;
   farmId: string;
 }
@@ -40,11 +40,8 @@ export default function FarmOpportunityComparisonChart({
   minerModel, 
   farmId 
 }: FarmOpportunityComparisonChartProps) {
-  // If date is null, use current date as fallback
-  const dateToUse = date || new Date();
-  
-  const formattedDate = format(dateToUse, "yyyy-MM-dd");
-  const formattedYearMonth = format(dateToUse, "yyyy-MM");
+  const formattedDate = format(date, "yyyy-MM-dd");
+  const formattedYearMonth = format(date, "yyyy-MM");
   
   // Only fetch when timeframe is daily and a farm is selected
   const { data: hourlyData = [], isLoading: isLoadingHourly } = useQuery<HourlyComparisonData[]>({
@@ -181,8 +178,8 @@ export default function FarmOpportunityComparisonChart({
   const chartTitle = !farmId 
     ? "Select a farm to see rate comparison"
     : timeframe === "daily"
-      ? `Daily Rate Comparison: Curtailment vs. Bitcoin (${format(dateToUse, "PP")})`
-      : `Monthly Rate Comparison: Curtailment vs. Bitcoin (${format(dateToUse, "MMMM yyyy")})`;
+      ? `Daily Rate Comparison: Curtailment vs. Bitcoin (${format(date, "PP")})`
+      : `Monthly Rate Comparison: Curtailment vs. Bitcoin (${format(date, "MMMM yyyy")})`;
   
   // Colors for the lines
   const curtailmentColor = "#000000"; // Black for curtailment
@@ -212,7 +209,7 @@ export default function FarmOpportunityComparisonChart({
           </div>
         ) : !hasValidData ? (
           <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-            No comparison data available for this farm on {timeframe === "daily" ? format(dateToUse, "PP") : format(dateToUse, "MMMM yyyy")}
+            No comparison data available for this farm on {timeframe === "daily" ? format(date, "PP") : format(date, "MMMM yyyy")}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>

@@ -8,7 +8,7 @@ import { AlertCircle } from "lucide-react";
 import CurtailmentPieChart from "@/components/curtailment-pie-chart";
 
 interface CurtailmentPercentageChartProps {
-  date: Date | null;
+  date: Date;
   leadPartyName?: string;
   farmId?: string;
 }
@@ -60,9 +60,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
       setError(null);
       
       try {
-        // If date is null, use current date as fallback
-        const dateToUse = date || new Date();
-        const formattedDate = format(dateToUse, "yyyy-MM-dd");
+        const formattedDate = format(date, "yyyy-MM-dd");
         
         if (farmId) {
           // For specific farm, still use the detailed API
@@ -254,7 +252,7 @@ export default function CurtailmentPercentageChart({ date, leadPartyName, farmId
                 description={chartDescription}
                 loading={loading}
                 error={error}
-                date={dateToUse}
+                date={date}
               />
             </div>
           ) : !loading && data && data.length > 0 ? (

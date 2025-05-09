@@ -10,7 +10,7 @@ import { formatEnergy, formatGBP, formatBitcoin } from "@/lib/utils";
 
 interface CurtailmentChartProps {
   timeframe: string;
-  date: Date | null;
+  date: Date;
   minerModel: string;
   farmId: string;
 }
@@ -48,13 +48,10 @@ const BitcoinIcon = ({ x, y, value }: { x: number, y: number, value: number }) =
 };
 
 export default function CurtailmentChart({ timeframe, date, minerModel, farmId }: CurtailmentChartProps) {
-  // If date is null, use current date as fallback
-  const dateToUse = date || new Date();
-  
-  const formattedDate = format(dateToUse, "yyyy-MM-dd");
-  const formattedYearMonth = format(dateToUse, "yyyy-MM");
-  const currentYear = dateToUse.getFullYear();
-  const selectedMonth = format(dateToUse, "MMM");  // Get the selected month abbreviation (e.g., "Mar")
+  const formattedDate = format(date, "yyyy-MM-dd");
+  const formattedYearMonth = format(date, "yyyy-MM");
+  const currentYear = date.getFullYear();
+  const selectedMonth = format(date, "MMM");  // Get the selected month abbreviation (e.g., "Mar")
   
   // Log the selected month for debugging
   console.log("Selected month for highlighting:", selectedMonth);
@@ -80,7 +77,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
   
   // Fetch monthly data for monthly view - using actual API data for all months
   const { data: monthlyData = [], isLoading: isMonthlyLoading } = useQuery({
-    queryKey: [`/api/monthly-chart-data`, currentYear, format(dateToUse, "yyyy-MM"), minerModel, farmId],
+    queryKey: [`/api/monthly-chart-data`, currentYear, format(date, "yyyy-MM"), minerModel, farmId],
     queryFn: async () => {
       // Fetch data for each month of the year
       const months = [];
@@ -228,7 +225,7 @@ export default function CurtailmentChart({ timeframe, date, minerModel, farmId }
   const isHourInFuture = (hourStr: string) => {
     const [hour] = hourStr.split(":").map(Number);
     const now = new Date();
-    const selectedDate = date ? new Date(date) : now;
+    const selectedDate = new Date(date);
     
     if (format(now, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd")) {
       return hour > now.getHours();

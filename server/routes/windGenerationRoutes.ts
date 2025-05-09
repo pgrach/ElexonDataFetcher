@@ -18,7 +18,7 @@ import {
 import { isValidDateString, isValidYear } from '../utils/dates';
 import { ValidationError } from '../utils/errors';
 import { logger } from '../utils/logger';
-import { getWindDataServiceStatus, manualUpdate } from '../services/windDataUpdateService';
+import { getWindDataServiceStatus, manualUpdate } from '../services/windDataUpdater';
 import { db } from '../../db';
 import { sql } from 'drizzle-orm';
 

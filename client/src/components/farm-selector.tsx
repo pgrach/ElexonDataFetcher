@@ -17,7 +17,7 @@ interface FarmSelectorProps {
   value: string;
   onValueChange: (value: string) => void;
   timeframe: string;
-  date: Date | null;
+  date: Date;
 }
 
 interface FarmData {
@@ -27,21 +27,18 @@ interface FarmData {
 }
 
 export default function FarmSelector({ value, onValueChange, timeframe, date }: FarmSelectorProps) {
-  // If date is null, use current date as fallback
-  const dateToUse = date || new Date();
-  
   // Format date parameters based on the selected timeframe
   let dateParam = '';
   
   if (timeframe === 'daily') {
     // For daily view, use a specific date - YYYY-MM-DD
-    dateParam = `${dateToUse.getFullYear()}-${String(dateToUse.getMonth() + 1).padStart(2, '0')}-${String(dateToUse.getDate()).padStart(2, '0')}`;
+    dateParam = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   } else if (timeframe === 'monthly') {
     // For monthly view, use year-month - YYYY-MM
-    dateParam = `${dateToUse.getFullYear()}-${String(dateToUse.getMonth() + 1).padStart(2, '0')}`;
+    dateParam = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   } else {
     // For yearly view, use just the year - YYYY
-    dateParam = `${dateToUse.getFullYear()}`;
+    dateParam = `${date.getFullYear()}`;
   }
   
   // Use React Query for data fetching instead of local state & useEffect
