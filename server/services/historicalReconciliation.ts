@@ -4,7 +4,7 @@ import { format, startOfMonth, endOfMonth, parseISO, isBefore, subDays, subMonth
 import { processDailyCurtailment } from "./curtailment";
 import { fetchBidsOffers } from "./elexon";
 import { eq, and, sql } from "drizzle-orm";
-import { calculateMonthlyBitcoinSummary, manualUpdateYearlyBitcoinSummary, processSingleDay as bitcoinProcessSingleDay } from "./bitcoinService";
+import { calculateMonthlyBitcoinSummary, manualUpdateYearlyBitcoinSummary, processSingleDay } from "./bitcoinService";
 import { processWindDataForDate } from "./windDataUpdater";
 
 // Configuration constants
@@ -21,11 +21,11 @@ const MINER_MODEL_LIST = ['S19J_PRO', 'S9', 'M20S']; // Standard miner models us
  * @param date Settlement date in YYYY-MM-DD format
  * @param minerModel Miner model (e.g., 'S19J_PRO')
  */
-async function processSingleDay(date: string, minerModel: string): Promise<void> {
+async function processBitcoinDay(date: string, minerModel: string): Promise<void> {
   try {
     console.log(`Processing Bitcoin calculations for ${date} with model ${minerModel}...`);
     // Use the actual implementation from bitcoinService
-    await bitcoinProcessSingleDay(date, minerModel);
+    await processSingleDay(date, minerModel);
     return;
   } catch (error) {
     console.error(`Error processing Bitcoin calculations for ${date}:`, error);
@@ -227,7 +227,7 @@ export async function reconcileDay(date: string): Promise<void> {
       // Process for all three miner models
       const minerModels = ['S19J_PRO', 'S9', 'M20S'];
       for (const minerModel of minerModels) {
-        await processSingleDay(date, minerModel)
+        await processBitcoinDay(date, minerModel)
           .catch(error => {
             console.error(`Error processing Bitcoin calculations for ${date} with ${minerModel}:`, error);
             // Continue with other models even if one fails

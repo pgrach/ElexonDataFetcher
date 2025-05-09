@@ -1,238 +1,123 @@
 /**
- * In-memory cache management for Bitcoin Mining Analytics platform
+ * Cache Utilities
  * 
- * This module provides a configurable caching system to improve performance
- * by reducing database queries for frequently accessed data.
+ * This module provides in-memory caching mechanisms to reduce database and API calls.
  */
 
-import { logger } from './logger';
-
-/**
- * Base entry for all cache items
- */
-interface CacheEntry<T> {
-  value: T;
-  timestamp: number;
-  ttl: number;
+interface CacheOptions {
+  ttl?: number; // Time-to-live in milliseconds
 }
 
 /**
- * Generic in-memory cache implementation
+ * Simple in-memory cache implementation with TTL
  */
-export class Cache<T> {
-  private cache: Map<string, CacheEntry<T>> = new Map();
-  private name: string;
-  private defaultTtl: number;
-  private maxSize: number;
-  private cleanupInterval: NodeJS.Timeout | null = null;
+export class SimpleCache<T> {
+  private cache: Map<string, { value: T; expiry: number }>;
+  private defaultTtl: number; // Time-to-live in milliseconds
   
   /**
    * Create a new cache instance
    * 
-   * @param name - Cache identifier for logging
-   * @param defaultTtl - Default time to live in seconds (0 = no expiration)
-   * @param maxSize - Maximum number of entries before eviction (0 = unlimited)
-   * @param cleanupIntervalSec - How often to run cleanup (0 = manual only)
+   * @param defaultTtl Default time-to-live in milliseconds (default: 1 hour)
    */
-  constructor(
-    name: string,
-    defaultTtl: number = 300,
-    maxSize: number = 1000,
-    cleanupIntervalSec: number = 60
-  ) {
-    this.name = name;
-    this.defaultTtl = defaultTtl * 1000;   // Convert to milliseconds
-    this.maxSize = maxSize;
-    
-    // Setup automatic cleanup if interval > 0
-    if (cleanupIntervalSec > 0) {
-      this.cleanupInterval = setInterval(
-        () => this.cleanup(),
-        cleanupIntervalSec * 1000
-      );
-    }
+  constructor(defaultTtl: number = 60 * 60 * 1000) {
+    this.cache = new Map();
+    this.defaultTtl = defaultTtl;
   }
-  
+
   /**
    * Set a value in the cache
+   * 
+   * @param key Cache key
+   * @param value Value to store
+   * @param options Cache options (e.g., ttl)
    */
-  set(key: string, value: T, ttl: number = this.defaultTtl): void {
-    // Check if cache is at max capacity
-    if (this.maxSize > 0 && this.cache.size >= this.maxSize && !this.cache.has(key)) {
-      this.evictOldest();
-    }
+  set(key: string, value: T, options: CacheOptions = {}): void {
+    const ttl = options.ttl || this.defaultTtl;
+    const expiry = Date.now() + ttl;
     
-    this.cache.set(key, {
-      value,
-      timestamp: Date.now(),
-      ttl
-    });
+    this.cache.set(key, { value, expiry });
   }
-  
+
   /**
    * Get a value from the cache
-   * Returns undefined if not found or expired
+   * 
+   * @param key Cache key
+   * @returns The cached value, or undefined if not found or expired
    */
   get(key: string): T | undefined {
-    const entry = this.cache.get(key);
+    const item = this.cache.get(key);
     
-    if (!entry) {
+    if (!item) {
       return undefined;
     }
     
-    // Check if entry is expired
-    if (entry.ttl > 0 && Date.now() - entry.timestamp > entry.ttl) {
+    // Check if the item has expired
+    if (item.expiry < Date.now()) {
       this.cache.delete(key);
       return undefined;
     }
     
-    return entry.value;
+    return item.value;
   }
-  
-  /**
-   * Check if key exists in cache and is valid
-   */
-  has(key: string): boolean {
-    return this.get(key) !== undefined;
-  }
-  
+
   /**
    * Delete a value from the cache
+   * 
+   * @param key Cache key
    */
-  delete(key: string): boolean {
-    return this.cache.delete(key);
+  delete(key: string): void {
+    this.cache.delete(key);
   }
-  
+
   /**
    * Clear all values from the cache
    */
   clear(): void {
     this.cache.clear();
   }
-  
+
   /**
-   * Get all valid keys in the cache
+   * Get all valid (non-expired) keys in the cache
+   * 
+   * @returns Array of cache keys
    */
   keys(): string[] {
-    // Return only non-expired keys
-    const validKeys: string[] = [];
     const now = Date.now();
+    const keys: string[] = [];
     
-    this.cache.forEach((entry, key) => {
-      if (entry.ttl === 0 || now - entry.timestamp <= entry.ttl) {
-        validKeys.push(key);
+    for (const [key, item] of this.cache.entries()) {
+      if (item.expiry >= now) {
+        keys.push(key);
+      } else {
+        // Clean up expired items as we iterate
+        this.cache.delete(key);
       }
-    });
+    }
     
-    return validKeys;
+    return keys;
   }
   
   /**
-   * Get the number of items in the cache
+   * Get the number of valid items in the cache
+   * 
+   * @returns Number of valid items
    */
   size(): number {
-    return this.cache.size;
-  }
-  
-  /**
-   * Get or set cache value with callback
-   * This is useful for implementing memoization patterns
-   */
-  async getOrSet(
-    key: string,
-    fetchCallback: () => Promise<T>,
-    ttl: number = this.defaultTtl
-  ): Promise<T> {
-    // Check if value is already cached
-    const cachedValue = this.get(key);
-    if (cachedValue !== undefined) {
-      return cachedValue;
-    }
-    
-    try {
-      // Fetch value using callback
-      const value = await fetchCallback();
-      
-      // Store in cache
-      this.set(key, value, ttl);
-      
-      return value;
-    } catch (error) {
-      logger.error(`Cache fetch failed for key '${key}'`, {
-        module: 'cache',
-        context: { cacheName: this.name, key },
-        error: error as Error
-      });
-      throw error;
-    }
-  }
-  
-  /**
-   * Remove expired items from cache
-   */
-  cleanup(): number {
-    const now = Date.now();
-    let removedCount = 0;
-    
-    // Use forEach to iterate through cache entries
-    this.cache.forEach((entry, key) => {
-      if (entry.ttl > 0 && now - entry.timestamp > entry.ttl) {
-        this.cache.delete(key);
-        removedCount++;
-      }
-    });
-    
-    if (removedCount > 0) {
-      logger.debug(`Cleaned up ${removedCount} expired items from ${this.name} cache`, {
-        module: 'cache',
-        context: {
-          cacheName: this.name,
-          remainingItems: this.cache.size
-        }
-      });
-    }
-    
-    return removedCount;
-  }
-  
-  /**
-   * Destroy the cache and cleanup resources
-   */
-  destroy(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
-    
-    this.clear();
-  }
-  
-  /**
-   * Evict the oldest item from the cache
-   */
-  private evictOldest(): void {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
-    
-    // Use forEach to find the oldest item
-    this.cache.forEach((entry, key) => {
-      if (entry.timestamp < oldestTime) {
-        oldestTime = entry.timestamp;
-        oldestKey = key;
-      }
-    });
-    
-    if (oldestKey) {
-      this.cache.delete(oldestKey);
-      logger.debug(`Evicted oldest item from ${this.name} cache: ${oldestKey}`, {
-        module: 'cache'
-      });
-    }
+    return this.keys().length;
   }
 }
 
-// Create and export commonly used caches
-export const difficultyCache = new Cache<number>('difficulty', 3600);  // 1 hour TTL
-export const priceCache = new Cache<number>('price', 300);            // 5 minutes TTL
-export const farmDataCache = new Cache<any>('farmData', 1800);        // 30 minutes TTL
-export const calculationCache = new Cache<any>('calculations', 600);  // 10 minutes TTL
+// Create cache instances with different TTLs
+
+// 1 hour TTL for price data
+export const priceCache = new SimpleCache<number>(60 * 60 * 1000);
+
+// 6 hour TTL for difficulty data (changes less frequently)
+export const difficultyCache = new SimpleCache<number>(6 * 60 * 60 * 1000);
+
+// 24 hour TTL for complex calculation results
+export const calculationCache = new SimpleCache<any>(24 * 60 * 60 * 1000);
+
+// 5 minute TTL for frequently updated data
+export const frequentCache = new SimpleCache<any>(5 * 60 * 1000);

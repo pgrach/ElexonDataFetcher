@@ -23,7 +23,10 @@ export async function getAllLeadParties(): Promise<string[]> {
     .groupBy(curtailmentRecords.leadPartyName)
     .orderBy(curtailmentRecords.leadPartyName);
 
-  return leadParties.map(party => party.leadPartyName);
+  // Filter out any null values and cast to string[]
+  return leadParties
+    .map(party => party.leadPartyName)
+    .filter((name): name is string => name !== null);
 }
 
 /**
@@ -47,7 +50,10 @@ export async function getLeadPartiesForDate(date: string): Promise<string[]> {
     .groupBy(curtailmentRecords.leadPartyName)
     .orderBy(curtailmentRecords.leadPartyName);
 
-  return leadParties.map(party => party.leadPartyName);
+  // Filter out any null values and cast to string[]
+  return leadParties
+    .map(party => party.leadPartyName)
+    .filter((name): name is string => name !== null);
 }
 
 /**

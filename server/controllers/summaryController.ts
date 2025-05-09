@@ -34,7 +34,7 @@ export async function getCurtailedLeadParties(req: Request, res: Response) {
       res.json(leadParties);
     } catch (validationError) {
       return res.status(400).json({
-        error: validationError.message
+        error: validationError instanceof Error ? validationError.message : "Invalid request"
       });
     }
   } catch (error) {
@@ -64,7 +64,7 @@ export async function getDailySummary(req: Request, res: Response) {
       res.json(summary);
     } catch (validationError) {
       return res.status(400).json({
-        error: validationError.message
+        error: validationError instanceof Error ? validationError.message : "Invalid request"
       });
     }
   } catch (error) {
@@ -94,7 +94,7 @@ export async function getMonthlySummary(req: Request, res: Response) {
       res.json(summary);
     } catch (validationError) {
       return res.status(400).json({
-        error: validationError.message
+        error: validationError instanceof Error ? validationError.message : "Invalid request"
       });
     }
   } catch (error) {
@@ -124,7 +124,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       res.json(summary);
     } catch (validationError) {
       return res.status(400).json({
-        error: validationError.message
+        error: validationError instanceof Error ? validationError.message : "Invalid request"
       });
     }
   } catch (error) {

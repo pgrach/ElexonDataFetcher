@@ -1,42 +1,51 @@
-import { z } from 'zod';
+/**
+ * Bitcoin Types
+ * 
+ * Type definitions for Bitcoin-related data structures.
+ */
 
-export const BitcoinCalculationSchema = z.object({
-  bitcoinMined: z.number(),
-  difficulty: z.number()
-});
-
-export type BitcoinCalculation = z.infer<typeof BitcoinCalculationSchema>;
-
-// Miner efficiency is in J/TH, hashrate in TH/s
-export interface MinerStats {
-  hashrate: number;   // TH/s
-  power: number;      // Watts
-}
-
-export interface BMUCalculation {
-  farmId: string;
+/**
+ * Bitcoin calculation result from a mining calculation
+ */
+export interface BitcoinCalculation {
   bitcoinMined: number;
-  curtailedMwh: number;
+  difficulty: number;
+  valueAtPrice: number;
+  period: string;
 }
 
-export interface DynamoDBHistoricalData {
+/**
+ * Bitcoin difficulty data structure
+ */
+export interface BitcoinDifficulty {
+  timestamp: string;
   difficulty: number;
 }
 
-export const minerModels: Record<string, MinerStats> = {
-  S19J_PRO: {
-    hashrate: 100,
-    power: 3050
-  },
-  S9: {
-    hashrate: 13.5,
-    power: 1323
-  },
-  M20S: {
-    hashrate: 68,
-    power: 3360
-  }
-};
+/**
+ * Bitcoin price data structure
+ */
+export interface BitcoinPrice {
+  timestamp: string;
+  priceUsd: number;
+  priceGbp: number;
+}
 
-// Default values for fallback
-export const DEFAULT_DIFFICULTY = 108105433845147; // Current network difficulty as fallback
+/**
+ * Bitcoin mining summary for a date range
+ */
+export interface BitcoinMiningSummary {
+  dateRange: {
+    start: string;
+    end: string;
+  };
+  totalBitcoinMined: number;
+  averageDifficulty: number;
+  valueAtCurrentPrice: number;
+  currentPrice: number;
+  dailyDetails?: Array<{
+    date: string;
+    bitcoinMined: number;
+    valueAtCurrentPrice: number;
+  }>;
+}
