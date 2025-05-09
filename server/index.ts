@@ -1,8 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { startDataUpdateService } from "./services/dataUpdater";
-import { startWindDataUpdateService } from "./services/windDataUpdater";
+import { startDataUpdateService } from "./services/dataUpdateService";
+import { startWindDataUpdateService } from "./services/windDataUpdateService";
 import { requestLogger } from "./middleware/requestLogger";
 import { errorHandler } from "./middleware/errorHandler";
 import { performanceMonitor } from "./middleware/performanceMonitor";
