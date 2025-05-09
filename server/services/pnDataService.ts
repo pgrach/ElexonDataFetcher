@@ -34,7 +34,7 @@ export interface BMUMapping {
 }
 
 // Path to the BMU mapping file
-const BMU_MAPPING_PATH = path.join(process.cwd(), 'data', 'bmu_mapping.json');
+const BMU_MAPPING_PATH = path.join(process.cwd(), 'server', 'data', 'bmuMapping.json');
 
 // Cache for BMU mappings
 let bmuMappingCache: BMUMapping[] | null = null;
