@@ -12,7 +12,7 @@ interface CurtailmentPieChartProps {
   description: string;
   loading?: boolean;
   error?: string | null;
-  date?: Date; // Add date prop
+  date?: Date | null; // Date can be null
 }
 
 export default function CurtailmentPieChart({
@@ -22,8 +22,10 @@ export default function CurtailmentPieChart({
   description,
   loading = false,
   error = null,
-  date = new Date() // Default to current date if not provided
+  date = null // Date can be null
 }: CurtailmentPieChartProps) {
+  // Ensure we have a valid date to work with
+  const dateToUse = date || new Date();
   // Calculate the actual generation (potential minus curtailed)
   const actualGeneration = Math.max(totalPotentialGeneration - totalCurtailedVolume, 0);
   
