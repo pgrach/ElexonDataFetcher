@@ -109,7 +109,7 @@ export async function getDailySummary(req: Request, res: Response) {
     res.json({
       date,
       totalCurtailedEnergy: Math.abs(Number(recordTotals[0].totalVolume)), // Keep absolute for energy
-      totalPayment: Number(recordTotals[0].totalPayment), // Keep positive - subsidies paid to wind farms
+      totalPayment: Math.abs(Number(recordTotals[0].totalPayment)), // Always positive - subsidies paid
       leadParty
     });
 
@@ -157,7 +157,7 @@ export async function getMonthlySummary(req: Request, res: Response) {
       return res.json({
         yearMonth,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Number(farmTotals[0].totalPayment) * -1, // Flip the sign
+        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)), // Always positive - subsidies paid
       });
     }
 
@@ -648,7 +648,7 @@ export async function getYearlySummary(req: Request, res: Response) {
       return res.json({
         year,
         totalCurtailedEnergy: Number(farmTotals[0].totalCurtailedEnergy),
-        totalPayment: Number(farmTotals[0].totalPayment) * -1 // Flip the sign
+        totalPayment: Math.abs(Number(farmTotals[0].totalPayment)) // Always positive - subsidies paid
       });
     }
 
