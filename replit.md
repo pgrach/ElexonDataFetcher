@@ -125,6 +125,7 @@ Based on July 6, 2025 experience where database contained only 9 records but API
 ## Changelog
 
 Changelog:
+- July 07, 2025. July 3 data payment signs successfully fixed from negative to positive values (£1,372,355.04). Data integrity verified with 2,368 records and 31,129.46 MWh. Payment signs now correctly represent subsidies paid TO wind farms. API endpoint functional.
 - July 07, 2025. July 4 data successfully re-ingested using proven API-first methodology (6,773 records, 113,831 MWh, £6,807,611 payment). Fixed payment signs to positive values representing subsidies paid to wind farms. All 48 settlement periods captured.
 - July 07, 2025. July 6 data successfully verified against Elexon API and re-ingested (9→199 records, 160→1,739 MWh). Updated data verification methodology.
 - July 04, 2025. Initial setup
