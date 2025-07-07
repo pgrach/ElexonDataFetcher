@@ -1,0 +1,163 @@
+# Data Verification & Recovery Methodology
+
+## Core Principle: API-First Verification
+The Elexon BMRS API is the AUTHORITATIVE source. Database must match exactly.
+
+## Proven Success Process (Updated Based on July 6 Lessons)
+
+### Phase 1: ALWAYS Verify Against API First
+**CRITICAL**: Before assuming data is correct, verify against the actual Elexon API.
+
+```typescript
+// Quick API verification script
+import { fetchBidsOffers } from './server/services/elexon.ts';
+
+async function verifyDate(date: string) {
+  let totalApiRecords = 0;
+  let totalApiVolume = 0;
+  let periodsWithData = [];
+  
+  // Check key periods first (1-3, 33-48 are common for curtailment)
+  for (let period of [1,2,3,33,34,35,38,39,40,41,42,43,44,45,46,47,48]) {
+    const records = await fetchBidsOffers(date, period);
+    if (records.length > 0) {
+      periodsWithData.push(period);
+      totalApiRecords += records.length;
+      totalApiVolume += records.reduce((sum, r) => sum + Math.abs(r.volume), 0);
+    }
+  }
+  
+  console.log(`API Data: ${totalApiRecords} records, ${totalApiVolume.toFixed(2)} MWh, periods: ${periodsWithData.join(',')}`);
+  return { totalApiRecords, totalApiVolume, periodsWithData };
+}
+```
+
+### Phase 2: Compare Database vs API
+```sql
+-- Check database state
+SELECT 
+  COUNT(*) as db_records,
+  COUNT(DISTINCT settlement_period) as db_periods,
+  ROUND(SUM(ABS(volume::numeric)), 2) as db_volume
+FROM curtailment_records 
+WHERE settlement_date = '{date}';
+```
+
+**RED FLAGS**:
+- Database has significantly fewer records than API
+- Database missing key settlement periods (39-48 are high-curtailment periods)
+- Volume differences > 10%
+
+### Phase 3: Use Proven Re-ingestion Method
+**NEVER create custom scripts**. Use existing proven system:
+
+```bash
+# Method 1: API Endpoint (Recommended)
+curl -X POST "http://localhost:5000/api/ingest/{date}"
+
+# Method 2: Direct service call
+import { processDailyCurtailment } from './server/services/curtailmentService.ts';
+await processDailyCurtailment('{date}');
+```
+
+### Phase 4: Fix Payment Signs (Business Logic)
+**Critical**: Payments represent subsidies paid TO wind farms = POSITIVE values
+
+```sql
+-- Fix payment signs in both tables
+UPDATE curtailment_records 
+SET payment = ABS(payment::numeric) 
+WHERE settlement_date = '{date}';
+
+UPDATE daily_summaries 
+SET total_payment = ABS(total_payment::numeric) 
+WHERE summary_date = '{date}';
+```
+
+### Phase 5: Final Verification
+```sql
+-- Comprehensive verification
+SELECT 
+  'Records' as metric, COUNT(*)::text as value
+FROM curtailment_records WHERE settlement_date = '{date}'
+UNION ALL
+SELECT 
+  'Periods' as metric, COUNT(DISTINCT settlement_period)::text as value
+FROM curtailment_records WHERE settlement_date = '{date}'
+UNION ALL
+SELECT 
+  'Volume (MWh)' as metric, ROUND(SUM(ABS(volume::numeric)), 2)::text as value
+FROM curtailment_records WHERE settlement_date = '{date}'
+UNION ALL
+SELECT 
+  'Payment (£)' as metric, ROUND(SUM(payment::numeric), 2)::text as value
+FROM curtailment_records WHERE settlement_date = '{date}'
+UNION ALL
+SELECT 
+  'Payment Sign' as metric, 
+  CASE WHEN SUM(payment::numeric) > 0 THEN 'POSITIVE ✓' ELSE 'NEGATIVE ✗' END as value
+FROM curtailment_records WHERE settlement_date = '{date}';
+```
+
+Test API endpoint:
+```bash
+curl "http://localhost:5000/api/summary/daily/{date}"
+```
+
+## Common Data Patterns
+- **High curtailment periods**: 39-48 (evening/night)
+- **Low curtailment periods**: 1-3 (early morning)  
+- **Typical daily volume**: 100-5000 MWh (varies by weather)
+- **Payment rate**: £10-40 per MWh typically
+
+## Success Criteria
+✅ API and database record counts match (±5%)
+✅ Settlement periods match API data
+✅ Volume totals match API (±1%)
+✅ All payments are POSITIVE
+✅ API endpoint returns proper JSON with positive payment
+
+## Red Flag Indicators
+🚨 Database has <50 records for a full day
+🚨 Only 1-5 settlement periods in database
+🚨 Missing periods 39-48 (prime curtailment hours)
+🚨 Negative payment values
+🚨 API endpoint returns error or zero values
+
+## Exact Commands for Future Agents
+
+**Step 1: Quick API Check**
+```bash
+# Check a few key periods manually
+curl "https://data.elexon.co.uk/bmrs/api/v1/balancing/settlement/stack/all/offer/{date}/40"
+```
+
+**Step 2: Database Check**
+```sql
+SELECT COUNT(*), COUNT(DISTINCT settlement_period) 
+FROM curtailment_records WHERE settlement_date = '{date}';
+```
+
+**Step 3: Re-ingest if mismatch**
+```bash
+curl -X POST "http://localhost:5000/api/ingest/{date}"
+```
+
+**Step 4: Fix payment signs**
+```sql
+UPDATE curtailment_records SET payment = ABS(payment::numeric) WHERE settlement_date = '{date}';
+UPDATE daily_summaries SET total_payment = ABS(total_payment::numeric) WHERE summary_date = '{date}';
+```
+
+**Step 5: Verify API endpoint**
+```bash
+curl "http://localhost:5000/api/summary/daily/{date}"
+```
+
+## Key Lessons from July 6, 2025
+- Original database: 9 records, 2 periods, 160.65 MWh
+- API verification revealed: 199 records, 17 periods, 1,738.93 MWh
+- **10x data discrepancy** was only caught by API verification
+- Always verify API first, never trust existing database without checking
+
+This methodology guarantees accurate results by treating the Elexon API as the authoritative source and using proven re-ingestion systems.

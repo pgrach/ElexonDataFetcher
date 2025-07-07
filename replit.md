@@ -105,7 +105,25 @@ The application follows a modern full-stack architecture:
 
 Preferred communication style: Simple, everyday language.
 
+## Data Ingestion Best Practices
+
+### Critical Success Methodology
+Based on July 6, 2025 experience where database contained only 9 records but API verification revealed 199 records:
+
+1. **API-First Verification**: Always verify against Elexon BMRS API before trusting database
+2. **Use Proven Systems**: Leverage `processDailyCurtailment()` service, never create custom scripts  
+3. **Payment Sign Logic**: Payments must be POSITIVE (subsidies paid TO wind farms)
+4. **End-to-End Testing**: Verify both database integrity AND API endpoint functionality
+5. **Pattern Recognition**: High curtailment typically in periods 39-48, expect 100-5000 MWh daily
+
+### Key Files for Data Operations
+- `server/services/curtailmentService.ts` - Proven ingestion service
+- `server/services/elexon.ts` - API interface  
+- `server/controllers/summary.ts` - Payment logic reference
+- `data-verification-methodology.md` - Complete verification process
+
 ## Changelog
 
 Changelog:
+- July 07, 2025. July 6 data successfully verified against Elexon API and re-ingested (9→199 records, 160→1,739 MWh). Updated data verification methodology.
 - July 04, 2025. Initial setup
