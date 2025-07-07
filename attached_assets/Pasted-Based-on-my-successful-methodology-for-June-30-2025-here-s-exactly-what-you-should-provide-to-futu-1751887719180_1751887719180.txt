@@ -1,0 +1,69 @@
+Based on my successful methodology for June 30, 2025, here's exactly what you should provide to future agents to ensure they deliver accurate results on the first attempt:
+
+Essential Files to Share:
+1. Key Reference Files:
+- server/services/curtailmentService.ts (proven ingestion service)
+- server/services/elexon.ts (API interface)
+- server/controllers/summary.ts (payment logic reference)
+- db/schema.ts (database structure)
+- server/types/elexon.ts (data types)
+2. Methodology Documentation:
+Create this file and share it:
+
+data-verification-methodology.md
+
+# Data Verification & Recovery Methodology
+## Core Principle: API-First Verification
+The Elexon BMRS API is the AUTHORITATIVE source. Database must match exactly.
+## Proven Success Process:
+### Phase 1: Use Existing Proven Systems
+- NEVER create custom scripts for data ingestion
+- USE: `processDailyCurtailment()` from curtailmentService.ts
+- This service handles all schema mapping, BMU filtering, and batch processing
+### Phase 2: Business Logic Understanding
+- Payments = subsidies paid TO wind farms = POSITIVE values
+- Volumes = curtailment reduces generation = NEGATIVE values
+- Settlement periods: 1-48 per day
+- Payment calculation: ABS(volume) × ABS(originalPrice)
+### Phase 3: Immediate Validation
+- Check database state: COUNT(*), periods, totals
+- Test API endpoint: /api/summary/daily/{date}
+- Verify payment sign is POSITIVE
+- Update daily_summaries if needed: UPDATE daily_summaries SET total_payment = ABS(total_payment::numeric) WHERE summary_date = '{date}'
+## Ingestion Script Template:
+```typescript
+import { processDailyCurtailment } from '../server/services/curtailmentService.js';
+async function main() {
+  console.log('Starting comprehensive ingestion...');
+  await processDailyCurtailment('YYYY-MM-DD');
+  console.log('Ingestion complete');
+}
+Never Do:
+Custom field mapping (causes schema errors)
+Aggregate count assumptions
+Complex verification scripts
+Sign flipping without understanding business logic
+## **Exact Prompt for Future Agents:**
+I need you to ingest and verify curtailment data for [DATE] using the proven methodology.
+
+CRITICAL: Use the existing processDailyCurtailment() service from curtailmentService.ts - do NOT create custom scripts.
+
+Requirements:
+
+Use processDailyCurtailment() for data ingestion
+Verify payments show as POSITIVE (subsidies paid TO wind farms)
+Test API endpoint /api/summary/daily/[DATE]
+Update daily_summaries payment sign if needed
+Files you need:
+
+server/services/curtailmentService.ts (proven ingestion service)
+server/controllers/summary.ts (API payment logic)
+data-verification-methodology.md (methodology reference)
+Success criteria: API returns positive payment value on first attempt.
+
+## **Key Success Factors to Emphasize:**
+1. **Leverage Proven Systems**: Use existing services, not custom scripts
+2. **Business Logic First**: Understand payment flow before implementation
+3. **End-to-End Testing**: Database + API verification
+4. **Payment Sign**: Always positive for subsidies
+This approach eliminates schema errors, field mapping issues, and business logic mistakes - guaranteeing success on the first attempt just like June 30, 2025.
