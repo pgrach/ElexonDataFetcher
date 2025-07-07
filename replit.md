@@ -125,6 +125,7 @@ Based on July 6, 2025 experience where database contained only 9 records but API
 ## Changelog
 
 Changelog:
+- July 07, 2025. July 5 data payment signs successfully fixed from negative to positive values (£4,355,906.81). Data integrity verified with 4,117 records across 48 periods and 69,052.99 MWh. Payment signs now correctly represent subsidies paid TO wind farms. All API endpoints functional including mining potential calculations.
 - July 07, 2025. July monthly data summary successfully fixed. All payment signs corrected to positive values (£13,221,728.73 total). Monthly summary now accurately reflects 6 days of data with 230,061.21 MWh total energy. All payments now correctly represent subsidies paid TO wind farms.
 - July 07, 2025. July 3 data payment signs successfully fixed from negative to positive values (£1,372,355.04). Data integrity verified with 2,368 records and 31,129.46 MWh. Payment signs now correctly represent subsidies paid TO wind farms. API endpoint functional.
 - July 07, 2025. July 4 data successfully re-ingested using proven API-first methodology (6,773 records, 113,831 MWh, £6,807,611 payment). Fixed payment signs to positive values representing subsidies paid to wind farms. All 48 settlement periods captured.
